@@ -1,3 +1,3 @@
-module github.com/elecnix/policyguard
+module github.com/elecnix/terraform-permcheck
 
 go 1.21

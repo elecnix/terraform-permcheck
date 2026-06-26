@@ -1,11 +1,11 @@
-// policyguard validates that a terraform deploy role has sufficient IAM
+// tf-permcheck validates that a terraform deploy role has sufficient IAM
 // permissions for every resource in a terraform plan.
 //
 // Usage:
 //
-//	terraform show -json plan.tfplan | policyguard validate --policy-file deploy_policy.json --cloud aws
+//	terraform show -json plan.tfplan | tf-permcheck validate --policy-file deploy_policy.json --cloud aws
 //
-//	policyguard validate --plan-file plan.json --policy-file deploy_policy.json --cloud aws
+//	tf-permcheck validate --plan-file plan.json --policy-file deploy_policy.json --cloud aws
 package main
 
 import (
@@ -15,14 +15,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/elecnix/policyguard/internal/cloud"
-	"github.com/elecnix/policyguard/internal/iam"
-	"github.com/elecnix/policyguard/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "policyguard: %v\n", err)
+		fmt.Fprintf(os.Stderr, "tf-permcheck: %v\n", err)
 		os.Exit(2)
 	}
 }
@@ -36,7 +36,7 @@ func run(args []string) error {
 	case "validate":
 		return validateCmd(args[1:])
 	case "version":
-		fmt.Println("policyguard v0.1.0")
+		fmt.Println("tf-permcheck v0.1.0")
 		return nil
 	default:
 		return fmt.Errorf("unknown subcommand: %s", args[0])

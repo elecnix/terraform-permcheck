@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/elecnix/policyguard/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
 // MissingAction is a single required permission found to be absent from the policy.

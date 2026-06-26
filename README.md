@@ -1,15 +1,15 @@
-# PolicyGuard
+# PermCheck
 
 **Pre-apply IAM policy validation for Terraform — cloud-agnostic.**
 
-PolicyGuard ensures your Terraform deploy role has the permissions required
+PermCheck ensures your Terraform deploy role has the permissions required
 by **every resource** in the plan, **before** `terraform apply` touches a
 single cloud API. It cross-references the plan's resource types against your
 declared IAM policies using each cloud's native schema registry.
 
 ```
 terraform plan -out=plan.tfplan
-terraform show -json plan.tfplan | policyguard validate
+terraform show -json plan.tfplan | tf-permcheck validate
 ```
 
 If your deploy role is missing `kms:CreateGrant` for a `aws_backup_vault`, you
@@ -19,7 +19,7 @@ find out at plan time — not 3 failed deploys later.
 
 Writing least-privilege IAM policies for a Terraform deploy role is tedious and
 error-prone. Every new resource type needs its own set of API permissions, and
-those permissions are scattered across AWS/GCP/Azure docs. PolicyGuard automates
+those permissions are scattered across AWS/GCP/Azure docs. PermCheck automates
 the cross-reference:
 
 1. Parses the `terraform plan -json` to extract every resource type being
@@ -46,12 +46,12 @@ the cross-reference:
 
 ```bash
 # Pipe the plan JSON directly
-terraform show -json plan.tfplan | policyguard validate \
+terraform show -json plan.tfplan | tf-permcheck validate \
   --policy-file deploy_policy.json \
   --cloud aws
 
 # Or point at files
-policyguard validate \
+tf-permcheck validate \
   --plan-file plan.json \
   --policy-file deploy_policy.json \
   --cloud aws
@@ -68,7 +68,7 @@ policyguard validate \
 ### Terraform provider (planned)
 
 ```hcl
-data "policyguard_iam_check" "deploy_role" {
+data "tf-permcheck_iam_check" "deploy_role" {
   cloud             = "aws"
   plan_file         = "plan.tfplan.json"
   policy_documents  = [
@@ -81,7 +81,7 @@ data "policyguard_iam_check" "deploy_role" {
 ## Install
 
 ```bash
-go install github.com/elecnix/policyguard@latest
+go install github.com/elecnix/terraform-permcheck@latest
 ```
 
 ## CI integration
@@ -91,7 +91,7 @@ go install github.com/elecnix/policyguard@latest
 - name: Check IAM permissions
   run: |
     terraform plan -out=plan.tfplan
-    terraform show -json plan.tfplan | policyguard validate \
+    terraform show -json plan.tfplan | tf-permcheck validate \
       --policy-file <(terraform output -raw deploy_policy) \
       --cloud aws
 ```
