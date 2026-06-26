@@ -18,6 +18,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
 func main() {
@@ -100,7 +101,10 @@ func validateCmd(args []string) error {
 	}
 
 	// Resolve schemas
-	resolver := cloud.NewAWSProvider()
+	resolver := cloud.NewChainProvider(
+		provideraws.NewSourceProvider(),
+		cloud.NewAWSProvider(),
+	)
 
 	// Validate with default filtering (skip data-plane and optional permissions)
 	filter := iam.DefaultFilter()
@@ -124,7 +128,7 @@ func validateCmd(args []string) error {
 
 // schemaAdapter bridges cloud.Provider to iam.SchemaLike for the validator.
 type schemaAdapter struct {
-	p *cloud.AWSProvider
+	p cloud.Provider
 }
 
 func (a *schemaAdapter) Resolve(tfType string) (iam.SchemaLike, error) {
