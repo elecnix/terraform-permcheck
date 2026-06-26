@@ -48,6 +48,7 @@ func validateCmd(args []string) error {
 	planFile := fs.String("plan-file", "", "path to terraform plan JSON (default: stdin)")
 	policyFile := fs.String("policy-file", "", "path to IAM policy JSON (required)")
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
+	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -101,8 +102,12 @@ func validateCmd(args []string) error {
 	// Resolve schemas
 	resolver := cloud.NewAWSProvider()
 
-	// Validate
-	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver})
+	// Validate with default filtering (skip data-plane and optional permissions)
+	filter := iam.DefaultFilter()
+	if *noFilter {
+		filter = iam.FilterConfig{} // all zero values = no filtering
+	}
+	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
 	if err != nil {
 		return err
 	}
