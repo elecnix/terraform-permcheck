@@ -1,0 +1,32 @@
+{
+  "resource_changes": [
+    {
+      "type": "aws_backup_vault",
+      "name": "this",
+      "change": {
+        "actions": ["create"]
+      }
+    },
+    {
+      "type": "aws_dynamodb_table",
+      "name": "switch_keys",
+      "change": {
+        "actions": ["create"]
+      }
+    },
+    {
+      "type": "aws_iam_role",
+      "name": "backup",
+      "change": {
+        "actions": ["create"]
+      }
+    },
+    {
+      "type": "aws_s3_bucket",
+      "name": "logs",
+      "change": {
+        "actions": ["no-op"]
+      }
+    }
+  ]
+}
