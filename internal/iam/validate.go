@@ -236,6 +236,9 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		}
 	}
 
+	// Post-process: remove permissions absorbed by S3 sub-resource configs
+	missing = filterS3Subresources(missing, changes)
+
 	return missing, nil
 }
 
