@@ -6,7 +6,8 @@ package cloud
 // to create, read, update, delete, and list it.
 type Schema struct {
 	TypeName    string
-	Permissions map[string][]string // key: "create", "read", "update", "delete", "list"
+	Permissions map[string][]string          // key: "create", "read", "update", "delete", "list" → action strings
+	Conditional map[string]map[string]string // op → action → condition attribute name (empty if unconditional)
 }
 
 // GetPermissions returns the permission map (implements iam.SchemaLike).

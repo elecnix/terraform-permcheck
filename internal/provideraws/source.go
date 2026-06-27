@@ -217,15 +217,34 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string) {
 		return
 	}
 
-	actions, err := ParseResourceFile(string(src), tfType, resourceName)
+	actions, err := ParseResourceFileStructured(string(src), tfType, resourceName)
 	if err != nil {
 		return
 	}
 
-	p.schemas[tfType] = &cloud.Schema{
+	// Build the cloud.Schema with both Permissions and Conditional metadata
+	schema := &cloud.Schema{
 		TypeName:    tfType,
-		Permissions: actions,
+		Permissions: make(map[string][]string),
+		Conditional: make(map[string]map[string]string),
 	}
+
+	for op, eas := range actions {
+		perms := make([]string, 0, len(eas))
+		conds := make(map[string]string, len(eas))
+		for _, ea := range eas {
+			perms = append(perms, ea.Action)
+			if ea.Conditional && ea.Condition != "" {
+				conds[ea.Action] = ea.Condition
+			}
+		}
+		schema.Permissions[op] = perms
+		if len(conds) > 0 {
+			schema.Conditional[op] = conds
+		}
+	}
+
+	p.schemas[tfType] = schema
 }
 
 // resourceTypeFromFile derives the terraform resource type from the file path.
