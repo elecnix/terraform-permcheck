@@ -6,9 +6,14 @@
 //	terraform show -json plan.tfplan | tf-permcheck validate --policy-file deploy_policy.json --cloud aws
 //
 //	tf-permcheck validate --plan-file plan.json --policy-file deploy_policy.json --cloud aws
+//
+//	terraform show -json plan.tfplan | tf-permcheck validate --policy-from-plan-output deploy_policy_json --cloud aws
+//
+//	tf-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -47,7 +52,10 @@ func run(args []string) error {
 func validateCmd(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	planFile := fs.String("plan-file", "", "path to terraform plan JSON (default: stdin)")
-	policyFile := fs.String("policy-file", "", "path to IAM policy JSON (required)")
+	policyFile := fs.String("policy-file", "", "path to IAM policy JSON")
+	policyFromPlanOutput := fs.String("policy-from-plan-output", "", "read IAM policy from named output in plan JSON")
+	policyFromStateOutput := fs.String("policy-from-state-output", "", "read IAM policy from named output in state JSON")
+	stateFile := fs.String("state-file", "", "path to terraform state JSON (default: stdin, for use with --policy-from-state-output)")
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 
@@ -55,8 +63,22 @@ func validateCmd(args []string) error {
 		return err
 	}
 
-	if *policyFile == "" {
-		return fmt.Errorf("--policy-file is required")
+	// Exactly one policy source must be provided.
+	policySources := 0
+	if *policyFile != "" {
+		policySources++
+	}
+	if *policyFromPlanOutput != "" {
+		policySources++
+	}
+	if *policyFromStateOutput != "" {
+		policySources++
+	}
+	if policySources == 0 {
+		return fmt.Errorf("one of --policy-file, --policy-from-plan-output, or --policy-from-state-output is required")
+	}
+	if policySources > 1 {
+		return fmt.Errorf("only one of --policy-file, --policy-from-plan-output, or --policy-from-state-output may be specified")
 	}
 	if *cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
@@ -77,10 +99,40 @@ func validateCmd(args []string) error {
 		return fmt.Errorf("read plan: %w", err)
 	}
 
-	// Read policy
-	policyRaw, err := os.ReadFile(*policyFile)
-	if err != nil {
-		return fmt.Errorf("read policy: %w", err)
+	// Read policy from the appropriate source.
+	var policyRaw []byte
+	if *policyFile != "" {
+		policyRaw, err = os.ReadFile(*policyFile)
+		if err != nil {
+			return fmt.Errorf("read policy: %w", err)
+		}
+	} else if *policyFromPlanOutput != "" {
+		rawValue, err := plan.ParseOutput(planRaw, *policyFromPlanOutput)
+		if err != nil {
+			return fmt.Errorf("read policy from plan output: %w", err)
+		}
+		policyRaw, err = unwrapJSONString(rawValue)
+		if err != nil {
+			return fmt.Errorf("read policy from plan output %q: %w", *policyFromPlanOutput, err)
+		}
+	} else if *policyFromStateOutput != "" {
+		var stateRaw []byte
+		if *stateFile != "" {
+			stateRaw, err = os.ReadFile(*stateFile)
+		} else {
+			stateRaw, err = readStdin()
+		}
+		if err != nil {
+			return fmt.Errorf("read state: %w", err)
+		}
+		rawValue, err := plan.ParseStateOutput(stateRaw, *policyFromStateOutput)
+		if err != nil {
+			return fmt.Errorf("read policy from state output: %w", err)
+		}
+		policyRaw, err = unwrapJSONString(rawValue)
+		if err != nil {
+			return fmt.Errorf("read policy from state output %q: %w", *policyFromStateOutput, err)
+		}
 	}
 
 	// Parse plan
@@ -141,7 +193,19 @@ func readStdin() ([]byte, error) {
 		return nil, err
 	}
 	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return nil, fmt.Errorf("no plan on stdin and --plan-file not set")
+		return nil, fmt.Errorf("no data on stdin and no file flag set")
 	}
 	return io.ReadAll(os.Stdin)
+}
+
+// unwrapJSONString converts a json.RawMessage to a []byte suitable for
+// policy parsing. If the raw value is a JSON string (e.g. `"..."`), it
+// unquotes and returns the inner string. Otherwise it returns the raw
+// message as-is (e.g. for nested JSON objects).
+func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return []byte(s), nil
+	}
+	return raw, nil
 }
