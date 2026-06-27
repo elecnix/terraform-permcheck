@@ -63,8 +63,8 @@ func NewSourceProviderWithPath(repoPath string) *SourceProvider {
 func (p *SourceProvider) Name() string { return "aws" }
 
 // Ensure checks that the provider repo is available and parses all resource
-// files. If the repo can't be cloned or located, returns nil with no schemas
-// loaded (the caller is expected to fall back to another resolver).
+// files. If the repo can't be cloned or located, returns an error so callers
+// can fall back to another resolver. Subsequent calls will retry.
 func (p *SourceProvider) Ensure() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -74,13 +74,11 @@ func (p *SourceProvider) Ensure() error {
 	}
 
 	if err := p.ensureRepo(); err != nil {
-		// Repo not available — leave schemas empty, fall back gracefully
-		p.parsed = true
-		return nil
+		// Repo not available — don't mark parsed, allow retry
+		return err
 	}
 
 	if err := p.parseAll(); err != nil {
-		// Parsing failed — leave schemas empty
 		p.parsed = true
 		return nil
 	}
@@ -90,6 +88,7 @@ func (p *SourceProvider) Ensure() error {
 }
 
 // Resolve maps a terraform resource type to its required IAM permissions.
+// Returns an error if the provider source is unavailable (allowing fallback).
 func (p *SourceProvider) Resolve(tfType string) (*cloud.Schema, error) {
 	if err := p.Ensure(); err != nil {
 		return nil, err

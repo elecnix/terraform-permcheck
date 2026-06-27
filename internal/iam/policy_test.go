@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -202,5 +203,95 @@ func TestClassifyPermission(t *testing.T) {
 				t.Errorf("classifyPermission(%q) = %d, want %d", tt.action, got, tt.class)
 			}
 		})
+	}
+}
+
+func TestClassTag(t *testing.T) {
+	tests := []struct {
+		class PermissionClass
+		tag   string
+	}{
+		{ClassManagement, "[required]"},
+		{ClassOptional, "[optional]"},
+		{ClassDataPlane, "[data-plane]"},
+		{ClassServiceRole, "[service-role]"},
+		{ClassUnknown, "[unknown]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			got := classTag(tt.class)
+			if got != tt.tag {
+				t.Errorf("classTag(%d) = %q, want %q", tt.class, got, tt.tag)
+			}
+		})
+	}
+}
+
+func TestFormatMissing_WithClassification(t *testing.T) {
+	missing := []MissingAction{
+		{
+			ResourceType: "aws_backup_vault",
+			ResourceName: "this",
+			Change:       "create",
+			Action:       "backup:CreateBackupVault",
+			Service:      "backup",
+			Class:        "[required]",
+		},
+		{
+			ResourceType: "aws_backup_vault",
+			ResourceName: "this",
+			Change:       "create",
+			Action:       "backup:PutBackupVaultAccessPolicy",
+			Service:      "backup",
+			Class:        "[optional]",
+		},
+		{
+			ResourceType: "aws_backup_vault",
+			ResourceName: "this",
+			Change:       "create",
+			Action:       "kms:CreateGrant",
+			Service:      "kms",
+			Class:        "[required]",
+		},
+	}
+
+	output := FormatMissing(missing)
+
+	// Check header
+	if !strings.Contains(output, "Missing IAM permissions (3)") {
+		t.Errorf("expected header with count, got: %s", output)
+	}
+
+	// Check tags appear in output
+	checks := []string{
+		"backup:CreateBackupVault [required]",
+		"backup:PutBackupVaultAccessPolicy [optional]",
+		"kms:CreateGrant [required]",
+	}
+	for _, want := range checks {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected output to contain %q, got:\n%s", want, output)
+		}
+	}
+}
+
+func TestFormatMissing_NoClass(t *testing.T) {
+	missing := []MissingAction{
+		{
+			ResourceType: "aws_backup_vault",
+			ResourceName: "this",
+			Change:       "create",
+			Action:       "backup:CreateBackupVault",
+			Service:      "backup",
+			Class:        "",
+		},
+	}
+
+	output := FormatMissing(missing)
+
+	// Should NOT have a trailing space before newline (no tag)
+	if !strings.Contains(output, "needs backup:CreateBackupVault\n") {
+		t.Errorf("expected no classification tag, got:\n%s", output)
 	}
 }

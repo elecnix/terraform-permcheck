@@ -148,6 +148,7 @@ type MissingAction struct {
 	Action       string // required IAM action, e.g. "kms:CreateGrant"
 	Service      string // extracted service prefix, e.g. "kms"
 	Filtered     bool   // true if this was filtered out (data-plane / optional)
+	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
 }
 
 // AllowedProvider is something that can check whether an action is covered.
@@ -232,6 +233,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				Change:       rc.Change,
 				Action:       action,
 				Service:      service,
+				Class:        classTag(class),
 			})
 		}
 	}
@@ -247,7 +249,27 @@ func FormatMissing(missing []MissingAction) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(missing)))
 	for _, m := range missing {
-		b.WriteString(fmt.Sprintf("  %s (%s) needs %s\n", m.ResourceType, m.Change, m.Action))
+		tag := ""
+		if m.Class != "" {
+			tag = " " + m.Class
+		}
+		b.WriteString(fmt.Sprintf("  %s (%s) needs %s%s\n", m.ResourceType, m.Change, m.Action, tag))
 	}
 	return b.String()
+}
+
+// classTag returns a human-readable classification tag for a PermissionClass.
+func classTag(c PermissionClass) string {
+	switch c {
+	case ClassOptional:
+		return "[optional]"
+	case ClassDataPlane:
+		return "[data-plane]"
+	case ClassServiceRole:
+		return "[service-role]"
+	case ClassManagement:
+		return "[required]"
+	default:
+		return "[unknown]"
+	}
 }
