@@ -8,11 +8,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
 )
+
+// sdkResourceAnnotationRE matches the @SDKResource annotation in provider source.
+// Format: // @SDKResource("aws_instance", name="Instance")
+var sdkResourceAnnotationRE = regexp.MustCompile(`@SDKResource\("(aws_[^"]+)"`)
 
 // DefaultProviderRef is the pinned provider version used for parsing.
 // This is the framework-refactored codebase (v5+).
@@ -202,11 +207,12 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string) {
 		return
 	}
 
-	// Determine the terraform resource type from the file.
-	// Convention: internal/service/backup/vault.go -> aws_backup_vault
-	// We can get the resource name from the @SDKResource annotation or
-	// from the function names in the file.
-	tfType := resourceTypeFromFile(serviceName, fileName)
+	// Determine the terraform resource type.
+	// Prefer the @SDKResource annotation (canonical), fall back to file-path derivation.
+	tfType := resourceTypeFromAnnotation(src)
+	if tfType == "" {
+		tfType = resourceTypeFromFile(serviceName, fileName)
+	}
 	if tfType == "" {
 		return
 	}
@@ -226,6 +232,21 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string) {
 		TypeName:    tfType,
 		Permissions: actions,
 	}
+}
+
+// resourceTypeFromAnnotation extracts the terraform resource type from an
+// @SDKResource annotation in the Go source code.
+//
+//	// @SDKResource("aws_instance", name="Instance")
+//	// @SDKResource("aws_cloudwatch_log_group", name="Log Group")
+//
+// Returns empty string if no annotation is found.
+func resourceTypeFromAnnotation(src []byte) string {
+	matches := sdkResourceAnnotationRE.FindSubmatch(src)
+	if len(matches) >= 2 {
+		return string(matches[1])
+	}
+	return ""
 }
 
 // resourceTypeFromFile derives the terraform resource type from the file path.
