@@ -24,9 +24,16 @@ type ExtractedAction struct {
 
 // ParseResourceFile parses a Go source file from the terraform-provider-aws
 // and extracts the IAM permissions (actions) required by each CRUD function.
-// Returns all actions (both unconditional and conditional) as plain strings.
 //
-// For structured results with conditional metadata, use ParseResourceFileStructured.
+// It handles:
+// - Direct conn.Method() calls in CRUD function bodies
+// - Conditional calls gated by d.GetOk() or d.Get()
+// - Helper function calls: retryCreateRole(ctx, conn, ...) → conn.CreateRole
+// - Recursive helper chains: findRoleByName → findRole → conn.GetRole
+// - Anonymous function bodies (via tfresource.RetryWhen)
+// - Function return following (Create returns Read → include Read permissions)
+//
+// Returns all actions (both unconditional and conditional) as plain strings.
 func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
 	structured, err := ParseResourceFileStructured(src, tfType, resourceName)
 	if err != nil {
@@ -44,7 +51,8 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 
 // ParseResourceFileStructured parses a Go source file and returns extracted
 // actions with conditional metadata (whether the call is inside an if-statement
-// guarded by d.GetOk() or d.Get()).
+// guarded by d.GetOk() or d.Get()). Follows helper function call chains
+// transitively within the same file.
 func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, tfType+".go", src, parser.ParseComments)
@@ -52,8 +60,10 @@ func ParseResourceFileStructured(src string, tfType string, resourceName string)
 		return nil, fmt.Errorf("parse Go source: %w", err)
 	}
 
-	// Phase 1: Find all resource functions and extract their SDK calls
-	funcActions := make(map[string][]ExtractedAction) // funcName -> actions
+	// Phase 1: Extract direct SDK calls from ALL functions (helpers + CRUD)
+	allSdkCalls := make(map[string][]ExtractedAction) // funcName -> actions
+	funcConnVar := make(map[string]string)            // funcName -> connVar
+	funcService := make(map[string]string)            // funcName -> service
 
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
@@ -61,28 +71,57 @@ func ParseResourceFileStructured(src string, tfType string, resourceName string)
 			continue
 		}
 		name := fd.Name.Name
-		if !containsIgnoreCase(name, resourceName) || !strings.HasPrefix(name, "resource") {
+		calls, connVar, service := extractSDKCallsWithConnInfo(fd)
+		if len(calls) > 0 {
+			allSdkCalls[name] = dedupActions(calls)
+		}
+		if connVar != "" {
+			funcConnVar[name] = connVar
+		}
+		if service != "" {
+			funcService[name] = service
+		}
+	}
+
+	// Phase 1b: Build call graph — for each function, track which helpers it calls
+	callGraph := make(map[string][]string) // funcName -> helper names
+	for _, decl := range f.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if !ok || fd.Body == nil {
 			continue
 		}
+		connVar := funcConnVar[fd.Name.Name]
+		if connVar == "" {
+			continue
+		}
+		helpers := findHelperCalls(fd, connVar, f)
+		if len(helpers) > 0 {
+			callGraph[fd.Name.Name] = helpers
+		}
+	}
 
-		funcCalls := extractSDKCalls(fd)
-		if len(funcCalls) > 0 {
-			funcActions[name] = dedupActions(funcCalls)
+	// Phase 1c: Resolve transitive SDK calls for each resource function
+	resolvedCalls := make(map[string][]ExtractedAction) // funcName -> resolved actions
+	for _, decl := range f.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		name := fd.Name.Name
+		if !strings.HasPrefix(name, "resource") || !containsIgnoreCase(name, resourceName) {
+			continue
+		}
+		resolved := resolveTransitiveExtracted(name, allSdkCalls, callGraph, make(map[string]bool), 0)
+		if len(resolved) > 0 {
+			resolvedCalls[name] = dedupActions(resolved)
 		}
 	}
 
 	// Phase 2: Map to CRUD operations
 	actions := make(map[string][]ExtractedAction)
+	operationMap := map[string]string{"Create": "create", "Read": "read", "Update": "update", "Delete": "delete", "Import": "import"}
 
-	operationMap := map[string]string{
-		"Create": "create",
-		"Read":   "read",
-		"Update": "update",
-		"Delete": "delete",
-		"Import": "import",
-	}
-
-	for funcName, funcCalls := range funcActions {
+	for funcName, funcCalls := range resolvedCalls {
 		for opSuffix, opKey := range operationMap {
 			if strings.HasSuffix(funcName, opSuffix) {
 				actions[opKey] = append(actions[opKey], funcCalls...)
@@ -92,20 +131,14 @@ func ParseResourceFileStructured(src string, tfType string, resourceName string)
 	}
 
 	// Phase 3: Follow function returns for implicit reads.
-	// When Create returns resourceXxxRead, include Read permissions in Create.
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
-		if !ok {
+		if !ok || !strings.HasPrefix(fd.Name.Name, "resource") || !strings.HasSuffix(fd.Name.Name, "Create") {
 			continue
 		}
-		name := fd.Name.Name
-		if !strings.HasPrefix(name, "resource") || !strings.HasSuffix(name, "Create") {
-			continue
-		}
-
 		calledFuncs := findReturnedResourceCalls(fd)
 		for _, calledName := range calledFuncs {
-			if calledActions, ok := funcActions[calledName]; ok {
+			if calledActions, ok := resolvedCalls[calledName]; ok {
 				actions["create"] = append(actions["create"], calledActions...)
 			}
 		}
@@ -599,7 +632,7 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 		} else {
 			// If a duplicate exists and this one is unconditional, upgrade
 			for i := range out {
-				if out[i].Action == ea.Action && ea.Conditional == false {
+				if out[i].Action == ea.Action && !ea.Conditional {
 					out[i].Conditional = false
 					out[i].Condition = ""
 				}
@@ -607,4 +640,162 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 		}
 	}
 	return out
+}
+
+// extractSDKCallsWithConnInfo walks the body of a function and extracts all AWS
+// SDK API calls, detecting the connection variable and service from either a
+// client assignment (conn := meta.(*conns.AWSClient).XxxClient) or a typed
+// parameter (func helper(ctx, conn *iam.Client)).
+// Returns (actions, connVar, service).
+func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) ([]ExtractedAction, string, string) {
+	if fd.Body == nil {
+		return nil, "", ""
+	}
+
+	state := &extractionState{}
+
+	// First, check for conn in function parameters (helper functions)
+	findConnParam(fd, &state.connVar, &state.service)
+
+	// Then walk the body for client assignments and SDK calls
+	walkWithConditionals(fd.Body, state)
+
+	return dedupActions(state.actions), state.connVar, state.service
+}
+
+// findConnParam checks function parameters for a conn variable with a typed
+// SDK client (e.g., conn *iam.Client, conn *backup.Client).
+// Sets connVar and service if found.
+func findConnParam(fd *ast.FuncDecl, connVar *string, service *string) {
+	if fd.Type.Params == nil {
+		return
+	}
+	for _, param := range fd.Type.Params.List {
+		for _, name := range param.Names {
+			if isConnParamName(name.Name) {
+				if svc := paramTypeToService(param.Type); svc != "" {
+					*connVar = name.Name
+					*service = svc
+					return
+				}
+			}
+		}
+	}
+}
+
+// isConnParamName checks if a parameter name looks like a connection variable.
+func isConnParamName(name string) bool {
+	switch name {
+	case "conn", "c", "client":
+		return true
+	}
+	return false
+}
+
+// paramTypeToService extracts the AWS service name from a parameter type
+// like *iam.Client -> iam, *backup.Client -> backup, *dynamodb.Client -> dynamodb.
+func paramTypeToService(expr ast.Expr) string {
+	star, ok := expr.(*ast.StarExpr)
+	if !ok {
+		return ""
+	}
+	sel, ok := star.X.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	// ident.Name is the package, e.g., "iam", "backup", "dynamodb"
+	return ident.Name
+}
+
+// findHelperCalls finds all helper function calls (functions defined in the same
+// file that use the given connVar as an argument) within a function body.
+func findHelperCalls(fd *ast.FuncDecl, connVar string, f *ast.File) []string {
+	if fd.Body == nil || connVar == "" {
+		return nil
+	}
+
+	var helpers []string
+
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		// Look for: someHelper(ctx, conn, ...)
+		fnName := ""
+		switch fn := call.Fun.(type) {
+		case *ast.Ident:
+			fnName = fn.Name
+		case *ast.SelectorExpr:
+			fnName = fn.Sel.Name
+		default:
+			return true
+		}
+
+		// Skip if this function is not defined in the same file
+		if !funcDefinedInFile(f, fnName) {
+			return true
+		}
+
+		// Check if any argument is the connVar
+		for _, arg := range call.Args {
+			if ident, ok := arg.(*ast.Ident); ok && ident.Name == connVar {
+				helpers = append(helpers, fnName)
+				return true
+			}
+		}
+
+		return true
+	})
+
+	return helpers
+}
+
+// funcDefinedInFile checks if a function with the given name is declared in the
+// same Go source file.
+func funcDefinedInFile(f *ast.File, name string) bool {
+	for _, decl := range f.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if ok && fd.Name.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveTransitiveExtracted recursively collects SDK calls from a function and
+// all helpers it transitively calls. Uses a depth limit (5) and a visited set
+// to prevent infinite recursion.
+func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]ExtractedAction, callGraph map[string][]string, visited map[string]bool, depth int) []ExtractedAction {
+	const maxHelperDepth = 5
+	if depth > maxHelperDepth || visited[funcName] {
+		return nil
+	}
+	visited[funcName] = true
+
+	var resolved []ExtractedAction
+
+	// Include this function's own SDK calls
+	if calls, ok := allSdkCalls[funcName]; ok {
+		resolved = append(resolved, calls...)
+	}
+
+	// Follow helper calls
+	if helpers, ok := callGraph[funcName]; ok {
+		for _, helperName := range helpers {
+			// Copy visited map to isolate each branch
+			branchVisited := make(map[string]bool)
+			for k := range visited {
+				branchVisited[k] = true
+			}
+			resolved = append(resolved, resolveTransitiveExtracted(helperName, allSdkCalls, callGraph, branchVisited, depth+1)...)
+		}
+	}
+
+	return resolved
 }

@@ -531,3 +531,135 @@ func TestExtractConditionAttribute(t *testing.T) {
 		})
 	}
 }
+
+func TestParseResourceFile_IAMRole_Helpers(t *testing.T) {
+	src := `
+package iam
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+)
+
+func resourceRoleCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	input := &iam.CreateRoleInput{RoleName: aws.String(name)}
+	output, err := retryCreateRole(ctx, conn, input)
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "creating IAM Role: %s", err)
+	}
+	_ = output
+	d.SetId("test")
+	return append(diags, resourceRoleRead(ctx, d, meta)...)
+}
+
+func retryCreateRole(ctx context.Context, conn *iam.Client, input *iam.CreateRoleInput) (*iam.CreateRoleOutput, error) {
+	return conn.CreateRole(ctx, input)
+}
+
+func resourceRoleRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	output, err := findRoleByName(ctx, conn, d.Id())
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading IAM Role: %s", err)
+	}
+	_ = output
+	return nil
+}
+
+func findRoleByName(ctx context.Context, conn *iam.Client, id string) (*iam.Role, error) {
+	return findRole(ctx, conn, id)
+}
+
+func findRole(ctx context.Context, conn *iam.Client, id string) (*iam.Role, error) {
+	return conn.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(id)})
+}
+`
+	actions, err := ParseResourceFile(src, "aws_iam_role", "Role")
+	if err != nil {
+		t.Fatalf("ParseResourceFile failed: %v", err)
+	}
+
+	createActions := actions["create"]
+	if !containsAction(createActions, "iam:CreateRole") {
+		t.Errorf("create: expected iam:CreateRole (followed through retryCreateRole helper), got %v", createActions)
+	}
+	// Create returns resourceRoleRead → should include GetRole from read chain
+	if !containsAction(createActions, "iam:GetRole") {
+		t.Errorf("create: expected iam:GetRole (followed through findRoleByName → findRole → GetRole chain + return following), got %v", createActions)
+	}
+	t.Logf("IAM role create actions: %v", createActions)
+}
+
+func TestParseResourceFile_ElastiCache_Helpers(t *testing.T) {
+	src := `
+package elasticache
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+)
+
+func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).ElastiCacheClient(ctx)
+	input := &elasticache.CreateCacheClusterInput{CacheClusterId: aws.String(id)}
+	clusterID, _, err := createCacheCluster(ctx, conn, "aws", input)
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "creating Cache Cluster: %s", err)
+	}
+	d.SetId(clusterID)
+	return append(diags, resourceClusterRead(ctx, d, meta)...)
+}
+
+func createCacheCluster(ctx context.Context, conn *elasticache.Client, partition string, input *elasticache.CreateCacheClusterInput) (string, string, error) {
+	output, err := conn.CreateCacheCluster(ctx, input)
+	if err != nil {
+		return "", "", err
+	}
+	return *output.CacheCluster.CacheClusterId, "", nil
+}
+
+func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).ElastiCacheClient(ctx)
+	output, err := conn.DescribeCacheClusters(ctx, &elasticache.DescribeCacheClustersInput{})
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading: %s", err)
+	}
+	_ = output
+	return nil
+}
+
+func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).ElastiCacheClient(ctx)
+	_, err := deleteCacheCluster(ctx, conn, "aws", d.Id())
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "deleting: %s", err)
+	}
+	return nil
+}
+
+func deleteCacheCluster(ctx context.Context, conn *elasticache.Client, partition, id string) error {
+	_, err := conn.DeleteCacheCluster(ctx, &elasticache.DeleteCacheClusterInput{CacheClusterId: aws.String(id)})
+	return err
+}
+`
+	actions, err := ParseResourceFile(src, "aws_elasticache_cluster", "Cluster")
+	if err != nil {
+		t.Fatalf("ParseResourceFile failed: %v", err)
+	}
+
+	createActions := actions["create"]
+	if !containsAction(createActions, "elasticache:CreateCacheCluster") {
+		t.Errorf("create: expected elasticache:CreateCacheCluster (followed through createCacheCluster helper), got %v", createActions)
+	}
+
+	deleteActions := actions["delete"]
+	if !containsAction(deleteActions, "elasticache:DeleteCacheCluster") {
+		t.Errorf("delete: expected elasticache:DeleteCacheCluster (followed through deleteCacheCluster helper), got %v", deleteActions)
+	}
+
+	t.Logf("ElastiCache create actions: %v", createActions)
+	t.Logf("ElastiCache delete actions: %v", deleteActions)
+}
