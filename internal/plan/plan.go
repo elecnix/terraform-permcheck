@@ -3,6 +3,7 @@ package plan
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -70,4 +71,56 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 		})
 	}
 	return changes, nil
+}
+
+// tfOutput holds the subset of a Terraform output we need.
+type tfOutput struct {
+	Value json.RawMessage `json:"value"`
+}
+
+// tfPlanWithOutputs mirrors the planned_values.outputs section of a plan.
+type tfPlanWithOutputs struct {
+	PlannedValues struct {
+		Outputs map[string]tfOutput `json:"outputs"`
+	} `json:"planned_values"`
+}
+
+// ParseOutput extracts the value of a named output from a terraform plan JSON
+// (from `terraform show -json plan.tfplan`). It navigates to
+// planned_values.outputs.<name>.value and returns the raw JSON value.
+func ParseOutput(raw []byte, name string) (json.RawMessage, error) {
+	var plan tfPlanWithOutputs
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		return nil, fmt.Errorf("parse plan for output %q: %w", name, err)
+	}
+
+	output, ok := plan.PlannedValues.Outputs[name]
+	if !ok {
+		return nil, fmt.Errorf("output %q not found in plan outputs", name)
+	}
+
+	return output.Value, nil
+}
+
+// tfStateOutputs mirrors the outputs section of terraform state JSON
+// (from `terraform show -json`).
+type tfStateOutputs struct {
+	Outputs map[string]tfOutput `json:"outputs"`
+}
+
+// ParseStateOutput extracts the value of a named output from terraform state
+// JSON (from `terraform show -json` without a plan file). It navigates to
+// outputs.<name>.value and returns the raw JSON value.
+func ParseStateOutput(raw []byte, name string) (json.RawMessage, error) {
+	var state tfStateOutputs
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return nil, fmt.Errorf("parse state for output %q: %w", name, err)
+	}
+
+	output, ok := state.Outputs[name]
+	if !ok {
+		return nil, fmt.Errorf("output %q not found in state outputs", name)
+	}
+
+	return output.Value, nil
 }
