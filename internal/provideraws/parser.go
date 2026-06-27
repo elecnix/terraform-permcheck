@@ -14,13 +14,38 @@ import (
 	"strings"
 )
 
+// ExtractedAction represents an AWS IAM action extracted from a provider
+// source file, with metadata about whether it is conditionally called.
+type ExtractedAction struct {
+	Action      string // e.g., "backup:CreateBackupVault"
+	Conditional bool   // true if this SDK call is inside a conditional block
+	Condition   string // attribute name guarding the call, e.g. "kms_key_arn"
+}
+
 // ParseResourceFile parses a Go source file from the terraform-provider-aws
 // and extracts the IAM permissions (actions) required by each CRUD function.
+// Returns all actions (both unconditional and conditional) as plain strings.
 //
-// src: the full Go source code of the resource file
-// tfType: terraform resource type, e.g. "aws_backup_vault"
-// resourceName: the CamelCase name used in function names, e.g. "Vault"
+// For structured results with conditional metadata, use ParseResourceFileStructured.
 func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
+	structured, err := ParseResourceFileStructured(src, tfType, resourceName)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]string)
+	for k, v := range structured {
+		for _, ea := range v {
+			result[k] = append(result[k], ea.Action)
+		}
+		result[k] = dedup(result[k])
+	}
+	return result, nil
+}
+
+// ParseResourceFileStructured parses a Go source file and returns extracted
+// actions with conditional metadata (whether the call is inside an if-statement
+// guarded by d.GetOk() or d.Get()).
+func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, tfType+".go", src, parser.ParseComments)
 	if err != nil {
@@ -28,7 +53,7 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 	}
 
 	// Phase 1: Find all resource functions and extract their SDK calls
-	funcActions := make(map[string][]string) // funcName -> actions
+	funcActions := make(map[string][]ExtractedAction) // funcName -> actions
 
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
@@ -42,12 +67,12 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 
 		funcCalls := extractSDKCalls(fd)
 		if len(funcCalls) > 0 {
-			funcActions[name] = dedup(funcCalls)
+			funcActions[name] = dedupActions(funcCalls)
 		}
 	}
 
 	// Phase 2: Map to CRUD operations
-	actions := make(map[string][]string)
+	actions := make(map[string][]ExtractedAction)
 
 	operationMap := map[string]string{
 		"Create": "create",
@@ -88,42 +113,223 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 
 	// Deduplicate
 	for k, v := range actions {
-		actions[k] = dedup(v)
+		actions[k] = dedupActions(v)
 	}
 
 	return actions, nil
 }
 
 // extractSDKCalls walks the body of a function and extracts all AWS SDK API
-// calls as IAM action strings (e.g., "backup:CreateBackupVault").
-func extractSDKCalls(fd *ast.FuncDecl) []string {
+// calls, distinguishing unconditional calls from those inside conditional
+// blocks (e.g., if d.GetOk("attribute") or d.Get(...)).
+func extractSDKCalls(fd *ast.FuncDecl) []ExtractedAction {
 	if fd.Body == nil {
 		return nil
 	}
 
-	var actions []string
-	service := ""
-	connVar := ""
+	state := &extractionState{}
+	walkWithConditionals(fd.Body, state)
+	return state.actions
+}
 
-	ast.Inspect(fd.Body, func(n ast.Node) bool {
-		switch node := n.(type) {
-		case *ast.AssignStmt:
-			// Look for: conn := meta.(*conns.AWSClient).XxxClient(ctx)
-			if svc, conn := findClientAssignment(node); svc != "" {
-				service = svc
-				connVar = conn
+// extractionState tracks the current state during conditional-aware AST walking.
+type extractionState struct {
+	service    string
+	connVar    string
+	actions    []ExtractedAction
+	condDepth  int    // how many conditional if-blocks deep we are
+	condReason string // attribute name from the innermost conditional guard
+}
+
+// walkWithConditionals recursively walks an AST node, tracking conditional
+// context from if-statements that gate on d.GetOk() or d.Get().
+func walkWithConditionals(node ast.Node, state *extractionState) {
+	if node == nil {
+		return
+	}
+
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		for _, stmt := range n.List {
+			walkWithConditionals(stmt, state)
+		}
+
+	case *ast.ExprStmt:
+		walkWithConditionals(n.X, state)
+
+	case *ast.IfStmt:
+		// Save current connVar/service so they can be restored after the if-block
+		savedConnVar := state.connVar
+		savedService := state.service
+
+		// Check if this if-statement is conditional on d.GetOk() or d.Get()
+		condAttr := extractConditionAttribute(n)
+		if condAttr != "" {
+			// Enter conditional context
+			state.condDepth++
+			if state.condReason == "" {
+				state.condReason = condAttr
 			}
 
-		case *ast.CallExpr:
-			// Look for: conn.MethodName(ctx, ...)
-			if action := extractCallAction(node, connVar, service); action != "" {
-				actions = append(actions, action)
+			// Walk body inside conditional context
+			walkWithConditionals(n.Body, state)
+
+			// Also walk else if present (also conditional, could be different attribute)
+			walkWithConditionals(n.Else, state)
+
+			// Leave conditional context
+			state.condDepth--
+			if state.condDepth == 0 {
+				state.condReason = ""
+			}
+		} else {
+			// Normal if — walk without changing conditional state
+			walkWithConditionals(n.Body, state)
+			walkWithConditionals(n.Else, state)
+		}
+
+		// Restore connVar/service in case inner assignments changed them
+		state.connVar = savedConnVar
+		state.service = savedService
+
+	case *ast.AssignStmt:
+		// Also walk the init statement of if-statements (which may contain d.GetOk)
+		// This is covered by the IfStmt.Init handling, but general assignments
+		// need to be checked for client assignments
+		if svc, conn := findClientAssignment(n); svc != "" {
+			state.service = svc
+			state.connVar = conn
+		}
+		// Walk children (RHS might have calls)
+		for _, expr := range n.Lhs {
+			walkWithConditionals(expr, state)
+		}
+		for _, expr := range n.Rhs {
+			walkWithConditionals(expr, state)
+		}
+
+	case *ast.ReturnStmt:
+		for _, expr := range n.Results {
+			walkWithConditionals(expr, state)
+		}
+
+	case *ast.CallExpr:
+		// Check for SDK API call: conn.MethodName(ctx, ...)
+		if action := extractCallAction(n, state.connVar, state.service); action != "" {
+			ea := ExtractedAction{
+				Action:      action,
+				Conditional: state.condDepth > 0,
+				Condition:   state.condReason,
+			}
+			state.actions = append(state.actions, ea)
+			return
+		}
+		// Walk arguments (recursive calls might contain more SDK calls)
+		for _, arg := range n.Args {
+			walkWithConditionals(arg, state)
+		}
+
+	case *ast.ForStmt:
+		walkWithConditionals(n.Body, state)
+
+	case *ast.RangeStmt:
+		walkWithConditionals(n.Body, state)
+
+	case *ast.SwitchStmt:
+		walkWithConditionals(n.Body, state)
+
+	case *ast.CaseClause:
+		for _, stmt := range n.Body {
+			walkWithConditionals(stmt, state)
+		}
+
+	case *ast.DeferStmt:
+		walkWithConditionals(n.Call, state)
+
+	case *ast.GoStmt:
+		walkWithConditionals(n.Call, state)
+
+	case *ast.LabeledStmt:
+		walkWithConditionals(n.Stmt, state)
+
+	case *ast.SendStmt:
+		// Channel send — no SDK calls here
+
+	case *ast.IncDecStmt:
+		// Increment/decrement — no SDK calls here
+
+	case *ast.BranchStmt:
+		// break, continue, goto
+
+	default:
+		// Ident, Literal, etc. — not relevant
+	}
+}
+
+// extractConditionAttribute checks if an if-statement's condition involves
+// d.GetOk("attribute") or d.Get("attribute") and returns the attribute name.
+func extractConditionAttribute(ifStmt *ast.IfStmt) string {
+	// Check Init statement: if v, ok := d.GetOk("attr"); ok { ...
+	if ifStmt.Init != nil {
+		if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
+			for _, rhs := range assign.Rhs {
+				if attr := extractGetOkAttribute(rhs); attr != "" {
+					return attr
+				}
 			}
 		}
-		return true
-	})
+	}
 
-	return actions
+	// Check condition expression: d.Get("attr").(bool)
+	// The condition may be wrapped in a TypeAssertExpr
+	cond := ifStmt.Cond
+	if ta, ok := cond.(*ast.TypeAssertExpr); ok {
+		cond = ta.X
+	}
+	if attr := extractGetOkAttribute(cond); attr != "" {
+		return attr
+	}
+
+	return ""
+}
+
+// extractGetOkAttribute checks if an expression is d.GetOk("attr") or
+// d.Get("attr") and returns the attribute name.
+func extractGetOkAttribute(expr ast.Expr) string {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+
+	// Must be a method call on something named "d"
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok || ident.Name != "d" {
+		return ""
+	}
+
+	// Method must be GetOk or Get
+	method := sel.Sel.Name
+	if method != "GetOk" && method != "Get" {
+		return ""
+	}
+
+	// First argument must be a string literal
+	if len(call.Args) < 1 {
+		return ""
+	}
+
+	bl, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || bl.Kind != token.STRING {
+		return ""
+	}
+
+	// Return the attribute name without quotes
+	return strings.Trim(bl.Value, "\"")
 }
 
 // findClientAssignment detects a client connection assignment like:
@@ -375,6 +581,29 @@ func dedup(s []string) []string {
 		if !seen[v] {
 			seen[v] = true
 			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// dedupActions removes duplicate ExtractedActions (by Action string) while
+// preserving order. When deduplicating, marks the action as unconditional
+// if any occurrence was unconditional (union).
+func dedupActions(actions []ExtractedAction) []ExtractedAction {
+	seen := make(map[string]bool)
+	var out []ExtractedAction
+	for _, ea := range actions {
+		if !seen[ea.Action] {
+			seen[ea.Action] = true
+			out = append(out, ea)
+		} else {
+			// If a duplicate exists and this one is unconditional, upgrade
+			for i := range out {
+				if out[i].Action == ea.Action && ea.Conditional == false {
+					out[i].Conditional = false
+					out[i].Condition = ""
+				}
+			}
 		}
 	}
 	return out

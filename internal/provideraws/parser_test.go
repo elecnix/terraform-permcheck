@@ -1,6 +1,9 @@
 package provideraws
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"testing"
 )
 
@@ -346,6 +349,184 @@ func resourceBucketCreate(ctx context.Context, d *schema.ResourceData, meta any)
 			got := resourceNameFromSource([]byte(tt.src))
 			if got != tt.want {
 				t.Errorf("resourceNameFromSource() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseResourceFileStructured_ConditionalCalls(t *testing.T) {
+	src := `
+package backup
+
+import (
+	"github.com/aws/aws-sdk-go-v2/service/backup"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+)
+
+func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+
+	// Unconditional: always needed
+	_, err := conn.CreateBackupVault(ctx, &backup.CreateBackupVaultInput{})
+	if err != nil { return nil }
+
+	// Conditional: only if kms_key_arn is set
+	if v, ok := d.GetOk("kms_key_arn"); ok {
+		kmsConn := meta.(*conns.AWSClient).KMSClient(ctx)
+		_, err := kmsConn.CreateGrant(ctx, &kms.CreateGrantInput{})
+		if err != nil { return nil }
+	}
+
+	// Conditional: only if tags are set
+	if _, ok := d.GetOk("tags"); ok {
+		conn.TagResource(ctx, &backup.TagResourceInput{})
+	}
+
+	return nil
+}
+`
+
+	actions, err := ParseResourceFileStructured(src, "aws_backup_vault", "Vault")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	createActions := actions["create"]
+
+	// Find unconditional CreateBackupVault
+	var createVault *ExtractedAction
+	var createGrant *ExtractedAction
+	var tagResource *ExtractedAction
+	for i := range createActions {
+		switch createActions[i].Action {
+		case "backup:CreateBackupVault":
+			createVault = &createActions[i]
+		case "kms:CreateGrant":
+			createGrant = &createActions[i]
+		case "backup:TagResource":
+			tagResource = &createActions[i]
+		}
+	}
+
+	// CreateBackupVault: unconditional
+	if createVault == nil {
+		t.Fatal("expected backup:CreateBackupVault in actions")
+	}
+	if createVault.Conditional {
+		t.Errorf("CreateBackupVault should be unconditional, got conditional=%v reason=%q",
+			createVault.Conditional, createVault.Condition)
+	}
+
+	// kms:CreateGrant: conditional on kms_key_arn
+	if createGrant == nil {
+		t.Fatal("expected kms:CreateGrant in actions")
+	}
+	if !createGrant.Conditional {
+		t.Error("kms:CreateGrant should be conditional")
+	}
+	if createGrant.Condition != "kms_key_arn" {
+		t.Errorf("kms:CreateGrant condition = %q, want %q", createGrant.Condition, "kms_key_arn")
+	}
+
+	// TagResource: conditional on tags
+	if tagResource == nil {
+		t.Fatal("expected backup:TagResource in actions")
+	}
+	if !tagResource.Conditional {
+		t.Error("TagResource should be conditional")
+	}
+	if tagResource.Condition != "tags" {
+		t.Errorf("TagResource condition = %q, want %q", tagResource.Condition, "tags")
+	}
+}
+
+func TestParseResourceFileStructured_IfGet(t *testing.T) {
+	// Test the d.Get("attribute").(bool) pattern
+	src := `
+package backup
+
+func resourceVaultDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+
+	if d.Get("force_destroy").(bool) {
+		conn.ListRecoveryPointsByBackupVault(ctx, &backup.ListRecoveryPointsByBackupVaultInput{})
+	}
+
+	conn.DeleteBackupVault(ctx, &backup.DeleteBackupVaultInput{})
+	return nil
+}
+`
+
+	actions, err := ParseResourceFileStructured(src, "aws_backup_vault", "Vault")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	deleteActions := actions["delete"]
+
+	var listPoints *ExtractedAction
+	var deleteVault *ExtractedAction
+	for i := range deleteActions {
+		switch deleteActions[i].Action {
+		case "backup:ListRecoveryPointsByBackupVault":
+			listPoints = &deleteActions[i]
+		case "backup:DeleteBackupVault":
+			deleteVault = &deleteActions[i]
+		}
+	}
+
+	if listPoints == nil {
+		t.Fatal("expected ListRecoveryPointsByBackupVault")
+	}
+	if !listPoints.Conditional {
+		t.Error("ListRecoveryPointsByBackupVault should be conditional")
+	}
+	if listPoints.Condition != "force_destroy" {
+		t.Errorf("condition = %q, want force_destroy", listPoints.Condition)
+	}
+
+	// DeleteBackupVault: unconditional (outside the if block)
+	if deleteVault == nil {
+		t.Fatal("expected DeleteBackupVault")
+	}
+	if deleteVault.Conditional {
+		t.Error("DeleteBackupVault should be unconditional")
+	}
+}
+
+func TestExtractConditionAttribute(t *testing.T) {
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`if v, ok := d.GetOk("kms_key_arn"); ok { foo() }`, "kms_key_arn"},
+		{`if _, ok := d.GetOk("tags"); ok { foo() }`, "tags"},
+		{`if d.Get("force_destroy").(bool) { foo() }`, "force_destroy"},
+		{`if err != nil { foo() }`, ""},
+		{`if d.HasChangesExcept("tags") { foo() }`, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			// Parse the if-statement from Go source
+			src := "package x\nfunc f() {\n" + tt.src + "\n}"
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+
+			var got string
+			ast.Inspect(f, func(n ast.Node) bool {
+				if ifStmt, ok := n.(*ast.IfStmt); ok {
+					got = extractConditionAttribute(ifStmt)
+					return false
+				}
+				return true
+			})
+
+			if got != tt.want {
+				t.Errorf("extractConditionAttribute = %q, want %q", got, tt.want)
 			}
 		})
 	}
