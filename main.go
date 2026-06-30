@@ -11,10 +11,17 @@
 //
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
+//
+// GitHub Actions annotations (warn, don't fail):
+//
+//	terraform show -json plan.tfplan | terraform-permcheck validate \
+//	  --policy-file deploy_policy.json --cloud aws \
+//	  --format github-annotations --exit-zero
 package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,8 +35,15 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
+// errGapsFound is returned by validateCmd when permission gaps are detected
+// and --exit-zero is not set. run() translates this to exit code 1.
+var errGapsFound = errors.New("permission gaps found")
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		if errors.Is(err, errGapsFound) {
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "terraform-permcheck: %v\n", err)
 		os.Exit(2)
 	}
@@ -42,7 +56,12 @@ func run(args []string) error {
 
 	switch args[0] {
 	case "validate":
-		return validateCmd(args[1:])
+		err := validateCmd(args[1:])
+		// Translate gaps to exit code 1; --exit-zero suppresses this upstream.
+		if errors.Is(err, errGapsFound) {
+			return err
+		}
+		return err
 	case "version":
 		fmt.Println("terraform-permcheck v0.1.0")
 		return nil
@@ -62,9 +81,15 @@ func validateCmd(args []string) error {
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
 	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration (static HCL mode — no plan, no AWS credentials required)")
+	format := fs.String("format", "text", "output format: text, github-annotations")
+	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if *format != "text" && *format != "github-annotations" {
+		return fmt.Errorf("unsupported format %q (supported: text, github-annotations)", *format)
 	}
 
 	// Static HCL mode: --terraform-root replaces --plan-file / stdin.
@@ -78,7 +103,7 @@ func validateCmd(args []string) error {
 		if *policyFile == "" {
 			return fmt.Errorf("--terraform-root requires --policy-file")
 		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired)
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero)
 	}
 
 	// Exactly one policy source must be provided.
@@ -190,12 +215,14 @@ func validateCmd(args []string) error {
 	}
 
 	if len(missing) > 0 {
-		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
-		fmt.Fprintf(os.Stderr, "\n%d resource changes checked, %d distinct missing permissions found.\n", len(changes), iam.DistinctCount(missing))
-		os.Exit(1)
+		printMissing(missing, len(changes), "resource changes", *format)
+		if *exitZero {
+			return nil
+		}
+		return errGapsFound
 	}
 
-	fmt.Printf("All required permissions covered (%d resource changes checked).\n", len(changes))
+	printSuccess(len(changes), "resource changes")
 	return nil
 }
 
@@ -219,6 +246,25 @@ func readStdin() ([]byte, error) {
 	return io.ReadAll(os.Stdin)
 }
 
+// printMissing formats and prints missing actions. In github-annotations mode
+// the output goes to stdout (so ::warning:: commands are parsed by the
+// workflow runner); in text mode it goes to stderr (for human readability).
+func printMissing(missing []iam.MissingAction, checked int, resourceLabel, format string) {
+	switch format {
+	case "github-annotations":
+		fmt.Print(iam.FormatGitHubAnnotations(missing))
+		fmt.Printf("\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+	default:
+		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
+		fmt.Fprintf(os.Stderr, "\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+	}
+}
+
+// printSuccess prints the all-clear message.
+func printSuccess(checked int, resourceLabel string) {
+	fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
+}
+
 // unwrapJSONString converts a json.RawMessage to a []byte suitable for
 // policy parsing. If the raw value is a JSON string (e.g. `"..."`), it
 // unquotes and returns the inner string. Otherwise it returns the raw
@@ -236,7 +282,7 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool) error {
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool, format string, exitZero bool) error {
 	if cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
 	}
@@ -302,9 +348,11 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 	}
 
 	if len(missing) > 0 {
-		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
-		fmt.Fprintf(os.Stderr, "\n%d resource types checked (static HCL mode), %d distinct missing permissions found.\n", len(changes), iam.DistinctCount(missing))
-		os.Exit(1)
+		printMissing(missing, len(changes), "resource types (static HCL mode)", format)
+		if exitZero {
+			return nil
+		}
+		return errGapsFound
 	}
 
 	fmt.Printf("All required permissions covered (%d resource types checked, static HCL mode).\n", len(changes))

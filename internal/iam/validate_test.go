@@ -320,6 +320,73 @@ func TestDistinctCount(t *testing.T) {
 	}
 }
 
+func TestFormatGitHubAnnotations_Grouped(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
+		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
+	}
+
+	got := FormatGitHubAnnotations(missing)
+
+	// Each distinct action should emit a single ::warning:: line
+	s3HeadCount := strings.Count(got, "::warning ")
+	if s3HeadCount != 3 {
+		t.Errorf("expected 3 ::warning lines (one per distinct action), got %d:\n%s", s3HeadCount, got)
+	}
+
+	// Verify the ::warning format: ::warning title=...::message
+	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
+		t.Error("expected ::warning title=Missing IAM permission:: prefix")
+	}
+
+	// Should list affected resource types
+	if !strings.Contains(got, "aws_s3_bucket") {
+		t.Error("expected aws_s3_bucket in annotations")
+	}
+	if !strings.Contains(got, "aws_cloudwatch_log_group") {
+		t.Error("expected aws_cloudwatch_log_group in annotations")
+	}
+
+	// Each warning should include the action name
+	if !strings.Contains(got, "cloudwatchlogs:TagResource") {
+		t.Error("expected cloudwatchlogs:TagResource in annotations")
+	}
+}
+
+func TestFormatGitHubAnnotations_Empty(t *testing.T) {
+	got := FormatGitHubAnnotations(nil)
+	if got != "" {
+		t.Errorf("expected empty string for nil, got %q", got)
+	}
+
+	got = FormatGitHubAnnotations([]MissingAction{})
+	if got != "" {
+		t.Errorf("expected empty string for empty slice, got %q", got)
+	}
+}
+
+func TestFormatGitHubAnnotations_Conditional(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
+	}
+
+	got := FormatGitHubAnnotations(missing)
+
+	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
+		t.Error("expected ::warning prefix")
+	}
+	// Should mention both the action and the attribute
+	if !strings.Contains(got, "kms:CreateGrant") {
+		t.Error("expected kms:CreateGrant in annotation")
+	}
+	if !strings.Contains(got, "kms_key_arn") {
+		t.Error("expected conditional attribute kms_key_arn in annotation")
+	}
+}
+
 func hasAction(missing []MissingAction, action string) bool {
 	for _, m := range missing {
 		if m.Action == action {
