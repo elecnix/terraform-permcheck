@@ -220,7 +220,7 @@ func TestFormatMissing_Grouped(t *testing.T) {
 		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
 	}
 
-	got := FormatMissing(missing)
+	got := FormatMissing(missing, nil)
 
 	// Header: count should be distinct actions (3), not total items (5)
 	if !strings.Contains(got, "Missing IAM permissions (3):") {
@@ -266,7 +266,7 @@ func TestFormatMissing_SingleResource(t *testing.T) {
 		{ResourceType: "aws_iam_role", ResourceName: "deploy", Change: "delete", Action: "iam:RemoveRoleFromInstanceProfile", Class: "[required]"},
 	}
 
-	got := FormatMissing(missing)
+	got := FormatMissing(missing, nil)
 
 	if !strings.Contains(got, "Missing IAM permissions (1):") {
 		t.Errorf("header should show count 1, got:\n%s", got)
@@ -280,12 +280,12 @@ func TestFormatMissing_SingleResource(t *testing.T) {
 }
 
 func TestFormatMissing_Empty(t *testing.T) {
-	got := FormatMissing(nil)
+	got := FormatMissing(nil, nil)
 	if got != "" {
 		t.Errorf("expected empty string for nil, got %q", got)
 	}
 
-	got = FormatMissing([]MissingAction{})
+	got = FormatMissing([]MissingAction{}, nil)
 	if got != "" {
 		t.Errorf("expected empty string for empty slice, got %q", got)
 	}
@@ -329,7 +329,7 @@ func TestFormatGitHubAnnotations_Grouped(t *testing.T) {
 		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
 	}
 
-	got := FormatGitHubAnnotations(missing)
+	got := FormatGitHubAnnotations(missing, nil)
 
 	// Each distinct action should emit a single ::warning:: line
 	s3HeadCount := strings.Count(got, "::warning ")
@@ -357,12 +357,12 @@ func TestFormatGitHubAnnotations_Grouped(t *testing.T) {
 }
 
 func TestFormatGitHubAnnotations_Empty(t *testing.T) {
-	got := FormatGitHubAnnotations(nil)
+	got := FormatGitHubAnnotations(nil, nil)
 	if got != "" {
 		t.Errorf("expected empty string for nil, got %q", got)
 	}
 
-	got = FormatGitHubAnnotations([]MissingAction{})
+	got = FormatGitHubAnnotations([]MissingAction{}, nil)
 	if got != "" {
 		t.Errorf("expected empty string for empty slice, got %q", got)
 	}
@@ -373,7 +373,7 @@ func TestFormatGitHubAnnotations_Conditional(t *testing.T) {
 		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
 	}
 
-	got := FormatGitHubAnnotations(missing)
+	got := FormatGitHubAnnotations(missing, nil)
 
 	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
 		t.Error("expected ::warning prefix")
@@ -402,7 +402,7 @@ func TestFormatMissing_ConditionalAttribute(t *testing.T) {
 		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
 		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateKey", Class: "[required]", ConditionAttribute: ""},
 	}
-	got := FormatMissing(missing)
+	got := FormatMissing(missing, nil)
 	if !strings.Contains(got, "kms:CreateGrant [conditional: kms_key_arn]") {
 		t.Errorf("expected conditional tag, got:\n%s", got)
 	}
@@ -437,5 +437,165 @@ func TestValidate_ExcludeConditional(t *testing.T) {
 	}
 	if !hasAction(missing, "kms:CreateKey") {
 		t.Error("kms:CreateKey should remain (unconditional)")
+	}
+}
+
+func TestStripResourceIndex(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"no index", "cloudtrail", "cloudtrail"},
+		{"count index", "cloudtrail[0]", "cloudtrail"},
+		{"large count", "cloudtrail[123]", "cloudtrail"},
+		{"for_each string key", `config["us-east-1"]`, "config"},
+		{"for_each with dots", `foo["bar.baz"]`, "foo"},
+		{"already clean", "my_bucket", "my_bucket"},
+		{"empty string", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripResourceIndex(tt.input)
+			if got != tt.expected {
+				t.Errorf("stripResourceIndex(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatGitHubAnnotations_WithFileLocation(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "cloudtrail", Change: "create", Action: "s3:PutPublicAccessBlock", Class: "[required]"},
+	}
+
+	locations := map[string]FileLocation{
+		"aws_s3_bucket.cloudtrail":                       {Path: "modules/datadog-cloudtrail/main.tf", Line: 10},
+		"aws_s3_bucket_public_access_block.cloudtrail":    {Path: "modules/datadog-cloudtrail/main.tf", Line: 82},
+	}
+
+	got := FormatGitHubAnnotations(missing, locations)
+
+	// First action (s3:CreateBucket) should have file=...line=10
+	if !strings.Contains(got, "::warning file=modules/datadog-cloudtrail/main.tf,line=10,title=Missing IAM permission::") {
+		t.Errorf("expected file= and line=10 in output, got:\n%s", got)
+	}
+
+	// Second action (s3:PutPublicAccessBlock) should have file=...line=82
+	if !strings.Contains(got, "::warning file=modules/datadog-cloudtrail/main.tf,line=82,title=Missing IAM permission::") {
+		t.Errorf("expected file= and line=82 in output, got:\n%s", got)
+	}
+}
+
+func TestFormatGitHubAnnotations_PartialFileLocation(t *testing.T) {
+	// Some resources have locations, some don't.
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "unknown_bucket", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+	}
+
+	locations := map[string]FileLocation{
+		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 5},
+	}
+
+	got := FormatGitHubAnnotations(missing, locations)
+
+	// The group contains cloudtrail (has location) and unknown_bucket (no location).
+	// First resource with a location wins → should have file=...
+	if !strings.Contains(got, "::warning file=main.tf,line=5,title=Missing IAM permission::") {
+		t.Errorf("expected file= for group with partial locations, got:\n%s", got)
+	}
+}
+
+func TestFormatGitHubAnnotations_NoLocations(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+	}
+
+	// nil map → behavior unchanged
+	got := FormatGitHubAnnotations(missing, nil)
+
+	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
+		t.Error("expected ::warning without file= when locations is nil")
+	}
+	if strings.Contains(got, "file=") {
+		t.Error("should not include file= when locations is nil")
+	}
+
+	// Empty map → same behavior
+	got = FormatGitHubAnnotations(missing, map[string]FileLocation{})
+
+	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
+		t.Error("expected ::warning without file= when locations is empty")
+	}
+	if strings.Contains(got, "file=") {
+		t.Error("should not include file= when locations is empty")
+	}
+}
+
+func TestFormatGitHubAnnotations_StripIndexForLookup(t *testing.T) {
+	// Resource names with count/for_each indices should be stripped before lookup.
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: `config["us-east-1"]`, Change: "create", Action: "s3:PutBucketPolicy", Class: "[required]"},
+	}
+
+	locations := map[string]FileLocation{
+		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
+		"aws_s3_bucket.config":     {Path: "config.tf", Line: 42},
+	}
+
+	got := FormatGitHubAnnotations(missing, locations)
+
+	if !strings.Contains(got, "::warning file=main.tf,line=10,title=Missing IAM permission::") {
+		t.Errorf("expected file=main.tf,line=10 for cloudtrail[0], got:\n%s", got)
+	}
+	if !strings.Contains(got, "::warning file=config.tf,line=42,title=Missing IAM permission::") {
+		t.Errorf("expected file=config.tf,line=42 for config[\"us-east-1\"], got:\n%s", got)
+	}
+}
+
+func TestFormatMissing_WithFileLocation(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+	}
+
+	locations := map[string]FileLocation{
+		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
+		// logs has NO location
+	}
+
+	got := FormatMissing(missing, locations)
+
+	// cloudtrail should have the file location appended
+	if !strings.Contains(got, "    → aws_s3_bucket.cloudtrail (create) [main.tf:10]\n") {
+		t.Errorf("expected file location for cloudtrail, got:\n%s", got)
+	}
+
+	// logs should NOT have a file location
+	if !strings.Contains(got, "    → aws_s3_bucket.logs (delete)\n") {
+		t.Errorf("expected no file location for logs, got:\n%s", got)
+	}
+	if strings.Contains(got, "aws_s3_bucket.logs (delete) [") {
+		t.Error("logs should not have file location")
+	}
+}
+
+func TestFormatMissing_StripIndexForLookup(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+	}
+
+	locations := map[string]FileLocation{
+		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
+	}
+
+	got := FormatMissing(missing, locations)
+
+	if !strings.Contains(got, "    → aws_s3_bucket.cloudtrail[0] (create) [main.tf:10]\n") {
+		t.Errorf("expected stripped index lookup with file location, got:\n%s", got)
 	}
 }

@@ -256,7 +256,7 @@ func TestFormatMissing_WithClassification(t *testing.T) {
 		},
 	}
 
-	output := FormatMissing(missing)
+	output := FormatMissing(missing, nil)
 
 	// Check header — shows distinct action count
 	if !strings.Contains(output, "Missing IAM permissions (3)") {
@@ -298,7 +298,7 @@ func TestFormatMissing_NoClass(t *testing.T) {
 		},
 	}
 
-	output := FormatMissing(missing)
+	output := FormatMissing(missing, nil)
 
 	// Action line should have no class tag, followed by resource
 	if !strings.Contains(output, "  backup:CreateBackupVault\n") {

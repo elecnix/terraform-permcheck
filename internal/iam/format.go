@@ -2,14 +2,38 @@ package iam
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// FileLocation records the source file path and line number of a terraform
+// resource declaration.
+type FileLocation struct {
+	Path string // file path relative to --terraform-root
+	Line int    // 1-based line number of the resource declaration
+}
+
+// stripResourceIndex removes count / for_each index suffixes from a terraform
+// resource name so it can be matched against the static HCL map (which only
+// carries the local name, never an index).
+//   cloudtrail[0]       → cloudtrail
+//   config["us-east-1"]  → config
+func stripResourceIndex(name string) string {
+	return resourceIndexRE.ReplaceAllString(name, "")
+}
+
+// resourceIndexRE matches a trailing bracket-index suffix like [0] or ["key"].
+var resourceIndexRE = regexp.MustCompile(`\[[^\]]*\]$`)
 
 // FormatGitHubAnnotations formats missing actions as GitHub Actions
 // ::warning:: workflow commands. Each distinct (Action, Class,
 // ConditionAttribute) group produces a single ::warning:: line listing the
-// affected resources. Returns empty string when there are no missing actions.
-func FormatGitHubAnnotations(missing []MissingAction) string {
+// affected resources. When locations is non-nil, the first resource in each
+// group that has a matching FileLocation entry (keyed by "type.name") gets
+// file= and line= parameters so GitHub surfaces the annotation inline in the
+// PR "Files changed" tab. Returns empty string when there are no missing
+// actions.
+func FormatGitHubAnnotations(missing []MissingAction, locations map[string]FileLocation) string {
 	if len(missing) == 0 {
 		return ""
 	}
@@ -31,6 +55,18 @@ func FormatGitHubAnnotations(missing []MissingAction) string {
 	for _, k := range order {
 		items := groups[k]
 
+		// Find the first resource in this group that has a file location.
+		var loc *FileLocation
+		if locations != nil {
+			for _, m := range items {
+				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
+				if l, ok := locations[key]; ok {
+					loc = &l
+					break
+				}
+			}
+		}
+
 		// Build the annotation message
 		var msgParts []string
 		for _, m := range items {
@@ -43,7 +79,11 @@ func FormatGitHubAnnotations(missing []MissingAction) string {
 		}
 		msg += " needed by: " + strings.Join(msgParts, ", ")
 
-		b.WriteString(fmt.Sprintf("::warning title=Missing IAM permission::%s\n", msg))
+		if loc != nil {
+			b.WriteString(fmt.Sprintf("::warning file=%s,line=%d,title=Missing IAM permission::%s\n", loc.Path, loc.Line, msg))
+		} else {
+			b.WriteString(fmt.Sprintf("::warning title=Missing IAM permission::%s\n", msg))
+		}
 	}
 
 	return b.String()
