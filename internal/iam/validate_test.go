@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -207,6 +208,115 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	}
 	if !hasAction(missing, "kms:TagResource") {
 		t.Error("expected kms:TagResource to be kept when attribute info is unknown")
+	}
+}
+
+func TestFormatMissing_Grouped(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
+		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
+	}
+
+	got := FormatMissing(missing)
+
+	// Header: count should be distinct actions (3), not total items (5)
+	if !strings.Contains(got, "Missing IAM permissions (3):") {
+		t.Errorf("header should show distinct count 3, got:\n%s", got)
+	}
+
+	// Each distinct action should appear exactly once as a group header
+	if !strings.Contains(got, "s3:HeadBucket [required]\n") {
+		t.Error("expected s3:HeadBucket [required] group header")
+	}
+	if !strings.Contains(got, "s3:DeletePublicAccessBlock [required]\n") {
+		t.Error("expected s3:DeletePublicAccessBlock [required] group header")
+	}
+	if !strings.Contains(got, "cloudwatchlogs:TagResource [required]\n") {
+		t.Error("expected cloudwatchlogs:TagResource [required] group header")
+	}
+
+	// Each resource should appear under its action group
+	if !strings.Contains(got, "  → aws_s3_bucket.logs (delete)\n") {
+		t.Error("expected → aws_s3_bucket.logs (delete)")
+	}
+	if !strings.Contains(got, "  → aws_s3_bucket.data (delete)\n") {
+		t.Error("expected → aws_s3_bucket.data (delete)")
+	}
+	if !strings.Contains(got, "  → aws_s3_bucket_public_access_block.logs_block (delete)\n") {
+		t.Error("expected → aws_s3_bucket_public_access_block.logs_block (delete)")
+	}
+	if !strings.Contains(got, "  → aws_s3_bucket_public_access_block.data_block (delete)\n") {
+		t.Error("expected → aws_s3_bucket_public_access_block.data_block (delete)")
+	}
+	if !strings.Contains(got, "  → aws_cloudwatch_log_group.api (delete)\n") {
+		t.Error("expected → aws_cloudwatch_log_group.api (delete)")
+	}
+
+	// Should not contain old format
+	if strings.Contains(got, " needs ") {
+		t.Error("output should not use old 'needs' format")
+	}
+}
+
+func TestFormatMissing_SingleResource(t *testing.T) {
+	missing := []MissingAction{
+		{ResourceType: "aws_iam_role", ResourceName: "deploy", Change: "delete", Action: "iam:RemoveRoleFromInstanceProfile", Class: "[required]"},
+	}
+
+	got := FormatMissing(missing)
+
+	if !strings.Contains(got, "Missing IAM permissions (1):") {
+		t.Errorf("header should show count 1, got:\n%s", got)
+	}
+	if !strings.Contains(got, "iam:RemoveRoleFromInstanceProfile [required]\n") {
+		t.Error("expected iam:RemoveRoleFromInstanceProfile group header")
+	}
+	if !strings.Contains(got, "  → aws_iam_role.deploy (delete)\n") {
+		t.Error("expected → aws_iam_role.deploy (delete)")
+	}
+}
+
+func TestFormatMissing_Empty(t *testing.T) {
+	got := FormatMissing(nil)
+	if got != "" {
+		t.Errorf("expected empty string for nil, got %q", got)
+	}
+
+	got = FormatMissing([]MissingAction{})
+	if got != "" {
+		t.Errorf("expected empty string for empty slice, got %q", got)
+	}
+}
+
+func TestDistinctCount(t *testing.T) {
+	missing := []MissingAction{
+		{Action: "s3:HeadBucket", Class: "[required]"},
+		{Action: "s3:HeadBucket", Class: "[required]"},
+		{Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
+		{Action: "cloudwatchlogs:TagResource", Class: "[required]"},
+		{Action: "backup:CreateBackupVault", Class: "[optional]"},
+	}
+
+	got := DistinctCount(missing)
+	if got != 4 {
+		t.Errorf("DistinctCount = %d, want 4", got)
+	}
+
+	// Different class = different group
+	missing2 := []MissingAction{
+		{Action: "s3:HeadBucket", Class: "[required]"},
+		{Action: "s3:HeadBucket", Class: "[optional]"},
+	}
+	if DistinctCount(missing2) != 2 {
+		t.Error("same action with different classes should be distinct")
+	}
+
+	// Empty
+	if DistinctCount(nil) != 0 {
+		t.Error("empty should return 0")
 	}
 }
 

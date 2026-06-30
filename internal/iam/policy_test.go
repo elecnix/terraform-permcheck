@@ -258,18 +258,28 @@ func TestFormatMissing_WithClassification(t *testing.T) {
 
 	output := FormatMissing(missing)
 
-	// Check header
+	// Check header — shows distinct action count
 	if !strings.Contains(output, "Missing IAM permissions (3)") {
 		t.Errorf("expected header with count, got: %s", output)
 	}
 
-	// Check tags appear in output
+	// Check grouped action lines with tags
 	checks := []string{
-		"backup:CreateBackupVault [required]",
-		"backup:PutBackupVaultAccessPolicy [optional]",
-		"kms:CreateGrant [required]",
+		"backup:CreateBackupVault [required]\n",
+		"backup:PutBackupVaultAccessPolicy [optional]\n",
+		"kms:CreateGrant [required]\n",
 	}
 	for _, want := range checks {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected output to contain %q, got:\n%s", want, output)
+		}
+	}
+
+	// Check resource references under each action
+	resourceChecks := []string{
+		"    → aws_backup_vault.this (create)\n",
+	}
+	for _, want := range resourceChecks {
 		if !strings.Contains(output, want) {
 			t.Errorf("expected output to contain %q, got:\n%s", want, output)
 		}
@@ -290,8 +300,11 @@ func TestFormatMissing_NoClass(t *testing.T) {
 
 	output := FormatMissing(missing)
 
-	// Should NOT have a trailing space before newline (no tag)
-	if !strings.Contains(output, "needs backup:CreateBackupVault\n") {
-		t.Errorf("expected no classification tag, got:\n%s", output)
+	// Action line should have no class tag, followed by resource
+	if !strings.Contains(output, "  backup:CreateBackupVault\n") {
+		t.Errorf("expected action line without class tag, got:\n%s", output)
+	}
+	if !strings.Contains(output, "    → aws_backup_vault.this (create)\n") {
+		t.Errorf("expected resource line, got:\n%s", output)
 	}
 }

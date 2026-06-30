@@ -259,21 +259,58 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	return missing, nil
 }
 
+// missingGroupKey is a grouping key for deduplicating missing actions.
+type missingGroupKey struct {
+	action string
+	class  string
+}
+
 // FormatMissing formats a list of missing actions as a human-readable message.
+// Permissions are grouped by (Action, Class) so duplicates across resources are
+// collapsed into a single entry, followed by the list of affected resources.
 func FormatMissing(missing []MissingAction) string {
 	if len(missing) == 0 {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(missing)))
+
+	// Group by (Action, Class)
+	groups := make(map[missingGroupKey][]MissingAction)
+	order := make([]missingGroupKey, 0, len(missing))
+	seen := make(map[missingGroupKey]bool)
 	for _, m := range missing {
-		tag := ""
-		if m.Class != "" {
-			tag = " " + m.Class
+		k := missingGroupKey{action: m.Action, class: m.Class}
+		groups[k] = append(groups[k], m)
+		if !seen[k] {
+			seen[k] = true
+			order = append(order, k)
 		}
-		b.WriteString(fmt.Sprintf("  %s (%s) needs %s%s\n", m.ResourceType, m.Change, m.Action, tag))
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(order)))
+	for _, k := range order {
+		items := groups[k]
+		// Action line with optional class tag
+		if k.class != "" {
+			b.WriteString(fmt.Sprintf("  %s %s\n", k.action, k.class))
+		} else {
+			b.WriteString(fmt.Sprintf("  %s\n", k.action))
+		}
+		// Affected resources
+		for _, m := range items {
+			b.WriteString(fmt.Sprintf("    → %s.%s (%s)\n", m.ResourceType, m.ResourceName, m.Change))
+		}
 	}
 	return b.String()
+}
+
+// DistinctCount returns the number of distinct (Action, Class) pairs in the list.
+func DistinctCount(missing []MissingAction) int {
+	seen := make(map[missingGroupKey]bool)
+	for _, m := range missing {
+		seen[missingGroupKey{action: m.Action, class: m.Class}] = true
+	}
+	return len(seen)
 }
 
 // classTag returns a human-readable classification tag for a PermissionClass.
