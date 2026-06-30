@@ -170,7 +170,7 @@ func validateCmd(args []string) error {
 
 	if len(missing) > 0 {
 		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
-		fmt.Fprintf(os.Stderr, "\n%d resource changes checked, %d missing permissions found.\n", len(changes), len(missing))
+		fmt.Fprintf(os.Stderr, "\n%d resource changes checked, %d distinct missing permissions found.\n", len(changes), iam.DistinctCount(missing))
 		os.Exit(1)
 	}
 
