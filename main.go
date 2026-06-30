@@ -1,15 +1,15 @@
-// tf-permcheck validates that a terraform deploy role has sufficient IAM
+// terraform-permcheck validates that a terraform deploy role has sufficient IAM
 // permissions for every resource in a terraform plan.
 //
 // Usage:
 //
-//	terraform show -json plan.tfplan | tf-permcheck validate --policy-file deploy_policy.json --cloud aws
+//	terraform show -json plan.tfplan | terraform-permcheck validate --policy-file deploy_policy.json --cloud aws
 //
-//	tf-permcheck validate --plan-file plan.json --policy-file deploy_policy.json --cloud aws
+//	terraform-permcheck validate --plan-file plan.json --policy-file deploy_policy.json --cloud aws
 //
-//	terraform show -json plan.tfplan | tf-permcheck validate --policy-from-plan-output deploy_policy_json --cloud aws
+//	terraform show -json plan.tfplan | terraform-permcheck validate --policy-from-plan-output deploy_policy_json --cloud aws
 //
-//	tf-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
+//	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 package main
 
 import (
@@ -28,7 +28,7 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "tf-permcheck: %v\n", err)
+		fmt.Fprintf(os.Stderr, "terraform-permcheck: %v\n", err)
 		os.Exit(2)
 	}
 }
@@ -42,7 +42,7 @@ func run(args []string) error {
 	case "validate":
 		return validateCmd(args[1:])
 	case "version":
-		fmt.Println("tf-permcheck v0.1.0")
+		fmt.Println("terraform-permcheck v0.1.0")
 		return nil
 	default:
 		return fmt.Errorf("unknown subcommand: %s", args[0])

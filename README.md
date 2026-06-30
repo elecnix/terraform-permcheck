@@ -9,7 +9,7 @@ declared IAM policies using each cloud's native schema registry.
 
 ```
 terraform plan -out=plan.tfplan
-terraform show -json plan.tfplan | tf-permcheck validate
+terraform show -json plan.tfplan | terraform-permcheck validate
 ```
 
 If your deploy role is missing `kms:CreateGrant` for a `aws_backup_vault`, you
@@ -56,12 +56,12 @@ present, so you neither miss them (when tags are set) nor get false positives
 
 ```bash
 # Pipe the plan JSON directly
-terraform show -json plan.tfplan | tf-permcheck validate \
+terraform show -json plan.tfplan | terraform-permcheck validate \
   --policy-file deploy_policy.json \
   --cloud aws
 
 # Or point at files
-tf-permcheck validate \
+terraform-permcheck validate \
   --plan-file plan.json \
   --policy-file deploy_policy.json \
   --cloud aws
@@ -101,7 +101,7 @@ go install github.com/elecnix/terraform-permcheck@latest
 - name: Check IAM permissions
   run: |
     terraform plan -out=plan.tfplan
-    terraform show -json plan.tfplan | tf-permcheck validate \
+    terraform show -json plan.tfplan | terraform-permcheck validate \
       --policy-file <(terraform output -raw deploy_policy) \
       --cloud aws
 ```
