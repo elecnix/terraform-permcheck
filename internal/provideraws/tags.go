@@ -25,25 +25,28 @@ func hasTagsAnnotation(src []byte) bool {
 }
 
 // TagActions holds the IAM actions a service uses for transparent tagging,
-// split into additive (apply) and subtractive (remove) calls.
+// split into additive (apply), subtractive (remove), and read-side (list) calls.
 //
 // Apply actions (e.g. kms:TagResource) are needed whenever tags are set, on
 // both create and update. Remove actions (e.g. kms:UntagResource) are only
-// needed on update, when existing tags change.
+// needed on update, when existing tags change. List actions (e.g.
+// kms:ListResourceTags) are always needed on read — the provider calls
+// listTags unconditionally on every Read for resources with the @Tags annotation.
 type TagActions struct {
 	Apply  []string
 	Remove []string
+	List   []string
 }
 
 // Empty reports whether no tagging actions were found.
 func (t TagActions) Empty() bool {
-	return len(t.Apply) == 0 && len(t.Remove) == 0
+	return len(t.Apply) == 0 && len(t.Remove) == 0 && len(t.List) == 0
 }
 
 // ExtractTagActions parses a service's generated tags_gen.go source and returns
-// the SDK tagging actions used by its updateTags/createTags helpers. The
-// connection variable is a typed SDK client parameter (conn *kms.Client), from
-// which the service prefix is derived.
+// the SDK tagging actions used by its updateTags, createTags, and listTags
+// helpers. The connection variable is a typed SDK client parameter
+// (conn *kms.Client), from which the service prefix is derived.
 func ExtractTagActions(src string) (TagActions, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "tags_gen.go", src, parser.ParseComments)
@@ -57,15 +60,20 @@ func ExtractTagActions(src string) (TagActions, error) {
 		if !ok {
 			continue
 		}
-		if fd.Name.Name != "updateTags" && fd.Name.Name != "createTags" {
-			continue
+		if fd.Name.Name == "updateTags" || fd.Name.Name == "createTags" {
+			calls, _, _ := extractSDKCallsWithConnInfo(fd)
+			for _, ea := range calls {
+				if isRemoveTagAction(ea.Action) {
+					ta.Remove = dedup(append(ta.Remove, ea.Action))
+				} else {
+					ta.Apply = dedup(append(ta.Apply, ea.Action))
+				}
+			}
 		}
-		calls, _, _ := extractSDKCallsWithConnInfo(fd)
-		for _, ea := range calls {
-			if isRemoveTagAction(ea.Action) {
-				ta.Remove = dedup(append(ta.Remove, ea.Action))
-			} else {
-				ta.Apply = dedup(append(ta.Apply, ea.Action))
+		if fd.Name.Name == "listTags" {
+			calls, _, _ := extractSDKCallsWithConnInfo(fd)
+			for _, ea := range calls {
+				ta.List = dedup(append(ta.List, ea.Action))
 			}
 		}
 	}
