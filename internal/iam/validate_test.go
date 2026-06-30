@@ -138,6 +138,78 @@ func TestS3SubresourceAbsorbed(t *testing.T) {
 	}
 }
 
+// fakeSchema is a test SchemaLike with conditional metadata.
+type fakeSchema struct {
+	perms map[string][]string
+	cond  map[string]map[string]string
+}
+
+func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
+func (f fakeSchema) GetConditional() map[string]map[string]string { return f.cond }
+
+type fakeResolver struct{ s SchemaLike }
+
+func (r fakeResolver) Resolve(string) (SchemaLike, error) { return r.s, nil }
+
+// denyAll covers no actions.
+type denyAll struct{}
+
+func (denyAll) Covers(string) bool { return false }
+
+func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{
+			"create": {"kms:CreateKey", "kms:TagResource"},
+		},
+		cond: map[string]map[string]string{
+			"create": {"kms:TagResource": "tags"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Case 1: tags present → kms:TagResource is required (reported missing).
+	withTags := []*plan.ResourceChange{
+		{Type: "aws_kms_key", Name: "k", Change: "create", Attributes: map[string]bool{"tags": true}},
+	}
+	missing, err := Validate(withTags, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "kms:TagResource") {
+		t.Error("expected kms:TagResource to be required when tags are present")
+	}
+	if !hasAction(missing, "kms:CreateKey") {
+		t.Error("expected kms:CreateKey to always be required")
+	}
+
+	// Case 2: attributes parsed but tags absent → kms:TagResource gated out.
+	noTags := []*plan.ResourceChange{
+		{Type: "aws_kms_key", Name: "k", Change: "create", Attributes: map[string]bool{"description": true}},
+	}
+	missing, err = Validate(noTags, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "kms:TagResource") {
+		t.Error("expected kms:TagResource to be gated out when tags absent")
+	}
+	if !hasAction(missing, "kms:CreateKey") {
+		t.Error("expected kms:CreateKey to remain required")
+	}
+
+	// Case 3: no attribute info (nil) → conditional kept (cannot prove absence).
+	unknown := []*plan.ResourceChange{
+		{Type: "aws_kms_key", Name: "k", Change: "create"},
+	}
+	missing, err = Validate(unknown, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "kms:TagResource") {
+		t.Error("expected kms:TagResource to be kept when attribute info is unknown")
+	}
+}
+
 func hasAction(missing []MissingAction, action string) bool {
 	for _, m := range missing {
 		if m.Action == action {

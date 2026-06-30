@@ -32,6 +32,16 @@ the cross-reference:
 4. Diffs against your declared IAM policy documents.
 5. Fails the pipeline if any required permission is missing.
 
+### Conditional & side-effect permissions
+
+Some permissions are only needed when a particular attribute is set. The AWS
+provider, for example, makes an extra `kms:TagResource` call when an
+`aws_kms_key` declares a `tags` block — a side effect that isn't part of the
+primary `kms:CreateKey` action. PermCheck reads the planned attribute values
+and only requires such permissions when their gating attribute is actually
+present, so you neither miss them (when tags are set) nor get false positives
+(when they aren't).
+
 ## Supported clouds
 
 | Cloud | Schema source | Status |

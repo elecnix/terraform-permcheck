@@ -15,6 +15,12 @@ func (s *Schema) GetPermissions() map[string][]string {
 	return s.Permissions
 }
 
+// GetConditional returns the conditional-permission metadata, mapping
+// op → action → gating attribute name (implements iam.SchemaLike).
+func (s *Schema) GetConditional() map[string]map[string]string {
+	return s.Conditional
+}
+
 // Provider resolves cloud resource types to their required IAM permissions.
 type Provider interface {
 	// Name returns the provider name (e.g. "aws").

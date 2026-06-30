@@ -12,6 +12,13 @@ type ResourceChange struct {
 	Type   string // terraform resource type, e.g. "aws_backup_vault"
 	Name   string // terraform resource name, e.g. "this"
 	Change string // "create", "update", or "delete"
+
+	// Attributes records which top-level attributes are meaningfully set in the
+	// planned (post-change) state, following terraform's GetOk semantics: a key
+	// maps to true only when its value is non-null and non-zero. It is nil when
+	// the plan carries no "after" state (e.g. a delete), meaning presence is
+	// unknown. Used to gate conditional permissions on attribute presence.
+	Attributes map[string]bool
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -23,7 +30,8 @@ type tfResourceChange struct {
 	Type   string `json:"type"`
 	Name   string `json:"name"`
 	Change struct {
-		Actions []string `json:"actions"`
+		Actions []string        `json:"actions"`
+		After   json.RawMessage `json:"after"`
 	} `json:"change"`
 }
 
@@ -65,12 +73,57 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			continue
 		}
 		changes = append(changes, &ResourceChange{
-			Type:   rc.Type,
-			Name:   rc.Name,
-			Change: action,
+			Type:       rc.Type,
+			Name:       rc.Name,
+			Change:     action,
+			Attributes: attributePresence(rc.Change.After),
 		})
 	}
 	return changes, nil
+}
+
+// attributePresence reports which top-level attributes of a planned resource's
+// "after" state are meaningfully set. Returns nil when after is absent or null
+// (presence unknown).
+func attributePresence(after json.RawMessage) map[string]bool {
+	if len(after) == 0 || string(after) == "null" {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(after, &fields); err != nil {
+		return nil
+	}
+	present := make(map[string]bool, len(fields))
+	for k, v := range fields {
+		present[k] = isMeaningful(v)
+	}
+	return present
+}
+
+// isMeaningful reports whether a JSON value is set to a non-zero value,
+// mirroring terraform's d.GetOk semantics (null, "", false, 0, empty
+// map/array all count as unset).
+func isMeaningful(raw json.RawMessage) bool {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return false
+	}
+	switch val := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return val
+	case float64:
+		return val != 0
+	case string:
+		return val != ""
+	case []any:
+		return len(val) > 0
+	case map[string]any:
+		return len(val) > 0
+	default:
+		return true
+	}
 }
 
 // tfOutput holds the subset of a Terraform output we need.
