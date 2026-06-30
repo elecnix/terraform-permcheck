@@ -328,3 +328,47 @@ func hasAction(missing []MissingAction, action string) bool {
 	}
 	return false
 }
+
+func TestFormatMissing_ConditionalAttribute(t *testing.T) {
+	// Conditional permissions should show [conditional: <attr>]
+	missing := []MissingAction{
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateKey", Class: "[required]", ConditionAttribute: ""},
+	}
+	got := FormatMissing(missing)
+	if !strings.Contains(got, "kms:CreateGrant [conditional: kms_key_arn]") {
+		t.Errorf("expected conditional tag, got:\n%s", got)
+	}
+	if !strings.Contains(got, "kms:CreateKey [required]") {
+		t.Errorf("expected [required] tag for unconditional action, got:\n%s", got)
+	}
+}
+
+func TestValidate_ExcludeConditional(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{
+			"create": {"kms:CreateKey", "kms:CreateGrant"},
+		},
+		cond: map[string]map[string]string{
+			"create": {"kms:CreateGrant": "kms_key_arn"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	changes := []*plan.ResourceChange{
+		{Type: "aws_backup_vault", Name: "v", Change: "create"},
+	}
+
+	// With ExcludeConditional: kms:CreateGrant should be filtered out
+	filter := FilterConfig{ExcludeConditional: true}
+	missing, err := Validate(changes, denyAll{}, resolver, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "kms:CreateGrant") {
+		t.Error("kms:CreateGrant should be excluded when ExcludeConditional is true")
+	}
+	if !hasAction(missing, "kms:CreateKey") {
+		t.Error("kms:CreateKey should remain (unconditional)")
+	}
+}

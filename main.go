@@ -60,6 +60,7 @@ func validateCmd(args []string) error {
 	stateFile := fs.String("state-file", "", "path to terraform state JSON (default: stdin, for use with --policy-from-state-output)")
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
+	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
 	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration (static HCL mode — no plan, no AWS credentials required)")
 
 	if err := fs.Parse(args); err != nil {
@@ -77,7 +78,7 @@ func validateCmd(args []string) error {
 		if *policyFile == "" {
 			return fmt.Errorf("--terraform-root requires --policy-file")
 		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter)
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired)
 	}
 
 	// Exactly one policy source must be provided.
@@ -180,6 +181,9 @@ func validateCmd(args []string) error {
 	if *noFilter {
 		filter = iam.FilterConfig{} // all zero values = no filtering
 	}
+	if *onlyRequired {
+		filter.ExcludeConditional = true
+	}
 	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
 	if err != nil {
 		return err
@@ -232,7 +236,7 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter bool) error {
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool) error {
 	if cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
 	}
@@ -288,6 +292,9 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter boo
 	filter := iam.DefaultFilter()
 	if noFilter {
 		filter = iam.FilterConfig{}
+	}
+	if onlyRequired {
+		filter.ExcludeConditional = true
 	}
 	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
 	if err != nil {

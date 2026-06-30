@@ -142,13 +142,14 @@ func classifyPermission(action string) PermissionClass {
 
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
-	ResourceType string // terraform resource type, e.g. "aws_backup_vault"
-	ResourceName string // terraform resource name, e.g. "this"
-	Change       string // "create", "update", or "delete"
-	Action       string // required IAM action, e.g. "kms:CreateGrant"
-	Service      string // extracted service prefix, e.g. "kms"
-	Filtered     bool   // true if this was filtered out (data-plane / optional)
-	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
+	ResourceType       string // terraform resource type, e.g. "aws_backup_vault"
+	ResourceName       string // terraform resource name, e.g. "this"
+	Change             string // "create", "update", or "delete"
+	Action             string // required IAM action, e.g. "kms:CreateGrant"
+	Service            string // extracted service prefix, e.g. "kms"
+	Filtered           bool   // true if this was filtered out (data-plane / optional)
+	Class              string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
+	ConditionAttribute string // attribute name gating this action (empty if unconditional), e.g. "kms_key_arn"
 }
 
 // AllowedProvider is something that can check whether an action is covered.
@@ -174,6 +175,9 @@ type FilterConfig struct {
 	ExcludeOptional bool
 	// ExcludeServiceRole excludes permissions only AWS service roles need (backup-storage, etc.)
 	ExcludeServiceRole bool
+	// ExcludeConditional excludes permissions gated on a schema attribute
+	// (d.GetOk guard). When true, only unconditional [required] actions are kept.
+	ExcludeConditional bool
 }
 
 // DefaultFilter returns a FilterConfig that excludes data-plane and optional
@@ -212,11 +216,13 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		conditional := schema.GetConditional()[op]
 
 		for _, action := range required {
-			// Conditional (attribute-gated) permissions are only required when
-			// the gating attribute is meaningfully set in the planned resource.
-			// When the plan carries no attribute info (rc.Attributes == nil),
-			// presence is unknown and the permission is kept.
-			if attr := conditional[action]; attr != "" && rc.Attributes != nil && !rc.Attributes[attr] {
+			condAttr := conditional[action]
+
+			// Conditional (attribute-gated) permissions: when the plan carries
+			// attribute info and the gating attribute is NOT meaningfully set,
+			// skip the permission. When Attributes is nil (e.g. static HCL
+			// mode), presence is unknown and the permission is kept.
+			if condAttr != "" && rc.Attributes != nil && !rc.Attributes[condAttr] {
 				continue
 			}
 
@@ -241,14 +247,18 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			if filter.ExcludeServiceRole && class == ClassServiceRole {
 				continue
 			}
+			if filter.ExcludeConditional && condAttr != "" {
+				continue
+			}
 
 			missing = append(missing, MissingAction{
-				ResourceType: rc.Type,
-				ResourceName: rc.Name,
-				Change:       rc.Change,
-				Action:       action,
-				Service:      service,
-				Class:        classTag(class),
+				ResourceType:       rc.Type,
+				ResourceName:       rc.Name,
+				Change:             rc.Change,
+				Action:             action,
+				Service:            service,
+				Class:              classTag(class),
+				ConditionAttribute: condAttr,
 			})
 		}
 	}
@@ -261,24 +271,26 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 
 // missingGroupKey is a grouping key for deduplicating missing actions.
 type missingGroupKey struct {
-	action string
-	class  string
+	action    string
+	class     string
+	condition string
 }
 
 // FormatMissing formats a list of missing actions as a human-readable message.
-// Permissions are grouped by (Action, Class) so duplicates across resources are
-// collapsed into a single entry, followed by the list of affected resources.
+// Permissions are grouped by (Action, Class, ConditionAttribute) so duplicates
+// across resources are collapsed into a single entry, followed by the list of
+// affected resources.
 func FormatMissing(missing []MissingAction) string {
 	if len(missing) == 0 {
 		return ""
 	}
 
-	// Group by (Action, Class)
+	// Group by (Action, Class, ConditionAttribute)
 	groups := make(map[missingGroupKey][]MissingAction)
 	order := make([]missingGroupKey, 0, len(missing))
 	seen := make(map[missingGroupKey]bool)
 	for _, m := range missing {
-		k := missingGroupKey{action: m.Action, class: m.Class}
+		k := missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute}
 		groups[k] = append(groups[k], m)
 		if !seen[k] {
 			seen[k] = true
@@ -290,12 +302,14 @@ func FormatMissing(missing []MissingAction) string {
 	b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(order)))
 	for _, k := range order {
 		items := groups[k]
-		// Action line with optional class tag
-		if k.class != "" {
-			b.WriteString(fmt.Sprintf("  %s %s\n", k.action, k.class))
-		} else {
-			b.WriteString(fmt.Sprintf("  %s\n", k.action))
+		// Action line with optional class and condition tags
+		line := k.action
+		if k.condition != "" {
+			line += fmt.Sprintf(" [conditional: %s]", k.condition)
+		} else if k.class != "" {
+			line += " " + k.class
 		}
+		b.WriteString(fmt.Sprintf("  %s\n", line))
 		// Affected resources
 		for _, m := range items {
 			b.WriteString(fmt.Sprintf("    → %s.%s (%s)\n", m.ResourceType, m.ResourceName, m.Change))
@@ -304,11 +318,12 @@ func FormatMissing(missing []MissingAction) string {
 	return b.String()
 }
 
-// DistinctCount returns the number of distinct (Action, Class) pairs in the list.
+// DistinctCount returns the number of distinct (Action, Class, ConditionAttribute)
+// pairs in the list.
 func DistinctCount(missing []MissingAction) int {
 	seen := make(map[missingGroupKey]bool)
 	for _, m := range missing {
-		seen[missingGroupKey{action: m.Action, class: m.Class}] = true
+		seen[missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute}] = true
 	}
 	return len(seen)
 }
