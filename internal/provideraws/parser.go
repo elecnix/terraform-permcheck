@@ -546,16 +546,16 @@ func normalizeSDKMethod(service, method string) string {
 // names where they diverge.
 func s3SDKMethodNormalization(original string) string {
 	s3Names := map[string]string{
-		"PutPublicAccessBlock":                "PutBucketPublicAccessBlock",
-		"GetPublicAccessBlock":                "GetBucketPublicAccessBlock",
-		"DeletePublicAccessBlock":             "DeleteBucketPublicAccessBlock",
-		"PutBucketNotificationConfiguration":  "PutBucketNotification",
-		"GetBucketNotificationConfiguration":  "GetBucketNotification",
-		"PutBucketObjectLockConfiguration":    "PutObjectLockConfiguration",
-		"GetBucketObjectLockConfiguration":    "GetObjectLockConfiguration",
-		"PutBucketTagging":                    "PutBucketTagging",
-		"GetBucketTagging":                    "GetBucketTagging",
-		"DeleteBucketTagging":                 "DeleteBucketTagging",
+		"PutPublicAccessBlock":               "PutBucketPublicAccessBlock",
+		"GetPublicAccessBlock":               "GetBucketPublicAccessBlock",
+		"DeletePublicAccessBlock":            "DeleteBucketPublicAccessBlock",
+		"PutBucketNotificationConfiguration": "PutBucketNotification",
+		"GetBucketNotificationConfiguration": "GetBucketNotification",
+		"PutBucketObjectLockConfiguration":   "PutObjectLockConfiguration",
+		"GetBucketObjectLockConfiguration":   "GetObjectLockConfiguration",
+		"PutBucketTagging":                   "PutBucketTagging",
+		"GetBucketTagging":                   "GetBucketTagging",
+		"DeleteBucketTagging":                "DeleteBucketTagging",
 	}
 	if canonical, ok := s3Names[original]; ok {
 		return canonical
@@ -770,11 +770,11 @@ func paramTypeToService(expr ast.Expr) string {
 // are listed.
 func sdkPackageToIAMService(pkg string) string {
 	pkgToService := map[string]string{
-		"cloudwatchlogs":     "logs",
-		"s3control":          "s3",
+		"cloudwatchlogs":         "logs",
+		"s3control":              "s3",
 		"elasticloadbalancingv2": "elasticloadbalancing",
-		"sfn":                "states",
-		"mobiletargeting":    "mobiletargeting", // pinpoint → mobiletargeting
+		"sfn":                    "states",
+		"mobiletargeting":        "mobiletargeting", // pinpoint → mobiletargeting
 	}
 	return pkgToService[pkg]
 }

@@ -306,13 +306,13 @@ func TestSDKPackageToIAMService(t *testing.T) {
 		pkg  string
 		want string
 	}{
-		{"s3", ""},               // exact match, no lookup needed
-		{"iam", ""},              // exact match
-		{"dynamodb", ""},         // exact match
+		{"s3", ""},                 // exact match, no lookup needed
+		{"iam", ""},                // exact match
+		{"dynamodb", ""},           // exact match
 		{"cloudwatchlogs", "logs"}, // package name differs from IAM namespace
 		{"s3control", "s3"},
 		{"sfn", "states"},
-		{"unknownpkg", ""},        // unknown, no mapping
+		{"unknownpkg", ""}, // unknown, no mapping
 	}
 
 	for _, tt := range tests {
