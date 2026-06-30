@@ -255,6 +255,11 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 		{"CreateBucket", "s3", "s3:CreateBucket"},
 		{"PutBucketVersioning", "s3", "s3:PutBucketVersioning"},
 		{"ListRecoveryPointsByBackupVault", "backup", "backup:ListRecoveryPointsByBackupVault"},
+		// S3 SDK v2 normalization: method name differs from canonical IAM action
+		{"PutPublicAccessBlock", "s3", "s3:PutBucketPublicAccessBlock"},
+		{"GetPublicAccessBlock", "s3", "s3:GetBucketPublicAccessBlock"},
+		{"DeletePublicAccessBlock", "s3", "s3:DeleteBucketPublicAccessBlock"},
+		{"PutBucketNotificationConfiguration", "s3", "s3:PutBucketNotification"},
 	}
 
 	for _, tt := range tests {
@@ -291,6 +296,30 @@ func TestClientMethodToService(t *testing.T) {
 			got := clientMethodToService(tt.clientMethod)
 			if got != tt.want {
 				t.Errorf("clientMethodToService(%q) = %q, want %q", tt.clientMethod, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSDKPackageToIAMService(t *testing.T) {
+	tests := []struct {
+		pkg  string
+		want string
+	}{
+		{"s3", ""},                 // exact match, no lookup needed
+		{"iam", ""},                // exact match
+		{"dynamodb", ""},           // exact match
+		{"cloudwatchlogs", "logs"}, // package name differs from IAM namespace
+		{"s3control", "s3"},
+		{"sfn", "states"},
+		{"unknownpkg", ""}, // unknown, no mapping
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pkg, func(t *testing.T) {
+			got := sdkPackageToIAMService(tt.pkg)
+			if got != tt.want {
+				t.Errorf("sdkPackageToIAMService(%q) = %q, want %q", tt.pkg, got, tt.want)
 			}
 		})
 	}
@@ -662,4 +691,62 @@ func deleteCacheCluster(ctx context.Context, conn *elasticache.Client, partition
 
 	t.Logf("ElastiCache create actions: %v", createActions)
 	t.Logf("ElastiCache delete actions: %v", deleteActions)
+}
+
+func TestParseResourceFileStructured_ConditionalHelperCall(t *testing.T) {
+	// Verifies that helper-resolved SDK actions inherit the conditional
+	// context from the call site. When a CRUD function delegates to a
+	// helper inside if d.GetOk("replica"), the helper's actions should
+	// be marked conditional on "replica".
+	src := `
+package secretsmanager
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+)
+
+func resourceSecretCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SecretsManagerClient(ctx)
+
+	if _, ok := d.GetOk("replica"); ok {
+		removeSecretReplicas(ctx, conn, d.Id())
+	}
+
+	return nil
+}
+
+func removeSecretReplicas(ctx context.Context, conn *secretsmanager.Client, id string) error {
+	_, err := conn.RemoveRegionsFromReplication(ctx, &secretsmanager.RemoveRegionsFromReplicationInput{})
+	return err
+}
+`
+
+	actions, err := ParseResourceFileStructured(src, "aws_secretsmanager_secret", "Secret")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	createActions := actions["create"]
+
+	var found bool
+	for _, ea := range createActions {
+		if ea.Action == "secretsmanager:RemoveRegionsFromReplication" {
+			found = true
+			if !ea.Conditional {
+				t.Error("RemoveRegionsFromReplication should be conditional (call site inside if d.GetOk(\"replica\"))")
+			}
+			if ea.Condition != "replica" {
+				t.Errorf("RemoveRegionsFromReplication condition = %q, want %q", ea.Condition, "replica")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected secretsmanager:RemoveRegionsFromReplication in create actions")
+		t.Logf("create actions: %+v", createActions)
+	}
+
+	// Also verify that helpers called unconditionally don't get a spurious condition
+	// (the existing IAM Role helper test covers this)
 }
