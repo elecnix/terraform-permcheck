@@ -16,8 +16,9 @@ type FileLocation struct {
 // stripResourceIndex removes count / for_each index suffixes from a terraform
 // resource name so it can be matched against the static HCL map (which only
 // carries the local name, never an index).
-//   cloudtrail[0]       → cloudtrail
-//   config["us-east-1"]  → config
+//
+//	cloudtrail[0]       → cloudtrail
+//	config["us-east-1"]  → config
 func stripResourceIndex(name string) string {
 	return resourceIndexRE.ReplaceAllString(name, "")
 }

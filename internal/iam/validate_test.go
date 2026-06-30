@@ -472,8 +472,8 @@ func TestFormatGitHubAnnotations_WithFileLocation(t *testing.T) {
 	}
 
 	locations := map[string]FileLocation{
-		"aws_s3_bucket.cloudtrail":                       {Path: "modules/datadog-cloudtrail/main.tf", Line: 10},
-		"aws_s3_bucket_public_access_block.cloudtrail":    {Path: "modules/datadog-cloudtrail/main.tf", Line: 82},
+		"aws_s3_bucket.cloudtrail":                     {Path: "modules/datadog-cloudtrail/main.tf", Line: 10},
+		"aws_s3_bucket_public_access_block.cloudtrail": {Path: "modules/datadog-cloudtrail/main.tf", Line: 82},
 	}
 
 	got := FormatGitHubAnnotations(missing, locations)
