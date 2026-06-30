@@ -255,6 +255,11 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 		{"CreateBucket", "s3", "s3:CreateBucket"},
 		{"PutBucketVersioning", "s3", "s3:PutBucketVersioning"},
 		{"ListRecoveryPointsByBackupVault", "backup", "backup:ListRecoveryPointsByBackupVault"},
+		// S3 SDK v2 normalization: method name differs from canonical IAM action
+		{"PutPublicAccessBlock", "s3", "s3:PutBucketPublicAccessBlock"},
+		{"GetPublicAccessBlock", "s3", "s3:GetBucketPublicAccessBlock"},
+		{"DeletePublicAccessBlock", "s3", "s3:DeleteBucketPublicAccessBlock"},
+		{"PutBucketNotificationConfiguration", "s3", "s3:PutBucketNotification"},
 	}
 
 	for _, tt := range tests {
@@ -291,6 +296,30 @@ func TestClientMethodToService(t *testing.T) {
 			got := clientMethodToService(tt.clientMethod)
 			if got != tt.want {
 				t.Errorf("clientMethodToService(%q) = %q, want %q", tt.clientMethod, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSDKPackageToIAMService(t *testing.T) {
+	tests := []struct {
+		pkg  string
+		want string
+	}{
+		{"s3", ""},               // exact match, no lookup needed
+		{"iam", ""},              // exact match
+		{"dynamodb", ""},         // exact match
+		{"cloudwatchlogs", "logs"}, // package name differs from IAM namespace
+		{"s3control", "s3"},
+		{"sfn", "states"},
+		{"unknownpkg", ""},        // unknown, no mapping
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pkg, func(t *testing.T) {
+			got := sdkPackageToIAMService(tt.pkg)
+			if got != tt.want {
+				t.Errorf("sdkPackageToIAMService(%q) = %q, want %q", tt.pkg, got, tt.want)
 			}
 		})
 	}

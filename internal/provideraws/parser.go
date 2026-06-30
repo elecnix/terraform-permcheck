@@ -521,8 +521,46 @@ func isAWSMethod(name string) bool {
 
 // sdKMethodToIAMAction converts an AWS SDK method name and service to an IAM
 // action string. Convention: backup + CreateBackupVault -> backup:CreateBackupVault.
+// Also normalizes SDK v2 method names where they diverge from canonical IAM action
+// names (e.g., S3 v2 SDK drops the "Bucket" infix in methods like
+// PutPublicAccessBlock, which maps to the canonical s3:PutBucketPublicAccessBlock).
 func sdKMethodToIAMAction(method string, service string) string {
+	if canonical := normalizeSDKMethod(service, method); canonical != "" {
+		return service + ":" + canonical
+	}
 	return service + ":" + method
+}
+
+// normalizeSDKMethod translates known AWS SDK v2 method names to their canonical
+// IAM action names. Returns empty string if no normalization is needed.
+func normalizeSDKMethod(service, method string) string {
+	// S3 SDK v2 drops the "Bucket" infix on some methods and adds "Configuration"
+	// suffix on others. These need canonical IAM action names.
+	if service == "s3" {
+		return s3SDKMethodNormalization(method)
+	}
+	return ""
+}
+
+// s3SDKMethodNormalization maps S3 SDK v2 method names to canonical IAM action
+// names where they diverge.
+func s3SDKMethodNormalization(original string) string {
+	s3Names := map[string]string{
+		"PutPublicAccessBlock":                "PutBucketPublicAccessBlock",
+		"GetPublicAccessBlock":                "GetBucketPublicAccessBlock",
+		"DeletePublicAccessBlock":             "DeleteBucketPublicAccessBlock",
+		"PutBucketNotificationConfiguration":  "PutBucketNotification",
+		"GetBucketNotificationConfiguration":  "GetBucketNotification",
+		"PutBucketObjectLockConfiguration":    "PutObjectLockConfiguration",
+		"GetBucketObjectLockConfiguration":    "GetObjectLockConfiguration",
+		"PutBucketTagging":                    "PutBucketTagging",
+		"GetBucketTagging":                    "GetBucketTagging",
+		"DeleteBucketTagging":                 "DeleteBucketTagging",
+	}
+	if canonical, ok := s3Names[original]; ok {
+		return canonical
+	}
+	return ""
 }
 
 // clientMethodToService extracts the AWS service name from a client accessor
@@ -701,6 +739,8 @@ func isConnParamName(name string) bool {
 
 // paramTypeToService extracts the AWS service name from a parameter type
 // like *iam.Client -> iam, *backup.Client -> backup, *dynamodb.Client -> dynamodb.
+// Falls back to a lookup table for package names that differ from IAM service names
+// (e.g., *cloudwatchlogs.Client -> "logs", not "cloudwatchlogs").
 func paramTypeToService(expr ast.Expr) string {
 	star, ok := expr.(*ast.StarExpr)
 	if !ok {
@@ -715,7 +755,28 @@ func paramTypeToService(expr ast.Expr) string {
 		return ""
 	}
 	// ident.Name is the package, e.g., "iam", "backup", "dynamodb"
-	return ident.Name
+	pkg := ident.Name
+	// Some SDK v2 package names differ from canonical IAM service names.
+	// Fall through to a lookup table to normalize them.
+	if svc := sdkPackageToIAMService(pkg); svc != "" {
+		return svc
+	}
+	return pkg
+}
+
+// sdkPackageToIAMService maps AWS SDK v2 Go package names to their canonical
+// IAM service names where they diverge (e.g., "cloudwatchlogs" → "logs").
+// Many packages match exactly ("s3" → "s3", "iam" → "iam"), so only mismatches
+// are listed.
+func sdkPackageToIAMService(pkg string) string {
+	pkgToService := map[string]string{
+		"cloudwatchlogs":     "logs",
+		"s3control":          "s3",
+		"elasticloadbalancingv2": "elasticloadbalancing",
+		"sfn":                "states",
+		"mobiletargeting":    "mobiletargeting", // pinpoint → mobiletargeting
+	}
+	return pkgToService[pkg]
 }
 
 // findHelperCalls finds all helper function calls (functions defined in the same
