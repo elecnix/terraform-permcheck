@@ -63,7 +63,7 @@ func run(args []string) error {
 		}
 		return err
 	case "version":
-		fmt.Println("terraform-permcheck v0.1.0")
+		fmt.Println("terraform-permcheck v0.3.0")
 		return nil
 	default:
 		return fmt.Errorf("unknown subcommand: %s", args[0])
