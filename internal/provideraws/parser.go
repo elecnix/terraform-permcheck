@@ -22,6 +22,13 @@ type ExtractedAction struct {
 	Condition   string // attribute name guarding the call, e.g. "kms_key_arn"
 }
 
+// helperCall records a helper function call and the conditional context at the
+// call site (e.g., if d.GetOk("replica") { removeSecretReplicas(...) }).
+type helperCall struct {
+	Name       string // helper function name
+	CondReason string // attribute from call-site d.GetOk/d.Get guard, empty if unconditional
+}
+
 // ParseResourceFile parses a Go source file from the terraform-provider-aws
 // and extracts the IAM permissions (actions) required by each CRUD function.
 //
@@ -84,7 +91,7 @@ func ParseResourceFileStructured(src string, tfType string, resourceName string)
 	}
 
 	// Phase 1b: Build call graph — for each function, track which helpers it calls
-	callGraph := make(map[string][]string) // funcName -> helper names
+	callGraph := make(map[string][]helperCall) // funcName -> helper calls
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
 		if !ok || fd.Body == nil {
@@ -712,48 +719,150 @@ func paramTypeToService(expr ast.Expr) string {
 }
 
 // findHelperCalls finds all helper function calls (functions defined in the same
-// file that use the given connVar as an argument) within a function body.
-func findHelperCalls(fd *ast.FuncDecl, connVar string, f *ast.File) []string {
+// file that use the given connVar as an argument) within a function body,
+// tracking the conditional context at each call site.
+func findHelperCalls(fd *ast.FuncDecl, connVar string, f *ast.File) []helperCall {
 	if fd.Body == nil || connVar == "" {
 		return nil
 	}
 
-	var helpers []string
+	state := &findHelperState{
+		connVar: connVar,
+		f:       f,
+	}
+	walkForHelpers(fd.Body, state)
+	return state.helpers
+}
 
-	ast.Inspect(fd.Body, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
+// findHelperState tracks state while walking for helper calls.
+type findHelperState struct {
+	connVar    string
+	f          *ast.File
+	helpers    []helperCall
+	condDepth  int
+	condReason string
+}
+
+// walkForHelpers is a recursive AST walker that finds helper function calls
+// and records the conditional context at each call site. It mirrors the
+// structure of walkWithConditionals but records helper calls instead of
+// SDK calls.
+func walkForHelpers(node ast.Node, state *findHelperState) {
+	if node == nil {
+		return
+	}
+
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		for _, stmt := range n.List {
+			walkForHelpers(stmt, state)
 		}
 
-		// Look for: someHelper(ctx, conn, ...)
-		fnName := ""
-		switch fn := call.Fun.(type) {
-		case *ast.Ident:
-			fnName = fn.Name
-		case *ast.SelectorExpr:
-			fnName = fn.Sel.Name
-		default:
-			return true
-		}
+	case *ast.ExprStmt:
+		walkForHelpers(n.X, state)
 
-		// Skip if this function is not defined in the same file
-		if !funcDefinedInFile(f, fnName) {
-			return true
-		}
+	case *ast.IfStmt:
+		// Save state for restoration after the if-block
+		savedCondDepth := state.condDepth
+		savedCondReason := state.condReason
 
-		// Check if any argument is the connVar
-		for _, arg := range call.Args {
-			if ident, ok := arg.(*ast.Ident); ok && ident.Name == connVar {
-				helpers = append(helpers, fnName)
-				return true
+		// Check if this if-statement is conditional on d.GetOk() or d.Get()
+		condAttr := extractConditionAttribute(n)
+		if condAttr != "" {
+			state.condDepth++
+			if state.condReason == "" {
+				state.condReason = condAttr
 			}
+
+			walkForHelpers(n.Body, state)
+			walkForHelpers(n.Else, state)
+
+			state.condDepth--
+			if state.condDepth == 0 {
+				state.condReason = ""
+			}
+		} else {
+			walkForHelpers(n.Body, state)
+			walkForHelpers(n.Else, state)
 		}
 
-		return true
-	})
+		// Restore state (inner if-blocks might have changed it)
+		state.condDepth = savedCondDepth
+		state.condReason = savedCondReason
 
-	return helpers
+	case *ast.CallExpr:
+		if hc := findHelperCall(n, state.connVar, state.f, state.condReason); hc != nil {
+			state.helpers = append(state.helpers, *hc)
+			return
+		}
+		// Walk arguments (recursive calls might contain more helper calls)
+		for _, arg := range n.Args {
+			walkForHelpers(arg, state)
+		}
+
+	case *ast.ReturnStmt:
+		for _, expr := range n.Results {
+			walkForHelpers(expr, state)
+		}
+
+	case *ast.AssignStmt:
+		for _, expr := range n.Lhs {
+			walkForHelpers(expr, state)
+		}
+		for _, expr := range n.Rhs {
+			walkForHelpers(expr, state)
+		}
+
+	case *ast.ForStmt:
+		walkForHelpers(n.Body, state)
+
+	case *ast.RangeStmt:
+		walkForHelpers(n.Body, state)
+
+	case *ast.SwitchStmt:
+		walkForHelpers(n.Body, state)
+
+	case *ast.CaseClause:
+		for _, stmt := range n.Body {
+			walkForHelpers(stmt, state)
+		}
+
+	case *ast.DeferStmt:
+		walkForHelpers(n.Call, state)
+
+	case *ast.GoStmt:
+		walkForHelpers(n.Call, state)
+
+	case *ast.LabeledStmt:
+		walkForHelpers(n.Stmt, state)
+	}
+}
+
+// findHelperCall checks if a CallExpr is a call to a helper function (defined
+// in the same file) that passes connVar. If so, returns a helperCall populated
+// with the current condReason.
+func findHelperCall(call *ast.CallExpr, connVar string, f *ast.File, condReason string) *helperCall {
+	fnName := ""
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		fnName = fn.Name
+	case *ast.SelectorExpr:
+		fnName = fn.Sel.Name
+	default:
+		return nil
+	}
+
+	if !funcDefinedInFile(f, fnName) {
+		return nil
+	}
+
+	for _, arg := range call.Args {
+		if ident, ok := arg.(*ast.Ident); ok && ident.Name == connVar {
+			return &helperCall{Name: fnName, CondReason: condReason}
+		}
+	}
+
+	return nil
 }
 
 // funcDefinedInFile checks if a function with the given name is declared in the
@@ -769,9 +878,12 @@ func funcDefinedInFile(f *ast.File, name string) bool {
 }
 
 // resolveTransitiveExtracted recursively collects SDK calls from a function and
-// all helpers it transitively calls. Uses a depth limit (5) and a visited set
-// to prevent infinite recursion.
-func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]ExtractedAction, callGraph map[string][]string, visited map[string]bool, depth int) []ExtractedAction {
+// all helpers it transitively calls. When a helper is called at a call site
+// inside a conditional block (if d.GetOk("attr")), the call-site condition is
+// propagated to the helper's resolved actions — unless the helper already has
+// a more specific condition on the action itself.
+// Uses a depth limit (5) and a visited set to prevent infinite recursion.
+func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]ExtractedAction, callGraph map[string][]helperCall, visited map[string]bool, depth int) []ExtractedAction {
 	const maxHelperDepth = 5
 	if depth > maxHelperDepth || visited[funcName] {
 		return nil
@@ -787,13 +899,28 @@ func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]Extrac
 
 	// Follow helper calls
 	if helpers, ok := callGraph[funcName]; ok {
-		for _, helperName := range helpers {
+		for _, hc := range helpers {
 			// Copy visited map to isolate each branch
 			branchVisited := make(map[string]bool)
 			for k := range visited {
 				branchVisited[k] = true
 			}
-			resolved = append(resolved, resolveTransitiveExtracted(helperName, allSdkCalls, callGraph, branchVisited, depth+1)...)
+			helperActions := resolveTransitiveExtracted(hc.Name, allSdkCalls, callGraph, branchVisited, depth+1)
+
+			// Propagate call-site condition to helper-resolved actions.
+			// Do NOT override a more specific condition the helper itself
+			// carries (i.e., if the helper's action already has a non-empty
+			// Condition, keep it — it's more precise).
+			if hc.CondReason != "" {
+				for i := range helperActions {
+					if helperActions[i].Condition == "" {
+						helperActions[i].Conditional = true
+						helperActions[i].Condition = hc.CondReason
+					}
+				}
+			}
+
+			resolved = append(resolved, helperActions...)
 		}
 	}
 
