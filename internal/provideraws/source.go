@@ -183,6 +183,12 @@ func (p *SourceProvider) parseAll() error {
 			continue
 		}
 
+		// Transparent tagging actions (e.g. kms:TagResource) live in the
+		// service's generated tags_gen.go, not in each resource's CRUD
+		// functions. Parse them once per service and attach to taggable
+		// resources below.
+		tagActions := tagActionsForService(svcDir)
+
 		for _, file := range files {
 			if file.IsDir() || !strings.HasSuffix(file.Name(), ".go") {
 				continue
@@ -193,15 +199,30 @@ func (p *SourceProvider) parseAll() error {
 			}
 
 			filePath := filepath.Join(svcDir, file.Name())
-			p.parseFile(filePath, entry.Name(), file.Name())
+			p.parseFile(filePath, entry.Name(), file.Name(), tagActions)
 		}
 	}
 
 	return nil
 }
 
+// tagActionsForService reads a service directory's generated tags_gen.go (if
+// present) and extracts its transparent-tagging SDK actions. Returns an empty
+// TagActions when the file is absent or yields no tagging calls.
+func tagActionsForService(svcDir string) TagActions {
+	src, err := os.ReadFile(filepath.Join(svcDir, "tags_gen.go"))
+	if err != nil {
+		return TagActions{}
+	}
+	ta, err := ExtractTagActions(string(src))
+	if err != nil {
+		return TagActions{}
+	}
+	return ta
+}
+
 // parseFile parses a single Go source file and extracts resource permissions.
-func (p *SourceProvider) parseFile(filePath, serviceName, fileName string) {
+func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagActions TagActions) {
 	src, err := os.ReadFile(filePath)
 	if err != nil {
 		return
@@ -250,7 +271,39 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string) {
 		}
 	}
 
+	// If the resource opts into transparent tagging (@Tags annotation), the
+	// provider makes additional SDK tagging calls when `tags` is set — calls
+	// that don't appear in the resource's own CRUD functions. Add them as
+	// permissions gated on the `tags` attribute.
+	if hasTagsAnnotation(src) && !tagActions.Empty() {
+		addTagActions(schema, "create", tagActions.Apply)
+		addTagActions(schema, "update", tagActions.Apply)
+		addTagActions(schema, "update", tagActions.Remove)
+	}
+
 	p.schemas[tfType] = schema
+}
+
+// addTagActions adds tagging actions to the given operation, gated on the
+// `tags` attribute, skipping any already present for that operation.
+func addTagActions(schema *cloud.Schema, op string, actions []string) {
+	if len(actions) == 0 {
+		return
+	}
+	existing := make(map[string]bool, len(schema.Permissions[op]))
+	for _, a := range schema.Permissions[op] {
+		existing[a] = true
+	}
+	if schema.Conditional[op] == nil {
+		schema.Conditional[op] = make(map[string]string)
+	}
+	for _, action := range actions {
+		if !existing[action] {
+			schema.Permissions[op] = append(schema.Permissions[op], action)
+			existing[action] = true
+		}
+		schema.Conditional[op][action] = "tags"
+	}
 }
 
 // resourceTypeFromAnnotation extracts the terraform resource type from an

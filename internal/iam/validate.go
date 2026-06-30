@@ -160,6 +160,10 @@ type AllowedProvider interface {
 // import cloud.
 type SchemaLike interface {
 	GetPermissions() map[string][]string
+	// GetConditional maps op → action → gating attribute name. An action with a
+	// non-empty gating attribute is only required when that attribute is set in
+	// the planned resource.
+	GetConditional() map[string]map[string]string
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -196,15 +200,26 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		}
 
 		perms := schema.GetPermissions()
-		required, ok := perms[rc.Change]
+		op := rc.Change
+		required, ok := perms[op]
 		if !ok {
-			required, ok = perms["create"]
+			op = "create"
+			required, ok = perms[op]
 		}
 		if !ok {
 			continue
 		}
+		conditional := schema.GetConditional()[op]
 
 		for _, action := range required {
+			// Conditional (attribute-gated) permissions are only required when
+			// the gating attribute is meaningfully set in the planned resource.
+			// When the plan carries no attribute info (rc.Attributes == nil),
+			// presence is unknown and the permission is kept.
+			if attr := conditional[action]; attr != "" && rc.Attributes != nil && !rc.Attributes[attr] {
+				continue
+			}
+
 			if policy.Covers(action) {
 				continue
 			}

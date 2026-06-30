@@ -38,6 +38,107 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseAttributePresence(t *testing.T) {
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "tagged",
+				"change": {
+					"actions": ["create"],
+					"after": {
+						"description": "test",
+						"tags": {"Environment": "test"},
+						"enable_key_rotation": false,
+						"deletion_window_in_days": null,
+						"policy": ""
+					}
+				}
+			},
+			{
+				"type": "aws_kms_key",
+				"name": "untagged",
+				"change": {
+					"actions": ["create"],
+					"after": {"description": "no tags", "tags": {}}
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	tagged := changes[0]
+	if tagged.Attributes == nil {
+		t.Fatal("expected tagged resource to have parsed attributes")
+	}
+	if !tagged.Attributes["tags"] {
+		t.Error("expected tags to be present on tagged resource")
+	}
+	if !tagged.Attributes["description"] {
+		t.Error("expected description to be present")
+	}
+	if tagged.Attributes["enable_key_rotation"] {
+		t.Error("expected false bool to count as absent (GetOk semantics)")
+	}
+	if tagged.Attributes["deletion_window_in_days"] {
+		t.Error("expected null to count as absent")
+	}
+	if tagged.Attributes["policy"] {
+		t.Error("expected empty string to count as absent")
+	}
+
+	untagged := changes[1]
+	if untagged.Attributes["tags"] {
+		t.Error("expected empty tags map to count as absent")
+	}
+}
+
+func TestParseTagsAllImpliesTags(t *testing.T) {
+	// A resource tagged only via provider default_tags has an empty `tags` but a
+	// populated `tags_all`; the tag gate must still be satisfied.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "default_tagged",
+				"change": {
+					"actions": ["create"],
+					"after": {"tags": {}, "tags_all": {"ManagedBy": "terraform"}}
+				}
+			}
+		]
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changes[0].Attributes["tags"] {
+		t.Error("expected tags gate to be satisfied when tags_all is populated via default_tags")
+	}
+}
+
+func TestParseNoAfter(t *testing.T) {
+	// A plan with no "after" (e.g. delete) yields nil Attributes (unknown).
+	raw := []byte(`{"resource_changes":[{"type":"aws_kms_key","name":"x","change":{"actions":["delete"]}}]}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if changes[0].Attributes != nil {
+		t.Errorf("expected nil Attributes when no after present, got %v", changes[0].Attributes)
+	}
+}
+
 func TestParseEmptyStdin(t *testing.T) {
 	raw := json.RawMessage(`{"resource_changes": []}`)
 	changes, err := Parse(raw, "aws_")
