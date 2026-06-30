@@ -10,6 +10,7 @@
 //	terraform show -json plan.tfplan | terraform-permcheck validate --policy-from-plan-output deploy_policy_json --cloud aws
 //
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
+//	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
@@ -58,9 +60,25 @@ func validateCmd(args []string) error {
 	stateFile := fs.String("state-file", "", "path to terraform state JSON (default: stdin, for use with --policy-from-state-output)")
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
+	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
+	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration (static HCL mode — no plan, no AWS credentials required)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	// Static HCL mode: --terraform-root replaces --plan-file / stdin.
+	if *terraformRoot != "" {
+		if *planFile != "" {
+			return fmt.Errorf("--terraform-root and --plan-file are mutually exclusive")
+		}
+		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
+			return fmt.Errorf("--terraform-root requires --policy-file (policy-from-plan/output not applicable)")
+		}
+		if *policyFile == "" {
+			return fmt.Errorf("--terraform-root requires --policy-file")
+		}
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired)
 	}
 
 	// Exactly one policy source must be provided.
@@ -163,6 +181,9 @@ func validateCmd(args []string) error {
 	if *noFilter {
 		filter = iam.FilterConfig{} // all zero values = no filtering
 	}
+	if *onlyRequired {
+		filter.ExcludeConditional = true
+	}
 	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
 	if err != nil {
 		return err
@@ -208,4 +229,84 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 		return []byte(s), nil
 	}
 	return raw, nil
+}
+
+// validateStaticHCL runs validation against terraform configuration files
+// directly, without requiring a terraform plan or AWS credentials. It
+// over-approximates: every resource type referenced in .tf files is included
+// regardless of count, for_each, or whether the resource would actually be
+// created.
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool) error {
+	if cloudName == "" {
+		return fmt.Errorf("--cloud is required (supported: aws)")
+	}
+	if cloudName != "aws" {
+		return fmt.Errorf("unsupported cloud %q (supported: aws)", cloudName)
+	}
+
+	// Parse .tf files
+	blocks, err := hcl.ParseDir(terraformRoot)
+	if err != nil {
+		return fmt.Errorf("parse terraform configurations: %w", err)
+	}
+
+	if len(blocks) == 0 {
+		fmt.Println("No aws resource or data blocks found in terraform configuration.")
+		return nil
+	}
+
+	// Build ResourceChange entries: over-approximate by treating all as create.
+	// Deduplicate by (Type) — one entry per resource type, regardless of count.
+	seen := make(map[string]bool)
+	var changes []*plan.ResourceChange
+	for _, b := range blocks {
+		if !seen[b.Type] {
+			seen[b.Type] = true
+			changes = append(changes, &plan.ResourceChange{
+				Type:   b.Type,
+				Name:   b.Name,
+				Change: "create",
+				// Attributes is nil → conditional permissions are preserved
+				// (presence unknown).
+			})
+		}
+	}
+
+	// Parse policy
+	policyRaw, err := os.ReadFile(policyFile)
+	if err != nil {
+		return fmt.Errorf("read policy: %w", err)
+	}
+	policy, err := iam.ParsePolicy(policyRaw)
+	if err != nil {
+		return fmt.Errorf("parse policy: %w", err)
+	}
+
+	// Resolve schemas
+	resolver := cloud.NewChainProvider(
+		provideraws.NewSourceProvider(),
+		cloud.NewAWSProvider(),
+	)
+
+	// Validate
+	filter := iam.DefaultFilter()
+	if noFilter {
+		filter = iam.FilterConfig{}
+	}
+	if onlyRequired {
+		filter.ExcludeConditional = true
+	}
+	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
+	if err != nil {
+		return err
+	}
+
+	if len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
+		fmt.Fprintf(os.Stderr, "\n%d resource types checked (static HCL mode), %d distinct missing permissions found.\n", len(changes), iam.DistinctCount(missing))
+		os.Exit(1)
+	}
+
+	fmt.Printf("All required permissions covered (%d resource types checked, static HCL mode).\n", len(changes))
+	return nil
 }
