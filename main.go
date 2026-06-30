@@ -17,6 +17,11 @@
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
 //	  --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --exit-zero
+//
+//	# With file/line annotations (inline in the PR "Files changed" tab):
+//	terraform show -json plan.tfplan | terraform-permcheck validate \
+//	  --policy-file deploy_policy.json --cloud aws \
+//	  --format github-annotations --terraform-root . --exit-zero
 package main
 
 import (
@@ -214,8 +219,20 @@ func validateCmd(args []string) error {
 		return err
 	}
 
+	// Build resource-to-file mapping when --format github-annotations is
+	// used with --terraform-root, so annotations get file= and line=.
+	var locations map[string]iam.FileLocation
+	if *format == "github-annotations" && *terraformRoot != "" {
+		var locErr error
+		locations, locErr = hcl.MapResources(*terraformRoot)
+		if locErr != nil {
+			// Non-fatal: continue without file locations.
+			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
+		}
+	}
+
 	if len(missing) > 0 {
-		printMissing(missing, len(changes), "resource changes", *format)
+		printMissing(missing, len(changes), "resource changes", *format, locations)
 		if *exitZero {
 			return nil
 		}
@@ -249,13 +266,15 @@ func readStdin() ([]byte, error) {
 // printMissing formats and prints missing actions. In github-annotations mode
 // the output goes to stdout (so ::warning:: commands are parsed by the
 // workflow runner); in text mode it goes to stderr (for human readability).
-func printMissing(missing []iam.MissingAction, checked int, resourceLabel, format string) {
+// The locations map (keyed by "type.name") adds file= and line= to
+// annotations and file paths to text output when available.
+func printMissing(missing []iam.MissingAction, checked int, resourceLabel, format string, locations map[string]iam.FileLocation) {
 	switch format {
 	case "github-annotations":
-		fmt.Print(iam.FormatGitHubAnnotations(missing))
+		fmt.Print(iam.FormatGitHubAnnotations(missing, locations))
 		fmt.Printf("\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
 	default:
-		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing))
+		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing, locations))
 		fmt.Fprintf(os.Stderr, "\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
 	}
 }
@@ -299,6 +318,16 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 	if len(blocks) == 0 {
 		fmt.Println("No aws resource or data blocks found in terraform configuration.")
 		return nil
+	}
+
+	// Build resource-to-file mapping for annotation formatting.
+	var locations map[string]iam.FileLocation
+	if format == "github-annotations" {
+		var locErr error
+		locations, locErr = hcl.MapResources(terraformRoot)
+		if locErr != nil {
+			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
+		}
 	}
 
 	// Build ResourceChange entries: over-approximate by treating all as create.
@@ -348,7 +377,7 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 	}
 
 	if len(missing) > 0 {
-		printMissing(missing, len(changes), "resource types (static HCL mode)", format)
+		printMissing(missing, len(changes), "resource types (static HCL mode)", format, locations)
 		if exitZero {
 			return nil
 		}

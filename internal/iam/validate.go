@@ -279,8 +279,10 @@ type missingGroupKey struct {
 // FormatMissing formats a list of missing actions as a human-readable message.
 // Permissions are grouped by (Action, Class, ConditionAttribute) so duplicates
 // across resources are collapsed into a single entry, followed by the list of
-// affected resources.
-func FormatMissing(missing []MissingAction) string {
+// affected resources. When locations is non-nil and a resource has a matching
+// FileLocation entry (keyed by "type.name"), the file path and line number are
+// appended to the resource line.
+func FormatMissing(missing []MissingAction, locations map[string]FileLocation) string {
 	if len(missing) == 0 {
 		return ""
 	}
@@ -312,7 +314,14 @@ func FormatMissing(missing []MissingAction) string {
 		b.WriteString(fmt.Sprintf("  %s\n", line))
 		// Affected resources
 		for _, m := range items {
-			b.WriteString(fmt.Sprintf("    → %s.%s (%s)\n", m.ResourceType, m.ResourceName, m.Change))
+			resourceLine := fmt.Sprintf("    → %s.%s (%s)", m.ResourceType, m.ResourceName, m.Change)
+			if locations != nil {
+				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
+				if loc, ok := locations[key]; ok {
+					resourceLine += fmt.Sprintf(" [%s:%d]", loc.Path, loc.Line)
+				}
+			}
+			b.WriteString(resourceLine + "\n")
 		}
 	}
 	return b.String()

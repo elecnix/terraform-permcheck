@@ -20,9 +20,11 @@ import (
 
 // ResourceBlock is a single resource or data block extracted from a .tf file.
 type ResourceBlock struct {
-	Type string // terraform resource type, e.g. "aws_backup_vault"
-	Name string // terraform resource name, e.g. "this"
-	Mode string // "resource" or "data"
+	Type     string // terraform resource type, e.g. "aws_backup_vault"
+	Name     string // terraform resource name, e.g. "this"
+	Mode     string // "resource" or "data"
+	Filename string // path to the .tf file (populated by ParseDir)
+	Line     int    // 1-based line number of the resource declaration
 }
 
 // resourceRE matches resource and data block declarations in terraform .tf files.
@@ -32,7 +34,7 @@ var resourceRE = regexp.MustCompile(`(resource|data)\s+"(aws_[^"]+)"\s+"([^"]+)"
 // ParseDir walks a directory recursively, parses all .tf files, and extracts
 // every resource and data block of known cloud types (aws_*). No module
 // resolution or variable evaluation is performed — this is an intentional
-// over-approximation.
+// over-approximation. Skips hidden directories (including .terraform).
 func ParseDir(dir string) ([]ResourceBlock, error) {
 	var blocks []ResourceBlock
 
@@ -56,7 +58,7 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		fileBlocks, err := ParseFile(string(src))
+		fileBlocks, err := ParseFile(path, string(src))
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
@@ -73,28 +75,67 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 }
 
 // ParseFile extracts resource and data block types from a single .tf file's
-// content. It strips comments and then matches resource/data declarations.
-func ParseFile(src string) ([]ResourceBlock, error) {
-	clean := stripComments(src)
-	matches := resourceRE.FindAllStringSubmatch(clean, -1)
+// content. It strips comments and then matches resource/data declarations
+// line-by-line to capture accurate line numbers. The filename parameter is
+// stored on every ResourceBlock so clients can correlate resources to sources.
+func ParseFile(filename, src string) ([]ResourceBlock, error) {
+	lines := strings.Split(src, "\n")
+	inBlockComment := false
 
 	var blocks []ResourceBlock
-	for _, m := range matches {
-		if len(m) < 4 {
+	for i, line := range lines {
+		// Track block comments (/* ... */) which can span lines.
+		// We still do line-level matching for resource declarations, so
+		// block-commented resources are skipped correctly.
+		if inBlockComment {
+			if idx := strings.Index(line, "*/"); idx >= 0 {
+				inBlockComment = false
+			}
 			continue
 		}
-		blocks = append(blocks, ResourceBlock{
-			Mode: m[1],
-			Type: m[2],
-			Name: m[3],
-		})
+		if idx := strings.Index(line, "/*"); idx >= 0 {
+			// Block comment starts on this line; only skip if it doesn't end same line.
+			if endIdx := strings.Index(line, "*/"); endIdx < 0 || endIdx < idx {
+				// Check if there's content before the comment
+				// (unlikely for resource blocks, but handle it)
+				if endIdx := strings.Index(line, "*/"); endIdx < 0 {
+					inBlockComment = true
+					continue
+				}
+			}
+		}
+
+		// Strip line comments to avoid matching commented-out resources.
+		clean := stripLineComments(line)
+
+		matches := resourceRE.FindStringSubmatch(clean)
+		if len(matches) >= 4 {
+			blocks = append(blocks, ResourceBlock{
+				Mode:     matches[1],
+				Type:     matches[2],
+				Name:     matches[3],
+				Filename: filename,
+				Line:     i + 1,
+			})
+		}
 	}
 
 	return blocks, nil
 }
 
+// stripLineComments removes line comments (// and #) from a single line.
+func stripLineComments(line string) string {
+	for _, marker := range []string{"//", "#"} {
+		if idx := strings.Index(line, marker); idx >= 0 {
+			return line[:idx]
+		}
+	}
+	return line
+}
+
 // stripComments removes terraform comments from source to prevent
-// commented-out resource blocks from being matched.
+// commented-out resource blocks from being matched. This is the original
+// all-at-once approach (used when line numbers aren't needed).
 func stripComments(src string) string {
 	// Remove line comments: // ... and # ...
 	lines := strings.Split(src, "\n")
