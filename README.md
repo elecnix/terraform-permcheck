@@ -67,11 +67,18 @@ terraform-permcheck validate \
   --cloud aws
 ```
 
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--format` | `text` | Output format: `text` or `github-annotations` |
+| `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
+
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | All permissions covered |
+| 0 | All permissions covered (or `--exit-zero` was set) |
 | 1 | Permission gaps found (details printed to stderr) |
 | 2 | Invalid input or configuration error |
 
@@ -96,6 +103,8 @@ go install github.com/elecnix/terraform-permcheck@latest
 
 ## CI integration
 
+### Hard fail (block the PR on missing permissions)
+
 ```yaml
 # .github/workflows/pr-tests.yml
 - name: Check IAM permissions
@@ -105,6 +114,24 @@ go install github.com/elecnix/terraform-permcheck@latest
       --policy-file <(terraform output -raw deploy_policy) \
       --cloud aws
 ```
+
+### Soft warn (annotate the PR diff without failing the check)
+
+```yaml
+- name: Check IAM permissions
+  run: |
+    terraform plan -out=plan.tfplan
+    terraform show -json plan.tfplan | terraform-permcheck validate \
+      --policy-file <(terraform output -raw deploy_policy) \
+      --cloud aws \
+      --format github-annotations \
+      --exit-zero
+```
+
+With `--format github-annotations`, each missing permission group produces a
+`::warning::` workflow command that GitHub Actions surfaces as a ⚠️ annotation
+in the PR diff. `--exit-zero` ensures the step itself succeeds so the check
+passes green while surfacing warnings.
 
 ## License
 
