@@ -279,9 +279,38 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		addTagActions(schema, "create", tagActions.Apply)
 		addTagActions(schema, "update", tagActions.Apply)
 		addTagActions(schema, "update", tagActions.Remove)
+
+		// The list-tags SDK call (e.g. kms:ListResourceTags) is made
+		// unconditionally on every resource Read for @Tags-annotated
+		// resources, and Create returns Read — so it's needed on both
+		// read and create without any attribute gating.
+		addUnconditionalActions(schema, "read", tagActions.List)
+		addUnconditionalActions(schema, "create", tagActions.List)
 	}
 
 	p.schemas[tfType] = schema
+}
+
+// addUnconditionalActions adds actions to the given operation without any
+// conditional gating, skipping any already present for that operation.
+func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) {
+	if len(actions) == 0 {
+		return
+	}
+	existing := make(map[string]bool, len(schema.Permissions[op]))
+	for _, a := range schema.Permissions[op] {
+		existing[a] = true
+	}
+	// Ensure Conditional map exists even if no entries for this op.
+	if schema.Conditional == nil {
+		schema.Conditional = make(map[string]map[string]string)
+	}
+	for _, action := range actions {
+		if !existing[action] {
+			schema.Permissions[op] = append(schema.Permissions[op], action)
+			existing[action] = true
+		}
+	}
 }
 
 // addTagActions adds tagging actions to the given operation, gated on the
