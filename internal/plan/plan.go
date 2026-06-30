@@ -97,6 +97,16 @@ func attributePresence(after json.RawMessage) map[string]bool {
 	for k, v := range fields {
 		present[k] = isMeaningful(v)
 	}
+
+	// The provider's transparent tagging keys off the effective tag set
+	// (tags_all = provider default_tags ∪ resource tags), so a resource can be
+	// tagged — and require kms:TagResource — via default_tags even with no
+	// resource-level `tags` block. Treat the canonical `tags` gate as satisfied
+	// whenever either is set.
+	if present["tags_all"] {
+		present["tags"] = true
+	}
+
 	return present
 }
 

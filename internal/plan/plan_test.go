@@ -100,6 +100,30 @@ func TestParseAttributePresence(t *testing.T) {
 	}
 }
 
+func TestParseTagsAllImpliesTags(t *testing.T) {
+	// A resource tagged only via provider default_tags has an empty `tags` but a
+	// populated `tags_all`; the tag gate must still be satisfied.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "default_tagged",
+				"change": {
+					"actions": ["create"],
+					"after": {"tags": {}, "tags_all": {"ManagedBy": "terraform"}}
+				}
+			}
+		]
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changes[0].Attributes["tags"] {
+		t.Error("expected tags gate to be satisfied when tags_all is populated via default_tags")
+	}
+}
+
 func TestParseNoAfter(t *testing.T) {
 	// A plan with no "after" (e.g. delete) yields nil Attributes (unknown).
 	raw := []byte(`{"resource_changes":[{"type":"aws_kms_key","name":"x","change":{"actions":["delete"]}}]}`)
