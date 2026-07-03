@@ -41,7 +41,7 @@ func TestVersionCommand(t *testing.T) {
 		}
 	})
 
-	want := "terraform-permcheck v0.3.0"
+	want := "terraform-permcheck v0.4.0"
 	if got := strings.TrimSpace(out); got != want {
 		t.Fatalf("version output = %q, want %q", got, want)
 	}
