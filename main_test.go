@@ -115,6 +115,97 @@ func TestValidate_GitHubAnnotationsWithExitZero(t *testing.T) {
 	}
 }
 
+// TestStaticHCL_ConditionalPermissionFiltering verifies that static HCL mode
+// filters conditional permissions based on parsed HCL attributes. A DynamoDB
+// table without tags should NOT report dynamodb:TagResource as missing.
+func TestStaticHCL_ConditionalPermissionFiltering(t *testing.T) {
+	root := t.TempDir()
+
+	// DynamoDB table WITHOUT tags.
+	if err := os.WriteFile(root+"/table.tf", []byte(`
+resource "aws_dynamodb_table" "items" {
+  name         = "items"
+  hash_key     = "id"
+  attribute    { name = "id"; type = "S" }
+  billing_mode = "PAY_PER_REQUEST"
+}
+`), 0644); err != nil {
+		t.Fatalf("write table.tf: %v", err)
+	}
+
+	// Partial policy missing dynamodb:TagResource and dynamodb:UntagResource.
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:CreateTable","dynamodb:DeleteTable","dynamodb:DescribeTable","dynamodb:ListTables","dynamodb:DescribeContinuousBackups","dynamodb:DescribeTimeToLive","dynamodb:ListTagsOfResource"],"Resource":"*"}]}`
+	policyPath := root + "/policy.json"
+	if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	// Use github-annotations format so output goes to stdout.
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if err != nil && !errors.Is(err, errGapsFound) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// tags is NOT set (only name, hash_key, attribute, billing_mode are
+	// top-level attributes), so dynamodb:TagResource should be filtered.
+	if strings.Contains(out, "dynamodb:TagResource") {
+		t.Errorf("dynamodb:TagResource should be filtered (no tags configured)\ngot: %s", out)
+	}
+}
+
+// TestStaticHCL_ConditionalPermissionPresent verifies that when a gating
+// attribute (tags) IS configured, the corresponding conditional permission
+// (dynamodb:TagResource) IS reported as missing.
+func TestStaticHCL_ConditionalPermissionPresent(t *testing.T) {
+	root := t.TempDir()
+
+	// DynamoDB table WITH tags.
+	if err := os.WriteFile(root+"/table.tf", []byte(`
+resource "aws_dynamodb_table" "items" {
+  name         = "items"
+  hash_key     = "id"
+  attribute    { name = "id"; type = "S" }
+  billing_mode = "PAY_PER_REQUEST"
+  tags = {
+    Environment = "test"
+  }
+}
+`), 0644); err != nil {
+		t.Fatalf("write table.tf: %v", err)
+	}
+
+	// Same partial policy missing dynamodb:TagResource.
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:CreateTable","dynamodb:DeleteTable","dynamodb:DescribeTable","dynamodb:ListTables","dynamodb:DescribeContinuousBackups","dynamodb:DescribeTimeToLive","dynamodb:ListTagsOfResource"],"Resource":"*"}]}`
+	policyPath := root + "/policy.json"
+	if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if err != nil && !errors.Is(err, errGapsFound) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// tags IS set, so dynamodb:TagResource should be reported as missing.
+	if !strings.Contains(out, "dynamodb:TagResource") {
+		t.Errorf("dynamodb:TagResource should be reported (tags configured)\ngot: %s", out)
+	}
+}
+
 // TestValidate_InvalidFormat returns an error for unsupported format values.
 func TestValidate_InvalidFormat(t *testing.T) {
 	err := run([]string{"validate",

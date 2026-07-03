@@ -20,11 +20,12 @@ import (
 
 // ResourceBlock is a single resource or data block extracted from a .tf file.
 type ResourceBlock struct {
-	Type     string // terraform resource type, e.g. "aws_backup_vault"
-	Name     string // terraform resource name, e.g. "this"
-	Mode     string // "resource" or "data"
-	Filename string // path to the .tf file (populated by ParseDir)
-	Line     int    // 1-based line number of the resource declaration
+	Type       string   // terraform resource type, e.g. "aws_backup_vault"
+	Name       string   // terraform resource name, e.g. "this"
+	Mode       string   // "resource" or "data"
+	Filename   string   // path to the .tf file (populated by ParseDir)
+	Line       int      // 1-based line number of the resource declaration
+	Attributes []string // top-level attribute names set in the resource body
 }
 
 // resourceRE matches resource and data block declarations in terraform .tf files.
@@ -110,17 +111,110 @@ func ParseFile(filename, src string) ([]ResourceBlock, error) {
 
 		matches := resourceRE.FindStringSubmatch(clean)
 		if len(matches) >= 4 {
+			attrs := parseAttributes(lines, i)
 			blocks = append(blocks, ResourceBlock{
-				Mode:     matches[1],
-				Type:     matches[2],
-				Name:     matches[3],
-				Filename: filename,
-				Line:     i + 1,
+				Mode:       matches[1],
+				Type:       matches[2],
+				Name:       matches[3],
+				Filename:   filename,
+				Line:       i + 1,
+				Attributes: attrs,
 			})
 		}
 	}
 
 	return blocks, nil
+}
+
+// parseAttributes extracts top-level attribute names from a resource block
+// body. It scans lines starting from the block declaration line, tracking
+// brace depth, and collects identifiers followed by = at depth 1 (the
+// top level of the resource body). Sub-blocks (e.g. website { ... }) are
+// at higher depth and their attribute keys are excluded.
+//
+// String contents are tracked to avoid counting braces inside JSON or
+// heredoc expressions as block delimiters. This is a heuristic — fully
+// correct HCL parsing requires a lexer/parser — but handles the vast
+// majority of real-world terraform configurations.
+func parseAttributes(lines []string, blockStartIdx int) []string {
+	if blockStartIdx >= len(lines) {
+		return nil
+	}
+
+	// Find the opening brace for this block.
+	openIdx := -1
+	for i := blockStartIdx; i < len(lines); i++ {
+		clean := stripLineComments(lines[i])
+		if strings.Contains(clean, "{") {
+			openIdx = i
+			break
+		}
+	}
+	if openIdx < 0 {
+		return nil
+	}
+
+	depth := 0
+	inString := false
+	var attrs []string
+
+	for i := openIdx; i < len(lines); i++ {
+		clean := stripLineComments(lines[i])
+		prevDepth := depth
+
+		for _, ch := range clean {
+			if ch == '"' {
+				inString = !inString
+				continue
+			}
+			if inString {
+				continue
+			}
+			switch ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth <= 0 {
+					return attrs
+				}
+			}
+		}
+
+		if prevDepth == 1 {
+			// At top level of resource body — look for attribute assignments.
+			// An attribute has the form: ident = <value>
+			// We need to find = that is not inside a nested block.
+			eqIdx := strings.Index(clean, "=")
+			if eqIdx > 0 {
+				openBraceIdx := strings.Index(clean[:eqIdx], "{")
+				if openBraceIdx < 0 {
+					name := strings.TrimSpace(clean[:eqIdx])
+					if isIdent(name) {
+						attrs = append(attrs, name)
+					}
+				}
+			}
+		}
+	}
+
+	return attrs
+}
+
+// isIdent reports whether s is a valid terraform identifier (letters,
+// digits, underscores, hyphens) and non-empty.
+func isIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, ch := range s {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '_' || ch == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // stripLineComments removes line comments (// and #) from a single line.
