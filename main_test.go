@@ -115,6 +115,86 @@ func TestValidate_GitHubAnnotationsWithExitZero(t *testing.T) {
 	}
 }
 
+// TestValidate_TerraformRootWithSourceMapping verifies that
+// --terraform-root with --plan-file enables source mapping
+// (file=/line= in github-annotations) in dynamic mode.
+func TestValidate_TerraformRootWithSourceMapping(t *testing.T) {
+	// Create a minimal terraform root with .tf files matching resources
+	// in the plan (aws_s3_bucket.logs, aws_backup_vault.this, etc. are in plan.json).
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/main.tf", []byte(`
+resource "aws_s3_bucket" "logs" {
+  bucket = "my-logs"
+}
+
+resource "aws_backup_vault" "this" {
+  name = "my-vault"
+}
+
+resource "aws_dynamodb_table" "switch_keys" {
+  name = "switch-keys"
+}
+
+resource "aws_iam_role" "backup" {
+  name = "backup-role"
+}
+`), 0644); err != nil {
+		t.Fatalf("write main.tf: %v", err)
+	}
+
+	// Use --terraform-root + --plan-file + --policy-file with a partial
+	// policy to trigger gaps and verify file=/line= annotations.
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--format", "github-annotations",
+			"--terraform-root", root,
+		})
+		// errGapsFound is expected with a partial policy.
+		if err != nil && !errors.Is(err, errGapsFound) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// With --terraform-root provided, annotations should include
+	// file= and line= parameters for inline PR annotations.
+	if !strings.Contains(out, "file=") {
+		t.Errorf("expected file= in annotations output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "line=") {
+		t.Errorf("expected line= in annotations output, got:\n%s", out)
+	}
+}
+
+// TestValidate_TerraformRootWithPolicyFromPlanOutput verifies that
+// --terraform-root no longer conflicts with --policy-from-plan-output.
+// It confirms the old exclusive gate is gone.
+func TestValidate_TerraformRootWithPolicyFromPlanOutput(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/main.tf", []byte(`
+resource "aws_s3_bucket" "logs" {
+  bucket = "my-logs"
+}
+`), 0644); err != nil {
+		t.Fatalf("write main.tf: %v", err)
+	}
+
+	// --terraform-root + --plan-file + --policy-from-plan-output
+	// must NOT error (was mutually exclusive before this change).
+	err := run([]string{"validate",
+		"--plan-file", "testdata/plan_with_output.json",
+		"--policy-from-plan-output", "deploy_policy_json",
+		"--cloud", "aws",
+		"--terraform-root", root,
+		"--exit-zero",
+	})
+	if err != nil {
+		t.Fatalf("--terraform-root + --policy-from-plan-output must not error: got %v", err)
+	}
+}
+
 // TestValidate_InvalidFormat returns an error for unsupported format values.
 func TestValidate_InvalidFormat(t *testing.T) {
 	err := run([]string{"validate",

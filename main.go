@@ -1,7 +1,7 @@
 // terraform-permcheck validates that a terraform deploy role has sufficient IAM
 // permissions for every resource in a terraform plan.
 //
-// Usage:
+// Usage (plan-based / dynamic mode):
 //
 //	terraform show -json plan.tfplan | terraform-permcheck validate --policy-file deploy_policy.json --cloud aws
 //
@@ -10,6 +10,9 @@
 //	terraform show -json plan.tfplan | terraform-permcheck validate --policy-from-plan-output deploy_policy_json --cloud aws
 //
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
+//
+// Usage (static HCL mode — no plan, no AWS credentials):
+//
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 //
 // GitHub Actions annotations (warn, don't fail):
@@ -18,7 +21,8 @@
 //	  --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --exit-zero
 //
-//	# With file/line annotations (inline in the PR "Files changed" tab):
+//	# With file/line annotations (inline in the PR "Files changed" tab)
+//	# via --terraform-root for source mapping:
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
 //	  --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --terraform-root . --exit-zero
@@ -85,7 +89,7 @@ func validateCmd(args []string) error {
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
-	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration (static HCL mode — no plan, no AWS credentials required)")
+	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration for source mapping (file=/line= in github-annotations), or static HCL mode when no plan is available")
 	format := fs.String("format", "text", "output format: text, github-annotations")
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 
@@ -97,18 +101,27 @@ func validateCmd(args []string) error {
 		return fmt.Errorf("unsupported format %q (supported: text, github-annotations)", *format)
 	}
 
-	// Static HCL mode: --terraform-root replaces --plan-file / stdin.
+	// --terraform-root is a supplementary flag for source mapping in
+	// github-annotations output. When no plan input is available (--plan-file,
+	// --policy-from-plan-output, --policy-from-state-output, or piped stdin),
+	// it switches to static HCL mode.
 	if *terraformRoot != "" {
-		if *planFile != "" {
-			return fmt.Errorf("--terraform-root and --plan-file are mutually exclusive")
+		planFromFlags := *planFile != "" || *policyFromPlanOutput != "" || *policyFromStateOutput != ""
+		if !planFromFlags {
+			// No plan source from flags; check if a plan is piped via stdin.
+			stat, _ := os.Stdin.Stat()
+			hasStdin := (stat.Mode() & os.ModeCharDevice) == 0
+			if !hasStdin {
+				// No plan available at all — static HCL mode.
+				if *policyFile == "" {
+					return fmt.Errorf("--terraform-root requires --policy-file when no plan is provided")
+				}
+				return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero)
+			}
 		}
-		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
-			return fmt.Errorf("--terraform-root requires --policy-file (policy-from-plan/output not applicable)")
-		}
-		if *policyFile == "" {
-			return fmt.Errorf("--terraform-root requires --policy-file")
-		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero)
+		// Plan input is available — fall through to dynamic mode.
+		// --terraform-root will be picked up below for building the
+		// resource-to-file locations map (file=/line= in annotations).
 	}
 
 	// Exactly one policy source must be provided.
