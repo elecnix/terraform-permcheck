@@ -332,17 +332,26 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 
 	// Build ResourceChange entries: over-approximate by treating all as create.
 	// Deduplicate by (Type) — one entry per resource type, regardless of count.
+	// Populate Attributes from parsed HCL to enable conditional permission
+	// filtering (e.g., s3:PutBucketWebsite is only reported when a website
+	// block is actually configured).
 	seen := make(map[string]bool)
 	var changes []*plan.ResourceChange
 	for _, b := range blocks {
 		if !seen[b.Type] {
 			seen[b.Type] = true
+			var attrs map[string]bool
+			if len(b.Attributes) > 0 {
+				attrs = make(map[string]bool, len(b.Attributes))
+				for _, a := range b.Attributes {
+					attrs[a] = true
+				}
+			}
 			changes = append(changes, &plan.ResourceChange{
-				Type:   b.Type,
-				Name:   b.Name,
-				Change: "create",
-				// Attributes is nil → conditional permissions are preserved
-				// (presence unknown).
+				Type:       b.Type,
+				Name:       b.Name,
+				Change:     "create",
+				Attributes: attrs,
 			})
 		}
 	}

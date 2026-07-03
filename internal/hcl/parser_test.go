@@ -278,3 +278,129 @@ data "aws_iam_role" "admin" {
 		t.Error(".terraform content should be skipped")
 	}
 }
+
+func TestParseFile_Attributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		wantType string
+		wantName string
+		wantAttr []string
+	}{
+		{
+			name: "simple attributes",
+			src: `resource "aws_s3_bucket" "logs" {
+  bucket = "my-bucket"
+  force_destroy = true
+}
+`,
+			wantType: "aws_s3_bucket",
+			wantName: "logs",
+			wantAttr: []string{"bucket", "force_destroy"},
+		},
+		{
+			name: "nested block not extracted",
+			src: `resource "aws_s3_bucket" "web" {
+  bucket = "www"
+  website {
+    index_document = "index.html"
+    error_document = "error.html"
+  }
+  force_destroy = true
+}
+`,
+			wantType: "aws_s3_bucket",
+			wantName: "web",
+			wantAttr: []string{"bucket", "force_destroy"}, // website is a block, not an attribute
+		},
+		{
+			name: "backup vault with access policy",
+			src: `resource "aws_backup_vault" "this" {
+  name = "my-vault"
+  access_policy = jsonencode({...})
+}
+`,
+			wantType: "aws_backup_vault",
+			wantName: "this",
+			wantAttr: []string{"name", "access_policy"},
+		},
+		{
+			name: "string with braces",
+			src: `resource "aws_s3_bucket" "docs" {
+  bucket = "my-{bucket}"
+  policy = jsonencode({Version = "2012-10-17"})
+}
+`,
+			wantType: "aws_s3_bucket",
+			wantName: "docs",
+			wantAttr: []string{"bucket", "policy"},
+		},
+		{
+			name: "no attributes",
+			src: `resource "aws_backup_vault" "empty" {
+}
+`,
+			wantType: "aws_backup_vault",
+			wantName: "empty",
+			wantAttr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			blocks, err := ParseFile("test.tf", tt.src)
+			if err != nil {
+				t.Fatalf("ParseFile: %v", err)
+			}
+			if len(blocks) != 1 {
+				t.Fatalf("expected 1 block, got %d", len(blocks))
+			}
+			b := blocks[0]
+			if b.Type != tt.wantType || b.Name != tt.wantName {
+				t.Fatalf("resource = %s.%s, want %s.%s", b.Type, b.Name, tt.wantType, tt.wantName)
+			}
+
+			if len(b.Attributes) != len(tt.wantAttr) {
+				t.Fatalf("attributes = %v (len=%d), want %v (len=%d)",
+					b.Attributes, len(b.Attributes), tt.wantAttr, len(tt.wantAttr))
+			}
+			for i, want := range tt.wantAttr {
+				got := b.Attributes[i]
+				if got != want {
+					t.Errorf("attribute[%d] = %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestParseFile_TwoResourcesAttributes(t *testing.T) {
+	src := `resource "aws_s3_bucket" "a" {
+  bucket = "bucket-a"
+}
+
+resource "aws_s3_bucket" "b" {
+  bucket = "bucket-b"
+  website {
+    index_document = "index.html"
+  }
+}
+`
+	blocks, err := ParseFile("test.tf", src)
+	if err != nil {
+		t.Fatalf("ParseFile: %v", err)
+	}
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(blocks))
+	}
+
+	// First bucket: no website block
+	if len(blocks[0].Attributes) != 1 || blocks[0].Attributes[0] != "bucket" {
+		t.Errorf("bucket a attributes = %v, want [bucket]", blocks[0].Attributes)
+	}
+
+	// Second bucket: website is a block, not an attribute — only bucket listed
+	if len(blocks[1].Attributes) != 1 || blocks[1].Attributes[0] != "bucket" {
+		t.Errorf("bucket b attributes = %v, want [bucket]", blocks[1].Attributes)
+	}
+}
