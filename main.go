@@ -330,20 +330,26 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		}
 	}
 
-	// Build ResourceChange entries: over-approximate by treating all as create.
-	// Deduplicate by (Type) — one entry per resource type, regardless of count.
+	// Build ResourceChange entries: validate all mutation operation types
+	// (create, update, delete) for each unique resource type. The validator
+	// gracefully skips operations with no permissions defined in the
+	// CloudFormation schema (falls back to "create", then skips if that is
+	// also absent). Deduplicate by (Type) — one entry per resource type,
+	// regardless of count, but with entries for each operation.
 	seen := make(map[string]bool)
 	var changes []*plan.ResourceChange
 	for _, b := range blocks {
 		if !seen[b.Type] {
 			seen[b.Type] = true
-			changes = append(changes, &plan.ResourceChange{
-				Type:   b.Type,
-				Name:   b.Name,
-				Change: "create",
-				// Attributes is nil → conditional permissions are preserved
-				// (presence unknown).
-			})
+			for _, op := range []string{"create", "update", "delete"} {
+				changes = append(changes, &plan.ResourceChange{
+					Type:   b.Type,
+					Name:   b.Name,
+					Change: op,
+					// Attributes is nil → conditional permissions are preserved
+					// (presence unknown).
+				})
+			}
 		}
 	}
 
