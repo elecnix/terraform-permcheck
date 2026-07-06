@@ -61,6 +61,45 @@ provider source, so PermCheck adds them explicitly:
   callback tagged `[conditional: resource_arn]`. Use `--only-required` to
   suppress that over-approximation.
 
+### Excluding known false positives
+
+Some reported gaps are correct but unactionable — a least-privilege deploy role
+may intentionally lack a permission for a resource it never manages (e.g. a role
+scoped to application resources that can't touch a separate audit/CloudTrail
+module's S3 buckets). Those findings are noise. PermCheck reads an exclusion
+list from a config file (`permcheck.json`, auto-discovered in the working
+directory, or pointed at with `--config`):
+
+```json
+{
+  "exclude": [
+    {
+      "permission": "s3:DeleteBucketPublicAccessBlock",
+      "reason": "CloudTrail bucket lifecycle managed by a separate audit role"
+    },
+    {
+      "permission": "secretsmanager:UpdateSecretVersionStage",
+      "resource": "aws_secretsmanager_secret.forwarder",
+      "reason": "Forwarder key version stages managed out-of-band"
+    }
+  ]
+}
+```
+
+- **`permission`** (required) — the IAM action to suppress. Supports glob
+  patterns, e.g. `s3:*`.
+- **`resource`** (optional) — scopes the exclusion to matching terraform
+  resources. Matched against the resource type (`aws_secretsmanager_secret`) or
+  the full address (`aws_secretsmanager_secret.forwarder`); supports globs like
+  `aws_secretsmanager_*`. Omit to apply the exclusion to every resource.
+- **`reason`** (optional) — a note kept for the audit trail.
+
+Excluded permissions are dropped from the gap report and no longer fail the run,
+but the suppression is **not** silent by default — pass `--show-excluded` to
+list what was suppressed (and why) so reviewers can audit it. In `--format json`
+the suppressed entries appear under an `excluded` array; in `github-annotations`
+mode they surface as `::notice::` lines.
+
 ## Supported clouds
 
 | Cloud | Schema source | Status |
@@ -90,8 +129,10 @@ terraform-permcheck validate \
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--format` | `text` | Output format: `text` or `github-annotations` |
+| `--format` | `text` | Output format: `text`, `github-annotations`, or `json` |
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
+| `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
+| `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 
 ### Exit codes
 
