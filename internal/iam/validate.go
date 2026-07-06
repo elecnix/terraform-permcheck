@@ -263,6 +263,19 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		}
 	}
 
+	// Cross-service callback permissions: actions in a different service that
+	// AWS invokes at apply time (e.g. elasticloadbalancing:SetWebACL for an
+	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
+	// schema/source resolution, so they're checked separately here.
+	for _, rc := range changes {
+		for _, m := range crossServiceMissing(rc, policy) {
+			if filter.ExcludeConditional && m.ConditionAttribute != "" {
+				continue
+			}
+			missing = append(missing, m)
+		}
+	}
+
 	// Post-process: remove permissions absorbed by S3 sub-resource configs
 	missing = filterS3Subresources(missing, changes)
 

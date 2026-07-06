@@ -100,6 +100,59 @@ func TestParseAttributePresence(t *testing.T) {
 	}
 }
 
+func TestParseAttributeValues(t *testing.T) {
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_wafv2_web_acl_association",
+				"name": "known",
+				"change": {
+					"actions": ["create"],
+					"after": {
+						"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-lb/50dc6c495c0c9188",
+						"web_acl_arn": "",
+						"count": 1
+					}
+				}
+			},
+			{
+				"type": "aws_wafv2_web_acl_association",
+				"name": "computed",
+				"change": {
+					"actions": ["create"],
+					"after": {"web_acl_arn": "arn:aws:wafv2:us-east-1:123456789012:regional/webacl/x/y"}
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	known := changes[0]
+	if got := known.AttributeValues["resource_arn"]; got != "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-lb/50dc6c495c0c9188" {
+		t.Errorf("expected resource_arn string value captured, got %q", got)
+	}
+	// Empty strings and non-string values are omitted.
+	if _, ok := known.AttributeValues["web_acl_arn"]; ok {
+		t.Error("expected empty string value to be omitted from AttributeValues")
+	}
+	if _, ok := known.AttributeValues["count"]; ok {
+		t.Error("expected non-string value to be omitted from AttributeValues")
+	}
+
+	// resource_arn computed at apply time (not in after) → not captured.
+	computed := changes[1]
+	if _, ok := computed.AttributeValues["resource_arn"]; ok {
+		t.Error("expected absent resource_arn to be omitted from AttributeValues")
+	}
+}
+
 func TestParseTagsAllImpliesTags(t *testing.T) {
 	// A resource tagged only via provider default_tags has an empty `tags` but a
 	// populated `tags_all`; the tag gate must still be satisfied.
