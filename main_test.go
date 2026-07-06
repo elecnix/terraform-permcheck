@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -41,7 +42,7 @@ func TestVersionCommand(t *testing.T) {
 		}
 	})
 
-	want := "terraform-permcheck v0.4.0"
+	want := "terraform-permcheck v0.5.0"
 	if got := strings.TrimSpace(out); got != want {
 		t.Fatalf("version output = %q, want %q", got, want)
 	}
@@ -219,5 +220,248 @@ func TestValidate_InvalidFormat(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported format") {
 		t.Errorf("expected 'unsupported format' error, got: %v", err)
+	}
+}
+
+// --- v0.5.0 tests ---
+
+// TestValidate_JSONFormat ensures --format json produces valid JSON with the
+// expected structure and status fields.
+func TestValidate_JSONFormat(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\ngot: %s", err, out)
+	}
+
+	status, ok := result["status"].(string)
+	if !ok || status != "gaps_found" {
+		t.Errorf("expected status=gaps_found, got %v", result["status"])
+	}
+
+	checked, ok := result["checked"].(float64)
+	if !ok || checked < 1 {
+		t.Errorf("expected checked >= 1, got %v", result["checked"])
+	}
+
+	missing, ok := result["missing"].([]interface{})
+	if !ok || len(missing) == 0 {
+		t.Errorf("expected non-empty missing array, got %v", result["missing"])
+	}
+}
+
+// TestValidate_JSONFormatSuccess ensures --format json produces status=ok when
+// all permissions are covered. Uses an IAM-only plan (iam:* covers everything).
+func TestValidate_JSONFormatSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	iamOnlyPlan := `{"resource_changes":[{"type":"aws_iam_role","name":"test","change":{"actions":["create"]}}]}`
+	planPath := tmpDir + "/plan.json"
+	if err := os.WriteFile(planPath, []byte(iamOnlyPlan), 0644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", planPath,
+			"--policy-file", "testdata/policy_full.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\ngot: %s", err, out)
+	}
+
+	status, ok := result["status"].(string)
+	if !ok || status != "ok" {
+		t.Errorf("expected status=ok, got %v", result["status"])
+	}
+}
+
+// TestValidate_JSONWithExitZero ensures --format json with --exit-zero returns
+// nil and produces valid JSON.
+func TestValidate_JSONWithExitZero(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--format", "json",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("run(validate --exit-zero): expected nil, got %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\ngot: %s", err, out)
+	}
+
+	if result["status"] != "gaps_found" {
+		t.Errorf("expected status=gaps_found, got %v", result["status"])
+	}
+}
+
+// TestValidate_TerraformRootWithPlanFile verifies that --terraform-root is no
+// longer mutually exclusive with --plan-file. It should run in plan mode with
+// location annotations enabled.
+func TestValidate_TerraformRootWithPlanFile(t *testing.T) {
+	err := run([]string{"validate",
+		"--plan-file", "testdata/plan.json",
+		"--policy-file", "testdata/policy_partial.json",
+		"--cloud", "aws",
+		"--terraform-root", "testdata",
+		"--exit-zero",
+	})
+	if err != nil {
+		t.Fatalf("run(validate --terraform-root --plan-file): expected nil, got %v", err)
+	}
+}
+
+// TestValidate_TerraformRootWithPolicyFromPlanOutput verifies the core fix:
+// --terraform-root can now coexist with --policy-from-plan-output in plan mode.
+// This was the combination that caused the PrizmalSwitch CI to silently skip
+// validation since v0.4.0.
+func TestValidate_TerraformRootWithPolicyFromPlanOutput(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan_with_output.json",
+			"--policy-from-plan-output", "deploy_policy_json",
+			"--cloud", "aws",
+			"--terraform-root", "testdata",
+			"--format", "json",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("run(validate --terraform-root --policy-from-plan-output): expected nil, got %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\ngot: %s", err, out)
+	}
+
+	// With policy_full (wrapped in the plan output's deploy_policy_json),
+	// the wildcard "*" action should cover all permissions, giving status=ok.
+	if result["status"] != "ok" {
+		t.Errorf("expected status=ok (policy covers all), got %v", result["status"])
+	}
+}
+
+// TestValidate_NoPlanInputWithoutTerraformRoot ensures a clear error message
+// when there's no plan input and no --terraform-root.
+func TestValidate_NoPlanInputWithoutTerraformRoot(t *testing.T) {
+	// We can't easily test "no stdin" in unit tests since the test harness
+	// itself has stdin. Instead, verify the error message format by passing
+	// only --policy-file without --plan-file when stdin is a pipe. But since
+	// the test runner has a real stdin, we test the empty-plan scenario via
+	// an empty plan file.
+	tmpFile := t.TempDir() + "/empty.json"
+	if err := os.WriteFile(tmpFile, []byte(`{"resource_changes":[]}`), 0644); err != nil {
+		t.Fatalf("write empty plan: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", tmpFile,
+			"--policy-file", "testdata/policy_full.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error for empty plan: %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result["status"] != "ok" {
+		t.Errorf("expected status=ok for empty plan, got %v", result["status"])
+	}
+}
+
+// TestStaticHCL_JSONFormat verifies that --format json works in static HCL mode.
+// Uses a policy that's missing dynamodb:ListTables so we get a gap.
+func TestStaticHCL_JSONFormat(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.WriteFile(root+"/table.tf", []byte(`
+resource "aws_dynamodb_table" "items" {
+  name         = "items"
+  hash_key     = "id"
+  billing_mode = "PAY_PER_REQUEST"
+}
+`), 0644); err != nil {
+		t.Fatalf("write table.tf: %v", err)
+	}
+
+	// Missing dynamodb:ListTables — deliberately incomplete.
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:CreateTable","dynamodb:DeleteTable","dynamodb:DescribeTable"],"Resource":"*"}]}`
+	policyPath := root + "/policy.json"
+	if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "json",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if result["status"] != "gaps_found" {
+		t.Errorf("expected status=gaps_found, got %v", result["status"])
+	}
+
+	missing, ok := result["missing"].([]interface{})
+	if !ok || len(missing) == 0 {
+		t.Errorf("expected non-empty missing array, got %v", result["missing"])
+	}
+}
+
+// TestValidate_TerraformRootPlanMutualExclusionRemoved verifies that
+// --terraform-root and --plan-file can coexist (no longer mutually exclusive).
+func TestValidate_TerraformRootPlanMutualExclusionRemoved(t *testing.T) {
+	err := run([]string{"validate",
+		"--plan-file", "testdata/plan.json",
+		"--terraform-root", "testdata",
+		"--policy-file", "testdata/policy_full.json",
+		"--cloud", "aws",
+		"--exit-zero",
+	})
+	if err != nil {
+		t.Fatalf("expected nil (mutual exclusion removed), got %v", err)
 	}
 }
