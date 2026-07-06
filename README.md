@@ -42,6 +42,25 @@ and only requires such permissions when their gating attribute is actually
 present, so you neither miss them (when tags are set) nor get false positives
 (when they aren't).
 
+### Cross-service callback permissions
+
+Some AWS APIs require an IAM action from a *different* service than the one the
+Terraform provider calls. `aws_wafv2_web_acl_association` calls
+`wafv2:AssociateWebACL`, but AWS WAFv2 then calls into the target service to
+attach the ACL — so associating a Web ACL with an **ALB** additionally requires
+`elasticloadbalancing:SetWebACL`, an **API Gateway stage** requires
+`apigateway:SetWebACL`, and an **AppSync API** requires `appsync:SetWebACL`.
+These callbacks are invisible to both the CloudFormation schema and the
+provider source, so PermCheck adds them explicitly:
+
+- When the target's `resource_arn` is a known ARN, only the callback for that
+  ARN's service is required.
+- When `resource_arn` is computed at apply time (it references a resource
+  created in the same plan) or you're in static HCL mode, PermCheck can't tell
+  which target applies, so it over-approximates and reports every candidate
+  callback tagged `[conditional: resource_arn]`. Use `--only-required` to
+  suppress that over-approximation.
+
 ## Supported clouds
 
 | Cloud | Schema source | Status |

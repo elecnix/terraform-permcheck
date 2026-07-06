@@ -19,6 +19,14 @@ type ResourceChange struct {
 	// the plan carries no "after" state (e.g. a delete), meaning presence is
 	// unknown. Used to gate conditional permissions on attribute presence.
 	Attributes map[string]bool
+
+	// AttributeValues records the concrete string values of top-level
+	// attributes from the planned "after" state. Only known, non-empty string
+	// values are included (values computed at apply time are absent). Used to
+	// resolve cross-service callback targets — e.g. the service embedded in an
+	// aws_wafv2_web_acl_association's resource_arn. It is nil when the plan
+	// carries no "after" state.
+	AttributeValues map[string]string
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -73,10 +81,11 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			continue
 		}
 		changes = append(changes, &ResourceChange{
-			Type:       rc.Type,
-			Name:       rc.Name,
-			Change:     action,
-			Attributes: attributePresence(rc.Change.After),
+			Type:            rc.Type,
+			Name:            rc.Name,
+			Change:          action,
+			Attributes:      attributePresence(rc.Change.After),
+			AttributeValues: attributeStringValues(rc.Change.After),
 		})
 	}
 	return changes, nil
@@ -108,6 +117,29 @@ func attributePresence(after json.RawMessage) map[string]bool {
 	}
 
 	return present
+}
+
+// attributeStringValues extracts the concrete string values of top-level
+// attributes from a planned "after" state. Only non-empty JSON strings are
+// captured; null, empty, and non-string values (numbers, bools, objects,
+// arrays, and values computed at apply time) are omitted. Returns nil when
+// after is absent or null.
+func attributeStringValues(after json.RawMessage) map[string]string {
+	if len(after) == 0 || string(after) == "null" {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(after, &fields); err != nil {
+		return nil
+	}
+	values := make(map[string]string)
+	for k, v := range fields {
+		var s string
+		if err := json.Unmarshal(v, &s); err == nil && s != "" {
+			values[k] = s
+		}
+	}
+	return values
 }
 
 // isMeaningful reports whether a JSON value is set to a non-zero value,
