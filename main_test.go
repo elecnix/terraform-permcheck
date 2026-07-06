@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -463,5 +464,220 @@ func TestValidate_TerraformRootPlanMutualExclusionRemoved(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("expected nil (mutual exclusion removed), got %v", err)
+	}
+}
+
+// --- config-based permission exclusion (issue #43) ---
+
+// captureStderr runs fn while capturing everything written to os.Stderr.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = orig }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+	return string(out)
+}
+
+// writeConfig writes a permcheck config file into dir and returns its path.
+func writeConfig(t *testing.T, dir, body string) string {
+	t.Helper()
+	p := dir + "/permcheck.json"
+	if err := os.WriteFile(p, []byte(body), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return p
+}
+
+// TestValidate_ExcludeSuppressesGap verifies an excluded permission drops out of
+// the missing set while unrelated gaps still fail the run.
+func TestValidate_ExcludeSuppressesGap(t *testing.T) {
+	cfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"iam:GetRolePolicy","reason":"managed elsewhere"}]}`)
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--config", cfg,
+			"--format", "json",
+		})
+		// dynamodb gaps remain, so the run still reports gaps.
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	if strings.Contains(out, "iam:GetRolePolicy") {
+		t.Errorf("excluded permission iam:GetRolePolicy should not appear in missing output:\n%s", out)
+	}
+	// By default (no --show-excluded) there is no excluded section in JSON.
+	if strings.Contains(out, "\"excluded\"") {
+		t.Errorf("excluded section should be omitted without --show-excluded:\n%s", out)
+	}
+}
+
+// TestValidate_ExcludeAllClearsExit verifies that when every gap is excluded the
+// run exits 0 even without --exit-zero.
+func TestValidate_ExcludeAllClearsExit(t *testing.T) {
+	cfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"dynamodb:*"},{"permission":"iam:*"}]}`)
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--config", cfg,
+			"--format", "json",
+		})
+		if err != nil {
+			t.Fatalf("expected nil (all gaps excluded), got %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if result["status"] != "ok" {
+		t.Errorf("expected status=ok (all excluded), got %v", result["status"])
+	}
+}
+
+// TestValidate_ShowExcludedJSON verifies --show-excluded surfaces excluded
+// findings in JSON output with their reason.
+func TestValidate_ShowExcludedJSON(t *testing.T) {
+	cfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"iam:GetRolePolicy","reason":"managed elsewhere"}]}`)
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--config", cfg,
+			"--show-excluded",
+			"--format", "json",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	var result FormatJSONResultShape
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(result.Excluded) != 1 {
+		t.Fatalf("expected 1 excluded entry, got %d\n%s", len(result.Excluded), out)
+	}
+	if result.Excluded[0].ExcludedAction != "iam:GetRolePolicy" || result.Excluded[0].Reason != "managed elsewhere" {
+		t.Errorf("unexpected excluded entry: %+v", result.Excluded[0])
+	}
+}
+
+// FormatJSONResultShape mirrors the excluded section of the JSON output for
+// assertion purposes.
+type FormatJSONResultShape struct {
+	Status   string `json:"status"`
+	Excluded []struct {
+		ExcludedAction string `json:"excluded_action"`
+		Reason         string `json:"reason"`
+	} `json:"excluded"`
+}
+
+// TestValidate_ShowExcludedText verifies --show-excluded prints an "Excluded
+// (per config)" block to stderr in text mode.
+func TestValidate_ShowExcludedText(t *testing.T) {
+	cfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"iam:GetRolePolicy","reason":"managed elsewhere"}]}`)
+
+	stderr := captureStderr(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--config", cfg,
+			"--show-excluded",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	for _, want := range []string{"Excluded (per config)", "iam:GetRolePolicy", "reason: managed elsewhere"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q:\n%s", want, stderr)
+		}
+	}
+}
+
+// TestValidate_ConfigNotFound verifies an explicit --config path that can't be
+// read is a fatal error.
+func TestValidate_ConfigNotFound(t *testing.T) {
+	err := run([]string{"validate",
+		"--plan-file", "testdata/plan.json",
+		"--policy-file", "testdata/policy_partial.json",
+		"--cloud", "aws",
+		"--config", "testdata/does-not-exist.json",
+	})
+	if err == nil || !strings.Contains(err.Error(), "load config") {
+		t.Fatalf("expected 'load config' error, got %v", err)
+	}
+}
+
+// TestValidate_AutoDiscoverConfig verifies ./permcheck.json is picked up
+// automatically from the working directory when --config is not given.
+func TestValidate_AutoDiscoverConfig(t *testing.T) {
+	planAbs, err := filepath.Abs("testdata/plan.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyAbs, err := filepath.Abs("testdata/policy_partial.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	writeConfig(t, dir, `{"exclude":[{"permission":"dynamodb:*"},{"permission":"iam:*"}]}`)
+
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(orig) }()
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", planAbs,
+			"--policy-file", policyAbs,
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Fatalf("expected nil (auto-discovered config excludes all gaps), got %v", err)
+		}
+	})
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if result["status"] != "ok" {
+		t.Errorf("expected status=ok via auto-discovered config, got %v", result["status"])
 	}
 }

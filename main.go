@@ -89,6 +89,8 @@ func validateCmd(args []string) error {
 	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration for file/line annotations in github-annotations/json output; when no plan is provided, also enables static HCL mode")
 	format := fs.String("format", "text", "output format: text, github-annotations, json")
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
+	configFile := fs.String("config", "", "path to permcheck config JSON (default: ./permcheck.json if present)")
+	showExcluded := fs.Bool("show-excluded", false, "list config-excluded permissions in the report (default: suppressed silently)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -96,6 +98,14 @@ func validateCmd(args []string) error {
 
 	if *format != "text" && *format != "github-annotations" && *format != "json" {
 		return fmt.Errorf("unsupported format %q (supported: text, github-annotations, json)", *format)
+	}
+
+	// Load config exclusions (auto-discover ./permcheck.json unless --config
+	// overrides). Missing default config is fine; an explicit --config path
+	// that fails to load is fatal.
+	exclusions, err := loadExclusions(*configFile)
+	if err != nil {
+		return err
 	}
 
 	// Build resource-to-file location map when --terraform-root is set.
@@ -123,7 +133,7 @@ func validateCmd(args []string) error {
 		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
 			return fmt.Errorf("--policy-from-plan/output not applicable in static HCL mode (no plan available)")
 		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero, locations)
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero, locations, exclusions, *showExcluded)
 	}
 
 	// Plan mode: read plan from stdin or file.
@@ -153,7 +163,6 @@ func validateCmd(args []string) error {
 
 	// Read plan
 	var planRaw []byte
-	var err error
 	if *planFile != "" {
 		planRaw, err = os.ReadFile(*planFile)
 	} else {
@@ -235,16 +244,7 @@ func validateCmd(args []string) error {
 		return err
 	}
 
-	if len(missing) > 0 {
-		printMissing(missing, len(changes), "resource changes", *format, locations)
-		if *exitZero {
-			return nil
-		}
-		return errGapsFound
-	}
-
-	printSuccess(len(changes), "resource changes", *format)
-	return nil
+	return report(missing, exclusions, len(changes), "resource changes", *format, *exitZero, *showExcluded, locations)
 }
 
 // schemaAdapter bridges cloud.Provider to iam.SchemaLike for the validator.
@@ -277,31 +277,84 @@ func readStdin() ([]byte, error) {
 	return io.ReadAll(os.Stdin)
 }
 
-// printMissing formats and prints missing actions. In github-annotations mode
-// the output goes to stdout (so ::warning:: commands are parsed by the
-// workflow runner); in text mode it goes to stderr (for human readability);
-// in json mode it goes to stdout as a JSON object.
-// The locations map (keyed by "type.name") adds file= and line= to
+// defaultConfigFile is the config file auto-discovered in the working
+// directory when --config is not given.
+const defaultConfigFile = "permcheck.json"
+
+// loadExclusions resolves the config exclusion list. When configPath is set it
+// is loaded explicitly (a load failure is fatal). Otherwise ./permcheck.json is
+// used if present; an absent default config yields no exclusions.
+func loadExclusions(configPath string) ([]iam.Exclusion, error) {
+	path := configPath
+	if path == "" {
+		if _, err := os.Stat(defaultConfigFile); err != nil {
+			return nil, nil // no default config present — nothing to exclude
+		}
+		path = defaultConfigFile
+	}
+	cfg, err := iam.LoadConfig(path)
+	if err != nil {
+		return nil, fmt.Errorf("load config %s: %w", path, err)
+	}
+	return cfg.Exclude, nil
+}
+
+// report applies config exclusions to the missing actions, prints the result,
+// and returns errGapsFound when actionable (non-excluded) gaps remain and
+// --exit-zero was not set. Excluded findings never fail the run.
+func report(missing []iam.MissingAction, exclusions []iam.Exclusion, checked int, resourceLabel, format string, exitZero, showExcluded bool, locations map[string]iam.FileLocation) error {
+	kept, excluded := iam.ApplyExclusions(missing, exclusions)
+	printReport(kept, excluded, checked, resourceLabel, format, locations, showExcluded)
+	if len(kept) > 0 && !exitZero {
+		return errGapsFound
+	}
+	return nil
+}
+
+// printReport formats and prints the missing actions plus, when showExcluded is
+// set, the config-excluded actions. In github-annotations mode output goes to
+// stdout (so ::warning::/::notice:: commands are parsed by the workflow
+// runner); in text mode missing/excluded go to stderr (for human readability)
+// and the all-clear line to stdout; in json mode a single object goes to
+// stdout. The locations map (keyed by "type.name") adds file= and line= to
 // annotations and file paths to text output when available.
-func printMissing(missing []iam.MissingAction, checked int, resourceLabel, format string, locations map[string]iam.FileLocation) {
+func printReport(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, resourceLabel, format string, locations map[string]iam.FileLocation, showExcluded bool) {
 	switch format {
-	case "github-annotations":
-		fmt.Print(iam.FormatGitHubAnnotations(missing, locations))
-		fmt.Printf("\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
 	case "json":
-		fmt.Print(iam.FormatJSON(missing, checked, resourceLabel, locations))
+		var exc []iam.ExcludedAction
+		if showExcluded {
+			exc = excluded
+		}
+		fmt.Print(iam.FormatJSON(missing, exc, checked, resourceLabel, locations))
+	case "github-annotations":
+		if len(missing) > 0 {
+			fmt.Print(iam.FormatGitHubAnnotations(missing, locations))
+			fmt.Printf("\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+		} else {
+			fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
+		}
+		if showExcluded {
+			fmt.Print(iam.FormatExcludedAnnotations(excluded))
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing, locations))
-		fmt.Fprintf(os.Stderr, "\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+		if len(missing) > 0 {
+			fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing, locations))
+			fmt.Fprintf(os.Stderr, "\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+		} else {
+			fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
+		}
+		if showExcluded {
+			fmt.Fprint(os.Stderr, iam.FormatExcluded(excluded))
+		}
 	}
 }
 
-// printSuccess prints the all-clear message.
+// printSuccess prints the all-clear message for early-return paths with no
+// resource changes (and thus no exclusions to consider).
 func printSuccess(checked int, resourceLabel, format string) {
 	switch format {
 	case "json":
-		output := iam.FormatJSON(nil, checked, resourceLabel, nil)
-		fmt.Print(output)
+		fmt.Print(iam.FormatJSON(nil, nil, checked, resourceLabel, nil))
 	default:
 		fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
 	}
@@ -324,7 +377,7 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool, format string, exitZero bool, locations map[string]iam.FileLocation) error {
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool, format string, exitZero bool, locations map[string]iam.FileLocation, exclusions []iam.Exclusion, showExcluded bool) error {
 	if cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
 	}
@@ -398,14 +451,5 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return err
 	}
 
-	if len(missing) > 0 {
-		printMissing(missing, len(changes), "resource types (static HCL mode)", format, locations)
-		if exitZero {
-			return nil
-		}
-		return errGapsFound
-	}
-
-	printSuccess(len(changes), "resource types (static HCL mode)", format)
-	return nil
+	return report(missing, exclusions, len(changes), "resource types (static HCL mode)", format, exitZero, showExcluded, locations)
 }

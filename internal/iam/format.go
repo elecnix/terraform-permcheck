@@ -16,10 +16,20 @@ type FileLocation struct {
 
 // FormatJSONResult is the structured JSON output produced by --format json.
 type FormatJSONResult struct {
-	Status  string              `json:"status"`  // "ok" or "gaps_found"
-	Checked int                 `json:"checked"` // number of resources checked
-	Label   string              `json:"label"`   // human-readable label for checked resources
-	Missing []FormatJSONMissing `json:"missing"` // empty when status=ok
+	Status   string               `json:"status"`             // "ok" or "gaps_found"
+	Checked  int                  `json:"checked"`            // number of resources checked
+	Label    string               `json:"label"`              // human-readable label for checked resources
+	Missing  []FormatJSONMissing  `json:"missing"`            // empty when status=ok
+	Excluded []FormatJSONExcluded `json:"excluded,omitempty"` // config-suppressed findings (only when --show-excluded)
+}
+
+// FormatJSONExcluded is a single config-excluded permission in JSON output.
+type FormatJSONExcluded struct {
+	ResourceType   string `json:"resource_type"`
+	ResourceName   string `json:"resource_name"`
+	Change         string `json:"change"`
+	ExcludedAction string `json:"excluded_action"`
+	Reason         string `json:"reason,omitempty"`
 }
 
 // FormatJSONMissing is a single missing permission in JSON output.
@@ -35,12 +45,24 @@ type FormatJSONMissing struct {
 }
 
 // FormatJSON produces a machine-readable JSON representation of the
-// validation result. When missing is nil or empty, status is "ok".
-func FormatJSON(missing []MissingAction, checked int, label string, locations map[string]FileLocation) string {
+// validation result. When missing is nil or empty, status is "ok". Excluded
+// actions (config-suppressed) are included only when a non-empty slice is
+// passed; callers pass nil to omit them from the output.
+func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int, label string, locations map[string]FileLocation) string {
 	result := FormatJSONResult{
 		Status:  "ok",
 		Checked: checked,
 		Label:   label,
+	}
+
+	for _, e := range excluded {
+		result.Excluded = append(result.Excluded, FormatJSONExcluded{
+			ResourceType:   e.ResourceType,
+			ResourceName:   e.ResourceName,
+			Change:         e.Change,
+			ExcludedAction: e.Action,
+			Reason:         e.Reason,
+		})
 	}
 
 	if len(missing) > 0 {
