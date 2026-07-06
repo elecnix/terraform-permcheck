@@ -22,6 +22,12 @@
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
 //	  --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --terraform-root . --exit-zero
+//
+// JSON output (machine-readable, for CI integration):
+//
+//	terraform show -json plan.tfplan | terraform-permcheck validate \
+//	  --policy-from-plan-output deploy_policy_json --cloud aws \
+//	  --format json --terraform-root . --exit-zero
 package main
 
 import (
@@ -61,14 +67,9 @@ func run(args []string) error {
 
 	switch args[0] {
 	case "validate":
-		err := validateCmd(args[1:])
-		// Translate gaps to exit code 1; --exit-zero suppresses this upstream.
-		if errors.Is(err, errGapsFound) {
-			return err
-		}
-		return err
+		return validateCmd(args[1:])
 	case "version":
-		fmt.Println("terraform-permcheck v0.4.0")
+		fmt.Println("terraform-permcheck v0.5.0")
 		return nil
 	default:
 		return fmt.Errorf("unknown subcommand: %s", args[0])
@@ -85,32 +86,47 @@ func validateCmd(args []string) error {
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
-	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration (static HCL mode — no plan, no AWS credentials required)")
-	format := fs.String("format", "text", "output format: text, github-annotations")
+	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration for file/line annotations in github-annotations/json output; when no plan is provided, also enables static HCL mode")
+	format := fs.String("format", "text", "output format: text, github-annotations, json")
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	if *format != "text" && *format != "github-annotations" {
-		return fmt.Errorf("unsupported format %q (supported: text, github-annotations)", *format)
+	if *format != "text" && *format != "github-annotations" && *format != "json" {
+		return fmt.Errorf("unsupported format %q (supported: text, github-annotations, json)", *format)
 	}
 
-	// Static HCL mode: --terraform-root replaces --plan-file / stdin.
+	// Build resource-to-file location map when --terraform-root is set.
+	// In plan mode, this provides file= and line= parameters for annotations.
+	// In static HCL mode, this is also used (though the parser already has
+	// file info).
+	var locations map[string]iam.FileLocation
 	if *terraformRoot != "" {
-		if *planFile != "" {
-			return fmt.Errorf("--terraform-root and --plan-file are mutually exclusive")
+		var locErr error
+		locations, locErr = hcl.MapResources(*terraformRoot)
+		if locErr != nil {
+			// Non-fatal: continue without file locations.
+			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
+		}
+	}
+
+	// Determine whether we have a plan source.
+	hasPlanInput := *planFile != "" || stdinHasData()
+
+	if !hasPlanInput {
+		// Static HCL mode: read resources from .tf files.
+		if *terraformRoot == "" {
+			return fmt.Errorf("no plan input: provide --plan-file, pipe plan JSON to stdin, or use --terraform-root for static HCL mode")
 		}
 		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
-			return fmt.Errorf("--terraform-root requires --policy-file (policy-from-plan/output not applicable)")
+			return fmt.Errorf("--policy-from-plan/output not applicable in static HCL mode (no plan available)")
 		}
-		if *policyFile == "" {
-			return fmt.Errorf("--terraform-root requires --policy-file")
-		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero)
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, *format, *exitZero, locations)
 	}
 
+	// Plan mode: read plan from stdin or file.
 	// Exactly one policy source must be provided.
 	policySources := 0
 	if *policyFile != "" {
@@ -190,7 +206,7 @@ func validateCmd(args []string) error {
 	}
 
 	if len(changes) == 0 {
-		fmt.Println("No matching resource changes found in plan.")
+		printSuccess(0, "resource changes", *format)
 		return nil
 	}
 
@@ -219,18 +235,6 @@ func validateCmd(args []string) error {
 		return err
 	}
 
-	// Build resource-to-file mapping when --format github-annotations is
-	// used with --terraform-root, so annotations get file= and line=.
-	var locations map[string]iam.FileLocation
-	if *format == "github-annotations" && *terraformRoot != "" {
-		var locErr error
-		locations, locErr = hcl.MapResources(*terraformRoot)
-		if locErr != nil {
-			// Non-fatal: continue without file locations.
-			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
-		}
-	}
-
 	if len(missing) > 0 {
 		printMissing(missing, len(changes), "resource changes", *format, locations)
 		if *exitZero {
@@ -239,7 +243,7 @@ func validateCmd(args []string) error {
 		return errGapsFound
 	}
 
-	printSuccess(len(changes), "resource changes")
+	printSuccess(len(changes), "resource changes", *format)
 	return nil
 }
 
@@ -250,6 +254,16 @@ type schemaAdapter struct {
 
 func (a *schemaAdapter) Resolve(tfType string) (iam.SchemaLike, error) {
 	return a.p.Resolve(tfType)
+}
+
+// stdinHasData returns true if stdin is a pipe (not a terminal) and has data
+// ready to read.
+func stdinHasData() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) == 0
 }
 
 func readStdin() ([]byte, error) {
@@ -265,7 +279,8 @@ func readStdin() ([]byte, error) {
 
 // printMissing formats and prints missing actions. In github-annotations mode
 // the output goes to stdout (so ::warning:: commands are parsed by the
-// workflow runner); in text mode it goes to stderr (for human readability).
+// workflow runner); in text mode it goes to stderr (for human readability);
+// in json mode it goes to stdout as a JSON object.
 // The locations map (keyed by "type.name") adds file= and line= to
 // annotations and file paths to text output when available.
 func printMissing(missing []iam.MissingAction, checked int, resourceLabel, format string, locations map[string]iam.FileLocation) {
@@ -273,6 +288,8 @@ func printMissing(missing []iam.MissingAction, checked int, resourceLabel, forma
 	case "github-annotations":
 		fmt.Print(iam.FormatGitHubAnnotations(missing, locations))
 		fmt.Printf("\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
+	case "json":
+		fmt.Print(iam.FormatJSON(missing, checked, resourceLabel, locations))
 	default:
 		fmt.Fprintf(os.Stderr, "%s\n", iam.FormatMissing(missing, locations))
 		fmt.Fprintf(os.Stderr, "\n%d %s checked, %d distinct missing permissions found.\n", checked, resourceLabel, iam.DistinctCount(missing))
@@ -280,8 +297,14 @@ func printMissing(missing []iam.MissingAction, checked int, resourceLabel, forma
 }
 
 // printSuccess prints the all-clear message.
-func printSuccess(checked int, resourceLabel string) {
-	fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
+func printSuccess(checked int, resourceLabel, format string) {
+	switch format {
+	case "json":
+		output := iam.FormatJSON(nil, checked, resourceLabel, nil)
+		fmt.Print(output)
+	default:
+		fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
+	}
 }
 
 // unwrapJSONString converts a json.RawMessage to a []byte suitable for
@@ -301,7 +324,7 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool, format string, exitZero bool) error {
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired bool, format string, exitZero bool, locations map[string]iam.FileLocation) error {
 	if cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
 	}
@@ -316,18 +339,8 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 	}
 
 	if len(blocks) == 0 {
-		fmt.Println("No aws resource or data blocks found in terraform configuration.")
+		printSuccess(0, "resource types (static HCL mode)", format)
 		return nil
-	}
-
-	// Build resource-to-file mapping for annotation formatting.
-	var locations map[string]iam.FileLocation
-	if format == "github-annotations" {
-		var locErr error
-		locations, locErr = hcl.MapResources(terraformRoot)
-		if locErr != nil {
-			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
-		}
 	}
 
 	// Build ResourceChange entries: over-approximate by treating all as create.
@@ -393,6 +406,6 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return errGapsFound
 	}
 
-	fmt.Printf("All required permissions covered (%d resource types checked, static HCL mode).\n", len(changes))
+	printSuccess(len(changes), "resource types (static HCL mode)", format)
 	return nil
 }
