@@ -177,6 +177,59 @@ func TestParseTagsAllImpliesTags(t *testing.T) {
 	}
 }
 
+func TestParseUnknownTagsImpliesTags(t *testing.T) {
+	// A resource whose `tags` is set to a value computed at apply time reports
+	// `tags`/`tags_all` as null in `after` and `after_unknown.tags == true`.
+	// The tags will still be applied, so the tag gate must be satisfied.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "computed_tags",
+				"change": {
+					"actions": ["create"],
+					"after": {"tags": null, "tags_all": null},
+					"after_unknown": {"tags": true, "tags_all": true}
+				}
+			}
+		]
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changes[0].Attributes["tags"] {
+		t.Error("expected tags gate to be satisfied when tags are known after apply (after_unknown.tags == true)")
+	}
+}
+
+func TestParseUnknownTagsAllDoesNotImplyTags(t *testing.T) {
+	// An untagged resource with no default_tags still reports
+	// `after_unknown.tags_all == true` (tags_all is provider-computed), but no
+	// tags will ever be applied. Only `after_unknown.tags` — never tags_all —
+	// may satisfy the gate, otherwise every untagged resource false-positives.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "untagged",
+				"change": {
+					"actions": ["create"],
+					"after": {"tags": null, "tags_all": null},
+					"after_unknown": {"tags_all": true}
+				}
+			}
+		]
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Attributes["tags"] {
+		t.Error("expected an unknown tags_all alone NOT to satisfy the tags gate")
+	}
+}
+
 func TestParseNoAfter(t *testing.T) {
 	// A plan with no "after" (e.g. delete) yields nil Attributes (unknown).
 	raw := []byte(`{"resource_changes":[{"type":"aws_kms_key","name":"x","change":{"actions":["delete"]}}]}`)

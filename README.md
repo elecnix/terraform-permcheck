@@ -40,7 +40,8 @@ provider, for example, makes an extra `kms:TagResource` call when an
 primary `kms:CreateKey` action. PermCheck reads the planned attribute values
 and only requires such permissions when their gating attribute is actually
 present, so you neither miss them (when tags are set) nor get false positives
-(when they aren't).
+(when they aren't). A `tags` value computed at apply time (known after apply)
+still counts as set — the tags get applied, so the permission is still required.
 
 ### Cross-service callback permissions
 
