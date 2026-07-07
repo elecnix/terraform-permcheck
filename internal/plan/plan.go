@@ -38,8 +38,9 @@ type tfResourceChange struct {
 	Type   string `json:"type"`
 	Name   string `json:"name"`
 	Change struct {
-		Actions []string        `json:"actions"`
-		After   json.RawMessage `json:"after"`
+		Actions      []string        `json:"actions"`
+		After        json.RawMessage `json:"after"`
+		AfterUnknown json.RawMessage `json:"after_unknown"`
 	} `json:"change"`
 }
 
@@ -84,7 +85,7 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Type:            rc.Type,
 			Name:            rc.Name,
 			Change:          action,
-			Attributes:      attributePresence(rc.Change.After),
+			Attributes:      attributePresence(rc.Change.After, rc.Change.AfterUnknown),
 			AttributeValues: attributeStringValues(rc.Change.After),
 		})
 	}
@@ -92,9 +93,11 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 }
 
 // attributePresence reports which top-level attributes of a planned resource's
-// "after" state are meaningfully set. Returns nil when after is absent or null
+// "after" state are meaningfully set. afterUnknown is the parallel
+// "after_unknown" object, where a top-level attribute maps to true when its
+// value is computed at apply time. Returns nil when after is absent or null
 // (presence unknown).
-func attributePresence(after json.RawMessage) map[string]bool {
+func attributePresence(after, afterUnknown json.RawMessage) map[string]bool {
 	if len(after) == 0 || string(after) == "null" {
 		return nil
 	}
@@ -116,7 +119,35 @@ func attributePresence(after json.RawMessage) map[string]bool {
 		present["tags"] = true
 	}
 
+	// A `tags` value computed at apply time (e.g. tags = { X = some.arn })
+	// shows as null in "after" but true in "after_unknown". The tags will still
+	// be applied, so the gate must be satisfied. Only `tags` counts here, never
+	// `tags_all`: tags_all is provider-computed and reads as unknown even on an
+	// untagged resource with no default_tags, which would false-positive on
+	// every such resource.
+	if unknownAttrSet(afterUnknown, "tags") {
+		present["tags"] = true
+	}
+
 	return present
+}
+
+// unknownAttrSet reports whether a top-level attribute is marked fully
+// computed-at-apply in a change's "after_unknown" object (i.e. the attribute
+// maps to the JSON literal true).
+func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
+	if len(afterUnknown) == 0 {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(afterUnknown, &fields); err != nil {
+		return false
+	}
+	var unknown bool
+	if err := json.Unmarshal(fields[attr], &unknown); err != nil {
+		return false
+	}
+	return unknown
 }
 
 // attributeStringValues extracts the concrete string values of top-level
