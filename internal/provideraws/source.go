@@ -155,7 +155,12 @@ func (p *SourceProvider) ensureRepo() error {
 		return fmt.Errorf("fetch %s: %w", DefaultProviderRef, err)
 	}
 
-	cmdCO := exec.Command("git", "-C", dir, "checkout", DefaultProviderRef)
+	// Checkout FETCH_HEAD (the commit we just fetched) instead of the tag
+	// name directly to avoid noise from annotated-tag resolution ("warning:
+	// refs/tags/v5.90.0 ... is not a commit!"). --quiet and
+	// advice.detachedHead=false suppress progress output and the detached
+	// HEAD advice, respectively.
+	cmdCO := exec.Command("git", "-C", dir, "-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD")
 	cmdCO.Stdout = os.Stderr
 	cmdCO.Stderr = os.Stderr
 	return cmdCO.Run()
