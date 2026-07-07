@@ -133,7 +133,7 @@ func (p *SourceProvider) ensureRepo() error {
 			return err
 		}
 		cmd := exec.Command("git", "clone", "--depth", "1",
-			"--branch", DefaultProviderRef,
+			"--branch", DefaultProviderRef, "--quiet",
 			"https://github.com/hashicorp/terraform-provider-aws.git", dir)
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
@@ -148,7 +148,7 @@ func (p *SourceProvider) ensureRepo() error {
 	}
 
 	// Fetch and checkout
-	cmdFetch := exec.Command("git", "-C", dir, "fetch", "--depth", "1", "origin", DefaultProviderRef)
+	cmdFetch := exec.Command("git", "-C", dir, "fetch", "--depth", "1", "--quiet", "origin", DefaultProviderRef)
 	cmdFetch.Stdout = os.Stderr
 	cmdFetch.Stderr = os.Stderr
 	if err := cmdFetch.Run(); err != nil {
