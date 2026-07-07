@@ -368,8 +368,8 @@ func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 
 // TestCheckoutAnnotatedTagNoise verifies that git checkout of an annotated
 // tag does not leak noise (detached HEAD advice, tag-not-a-commit warnings)
-// into stderr when the checkout is properly quieted. This reproduces the
-// noisy output observed in PR #552 of PrizmalSwitch:
+// into stderr when the checkout is properly quieted. Checking out an annotated
+// provider tag (e.g. v5.90.0) otherwise emits:
 //   - warning: refs/tags/v5.90.0 ... is not a commit!
 //   - Note: switching to '<hash>'.
 //   - detached HEAD advice block
@@ -390,6 +390,9 @@ func TestCheckoutAnnotatedTagNoise(t *testing.T) {
 	runGit("config", "user.name", "test")
 	runGit("config", "user.email", "test@test")
 	runGit("commit", "--allow-empty", "-m", "initial")
+	// Pin the branch name — `git init` defaults to `master` on some hosts and
+	// `main` on others, and the checkout below is by name.
+	runGit("branch", "-M", "main")
 
 	// Create an annotated tag (NOT lightweight) — this is what triggers the
 	// "not a commit" warning and the detached HEAD advice.

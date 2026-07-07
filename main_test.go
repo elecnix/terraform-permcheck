@@ -339,8 +339,8 @@ func TestValidate_TerraformRootWithPlanFile(t *testing.T) {
 
 // TestValidate_TerraformRootWithPolicyFromPlanOutput verifies the core fix:
 // --terraform-root can now coexist with --policy-from-plan-output in plan mode.
-// This was the combination that caused the PrizmalSwitch CI to silently skip
-// validation since v0.4.0.
+// This was the combination that caused CI to silently skip validation since
+// v0.4.0.
 func TestValidate_TerraformRootWithPolicyFromPlanOutput(t *testing.T) {
 	out := captureStdout(t, func() {
 		err := run([]string{"validate",
