@@ -63,7 +63,7 @@ func main() {
 // version is the single source of truth for the release version — bump it
 // here when tagging a release; the version test derives its expectation from
 // this constant.
-const version = "v0.7.0"
+const version = "v0.8.0"
 
 func run(args []string) error {
 	if len(args) < 1 {
