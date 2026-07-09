@@ -231,7 +231,8 @@ func TestParseUnknownTagsAllDoesNotImplyTags(t *testing.T) {
 }
 
 func TestParseNoAfter(t *testing.T) {
-	// A plan with no "after" (e.g. delete) yields nil Attributes (unknown).
+	// A plan with no "after" and no "before" (e.g. delete of a resource with no
+	// recorded state) yields nil Attributes (unknown).
 	raw := []byte(`{"resource_changes":[{"type":"aws_kms_key","name":"x","change":{"actions":["delete"]}}]}`)
 	changes, err := Parse(raw, "aws_")
 	if err != nil {
@@ -241,7 +242,144 @@ func TestParseNoAfter(t *testing.T) {
 		t.Fatalf("expected 1 change, got %d", len(changes))
 	}
 	if changes[0].Attributes != nil {
-		t.Errorf("expected nil Attributes when no after present, got %v", changes[0].Attributes)
+		t.Errorf("expected nil Attributes when neither before nor after present, got %v", changes[0].Attributes)
+	}
+}
+
+func TestParseDeleteAttributePresenceFromBefore(t *testing.T) {
+	// Delete changes carry no "after" state, but the provider's d.GetOk reads
+	// prior state at destroy time — which the plan JSON exposes as "before".
+	// Attributes for a delete must reflect "before", not "after".
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "example",
+				"change": {
+					"actions": ["delete"],
+					"before": {
+						"version_stages": ["AWSCURRENT"],
+						"secret_id": "arn:aws:secretsmanager:us-east-1:123456789012:secret:x",
+						"stage_hint": null,
+						"tags": {}
+					},
+					"after": null
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+
+	del := changes[0]
+	if del.Change != "delete" {
+		t.Fatalf("expected delete change, got %q", del.Change)
+	}
+	if del.Attributes == nil {
+		t.Fatal("expected Attributes to be populated from before on a delete change")
+	}
+	if !del.Attributes["version_stages"] {
+		t.Error("expected version_stages to be present (set in before)")
+	}
+	if !del.Attributes["secret_id"] {
+		t.Error("expected secret_id to be present (set in before)")
+	}
+	if del.Attributes["stage_hint"] {
+		t.Error("expected null before value to count as absent")
+	}
+	if del.Attributes["tags"] {
+		t.Error("expected empty tags map in before to count as absent")
+	}
+}
+
+func TestParseDeleteAttributePresenceUnsetInBefore(t *testing.T) {
+	// A delete whose prior state never had the gating attribute set must report
+	// it absent, so the conditional permission it gates can be suppressed.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "example",
+				"change": {
+					"actions": ["delete"],
+					"before": {"secret_id": "arn:aws:secretsmanager:us-east-1:123456789012:secret:x"},
+					"after": null
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Attributes["version_stages"] {
+		t.Error("expected version_stages to be absent when unset in before")
+	}
+}
+
+func TestParseDeleteAttributeValuesFromBefore(t *testing.T) {
+	// AttributeValues (used for cross-service callback resolution) must also
+	// come from before on delete changes.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_wafv2_web_acl_association",
+				"name": "assoc",
+				"change": {
+					"actions": ["delete"],
+					"before": {
+						"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-lb/50dc6c495c0c9188",
+						"web_acl_arn": ""
+					},
+					"after": null
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changes[0].AttributeValues["resource_arn"]; got != "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-lb/50dc6c495c0c9188" {
+		t.Errorf("expected resource_arn value from before, got %q", got)
+	}
+}
+
+func TestParseReplaceStillUsesAfter(t *testing.T) {
+	// Replace actions ([\"delete\",\"create\"] / [\"create\",\"delete\"]) map to
+	// "create" and must keep using after, not before — only pure deletes read
+	// from before.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_kms_key",
+				"name": "replaced",
+				"change": {
+					"actions": ["delete", "create"],
+					"before": {"tags": {}},
+					"after": {"tags": {"Environment": "test"}}
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Change != "create" {
+		t.Fatalf("expected replace to map to create, got %q", changes[0].Change)
+	}
+	if !changes[0].Attributes["tags"] {
+		t.Error("expected replace (create) to read tags from after, not before")
 	}
 }
 

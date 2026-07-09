@@ -13,19 +13,22 @@ type ResourceChange struct {
 	Name   string // terraform resource name, e.g. "this"
 	Change string // "create", "update", or "delete"
 
-	// Attributes records which top-level attributes are meaningfully set in the
-	// planned (post-change) state, following terraform's GetOk semantics: a key
-	// maps to true only when its value is non-null and non-zero. It is nil when
-	// the plan carries no "after" state (e.g. a delete), meaning presence is
-	// unknown. Used to gate conditional permissions on attribute presence.
+	// Attributes records which top-level attributes are meaningfully set,
+	// following terraform's GetOk semantics: a key maps to true only when its
+	// value is non-null and non-zero. For create/update/replace it reflects the
+	// planned "after" state; for a pure delete it reflects the prior "before"
+	// state, since that's what the provider's d.GetOk reads at destroy time. It
+	// is nil when the plan carries neither state, meaning presence is unknown.
+	// Used to gate conditional permissions on attribute presence.
 	Attributes map[string]bool
 
 	// AttributeValues records the concrete string values of top-level
-	// attributes from the planned "after" state. Only known, non-empty string
-	// values are included (values computed at apply time are absent). Used to
-	// resolve cross-service callback targets — e.g. the service embedded in an
+	// attributes — from "after" for create/update/replace, from "before" for a
+	// pure delete. Only known, non-empty string values are included (values
+	// computed at apply time are absent). Used to resolve cross-service
+	// callback targets — e.g. the service embedded in an
 	// aws_wafv2_web_acl_association's resource_arn. It is nil when the plan
-	// carries no "after" state.
+	// carries no corresponding state.
 	AttributeValues map[string]string
 }
 
@@ -39,6 +42,7 @@ type tfResourceChange struct {
 	Name   string `json:"name"`
 	Change struct {
 		Actions      []string        `json:"actions"`
+		Before       json.RawMessage `json:"before"`
 		After        json.RawMessage `json:"after"`
 		AfterUnknown json.RawMessage `json:"after_unknown"`
 	} `json:"change"`
@@ -81,28 +85,38 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 		if action == "no-op" {
 			continue
 		}
+		// Pure deletes carry no "after" state. At destroy time the provider's
+		// d.GetOk reads prior state, exposed by the plan JSON as "before" — so
+		// evaluate attribute presence/values there instead. Replace actions
+		// (mapped to "create" above) still need "after", since that's the state
+		// being applied.
+		attrSource, afterUnknown := rc.Change.After, rc.Change.AfterUnknown
+		if action == "delete" {
+			attrSource, afterUnknown = rc.Change.Before, nil // before-values are never "unknown"
+		}
 		changes = append(changes, &ResourceChange{
 			Type:            rc.Type,
 			Name:            rc.Name,
 			Change:          action,
-			Attributes:      attributePresence(rc.Change.After, rc.Change.AfterUnknown),
-			AttributeValues: attributeStringValues(rc.Change.After),
+			Attributes:      attributePresence(attrSource, afterUnknown),
+			AttributeValues: attributeStringValues(attrSource),
 		})
 	}
 	return changes, nil
 }
 
-// attributePresence reports which top-level attributes of a planned resource's
-// "after" state are meaningfully set. afterUnknown is the parallel
-// "after_unknown" object, where a top-level attribute maps to true when its
-// value is computed at apply time. Returns nil when after is absent or null
-// (presence unknown).
-func attributePresence(after, afterUnknown json.RawMessage) map[string]bool {
-	if len(after) == 0 || string(after) == "null" {
+// attributePresence reports which top-level attributes of a resource change
+// state (either the planned "after" state, or "before" for a pure delete) are
+// meaningfully set. afterUnknown is the parallel "after_unknown" object, where
+// a top-level attribute maps to true when its value is computed at apply time
+// (always nil when state is "before", since prior state is never unknown).
+// Returns nil when state is absent or null (presence unknown).
+func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
+	if len(state) == 0 || string(state) == "null" {
 		return nil
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(after, &fields); err != nil {
+	if err := json.Unmarshal(state, &fields); err != nil {
 		return nil
 	}
 	present := make(map[string]bool, len(fields))
@@ -151,16 +165,17 @@ func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
 }
 
 // attributeStringValues extracts the concrete string values of top-level
-// attributes from a planned "after" state. Only non-empty JSON strings are
-// captured; null, empty, and non-string values (numbers, bools, objects,
-// arrays, and values computed at apply time) are omitted. Returns nil when
-// after is absent or null.
-func attributeStringValues(after json.RawMessage) map[string]string {
-	if len(after) == 0 || string(after) == "null" {
+// attributes from a resource change state (either the planned "after" state,
+// or "before" for a pure delete). Only non-empty JSON strings are captured;
+// null, empty, and non-string values (numbers, bools, objects, arrays, and
+// values computed at apply time) are omitted. Returns nil when state is
+// absent or null.
+func attributeStringValues(state json.RawMessage) map[string]string {
+	if len(state) == 0 || string(state) == "null" {
 		return nil
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(after, &fields); err != nil {
+	if err := json.Unmarshal(state, &fields); err != nil {
 		return nil
 	}
 	values := make(map[string]string)
