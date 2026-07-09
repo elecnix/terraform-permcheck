@@ -60,6 +60,11 @@ func main() {
 	}
 }
 
+// version is the single source of truth for the release version — bump it
+// here when tagging a release; the version test derives its expectation from
+// this constant.
+const version = "v0.7.0"
+
 func run(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("subcommand required: validate")
@@ -69,7 +74,7 @@ func run(args []string) error {
 	case "validate":
 		return validateCmd(args[1:])
 	case "version":
-		fmt.Println("terraform-permcheck v0.7.0")
+		fmt.Println("terraform-permcheck " + version)
 		return nil
 	default:
 		return fmt.Errorf("unknown subcommand: %s", args[0])
