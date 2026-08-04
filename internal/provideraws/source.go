@@ -153,8 +153,10 @@ func (p *SourceProvider) ensureRepo() error {
 	gitDir := filepath.Join(dir, ".git")
 
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		// Clone
-		if err := os.MkdirAll(filepath.Dir(dir), 0755); err != nil {
+		// Clone. Create the target directory first — git init with
+		// cmd.Dir requires the working directory to already exist,
+		// unlike git clone which creates it.
+		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
 
@@ -163,14 +165,19 @@ func (p *SourceProvider) ensureRepo() error {
 		// failure. git clone --branch <annotated-tag> leaks detached
 		// HEAD advice and tag-not-a-commit warnings that neither
 		// --quiet nor -c advice.detachedHead=false suppresses.
-		if err := runGit(dir, nil, "-c", "init.defaultBranch=main", "init"); err != nil {
+		var err error
+		const upstreamURL = "https://github.com/hashicorp/terraform-provider-aws.git"
+		if err = runGit(dir, nil, "-c", "init.defaultBranch=main", "init"); err != nil {
 			return err
 		}
-		if err := runGit(dir, nil, "fetch", "--depth", "1", "--quiet",
-			"https://github.com/hashicorp/terraform-provider-aws.git", DefaultProviderRef); err != nil {
+		if err = runGit(dir, nil, "remote", "add", "origin", upstreamURL); err != nil {
 			return err
 		}
-		if err := runGit(dir, nil, "-c", "advice.detachedHead=false",
+		if err = runGit(dir, nil, "fetch", "--depth", "1", "--quiet",
+			"origin", DefaultProviderRef); err != nil {
+			return err
+		}
+		if err = runGit(dir, nil, "-c", "advice.detachedHead=false",
 			"checkout", "--quiet", "FETCH_HEAD"); err != nil {
 			return err
 		}
