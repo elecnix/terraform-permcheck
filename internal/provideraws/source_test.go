@@ -479,7 +479,7 @@ func TestCloneAnnotatedTagNoise(t *testing.T) {
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	runGitDir(workDir, "init")
+	runGitDir(workDir, "-c", "init.defaultBranch=main", "init")
 	runGitDir(workDir, "config", "user.name", "test")
 	runGitDir(workDir, "config", "user.email", "test@test")
 	runGitDir(workDir, "commit", "--allow-empty", "-m", "initial")
@@ -491,7 +491,7 @@ func TestCloneAnnotatedTagNoise(t *testing.T) {
 	// Test 1: successful clone path is silent.
 	cloneDir := t.TempDir()
 	var successBuf bytes.Buffer
-	err := runGit(cloneDir, &successBuf, "init")
+	err := runGit(cloneDir, &successBuf, "-c", "init.defaultBranch=main", "init")
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -512,7 +512,7 @@ func TestCloneAnnotatedTagNoise(t *testing.T) {
 
 	// Test 2: a broken ref still fails with the git error visible.
 	brokenDir := t.TempDir()
-	err = runGit(brokenDir, nil, "init")
+	err = runGit(brokenDir, nil, "-c", "init.defaultBranch=main", "init")
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

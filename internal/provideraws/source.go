@@ -163,7 +163,7 @@ func (p *SourceProvider) ensureRepo() error {
 		// failure. git clone --branch <annotated-tag> leaks detached
 		// HEAD advice and tag-not-a-commit warnings that neither
 		// --quiet nor -c advice.detachedHead=false suppresses.
-		if err := runGit(dir, nil, "init"); err != nil {
+		if err := runGit(dir, nil, "-c", "init.defaultBranch=main", "init"); err != nil {
 			return err
 		}
 		if err := runGit(dir, nil, "fetch", "--depth", "1", "--quiet",
