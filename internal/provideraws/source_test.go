@@ -448,3 +448,81 @@ func TestCheckoutAnnotatedTagNoise(t *testing.T) {
 		t.Errorf("expected empty stderr from quiet checkout, got:\n%s", newOutput)
 	}
 }
+
+// TestCloneAnnotatedTagNoise verifies that the git init + fetch + checkout
+// pipeline used in place of git clone --branch X does not leak noise into
+// stderr on success (the clone path in ensureRepo). It also proves that a
+// deliberately broken ref still produces an error with the git message
+// visible.
+func TestCloneAnnotatedTagNoise(t *testing.T) {
+	// Create a bare upstream repo (simulates a cold-cache clone).
+	upstream := t.TempDir()
+	runGitDir := func(dir string, args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	// Create upstream.git as a bare repo so we can fetch from it.
+	upstreamGit := filepath.Join(upstream, "upstream.git")
+	if err := os.MkdirAll(upstreamGit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDir(upstreamGit, "init", "--bare")
+
+	// Create a workdir to populate the bare repo with a commit and an
+	// annotated tag.
+	workDir := filepath.Join(upstream, "work")
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDir(workDir, "init")
+	runGitDir(workDir, "config", "user.name", "test")
+	runGitDir(workDir, "config", "user.email", "test@test")
+	runGitDir(workDir, "commit", "--allow-empty", "-m", "initial")
+	runGitDir(workDir, "remote", "add", "origin", upstreamGit)
+	runGitDir(workDir, "push", "origin", "HEAD:refs/heads/main")
+	runGitDir(workDir, "tag", "-a", "v1.0.0", "-m", "annotated tag")
+	runGitDir(workDir, "push", "origin", "v1.0.0")
+
+	// Test 1: successful clone path is silent.
+	cloneDir := t.TempDir()
+	var successBuf bytes.Buffer
+	err := runGit(cloneDir, &successBuf, "init")
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	err = runGit(cloneDir, &successBuf, "fetch", "--depth", "1", "--quiet",
+		"file://"+upstreamGit, "v1.0.0")
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	err = runGit(cloneDir, &successBuf, "-c", "advice.detachedHead=false",
+		"checkout", "--quiet", "FETCH_HEAD")
+	if err != nil {
+		t.Fatalf("checkout: %v", err)
+	}
+
+	if successBuf.Len() > 0 {
+		t.Errorf("expected empty stderr from clone path, got:\n%s", successBuf.String())
+	}
+
+	// Test 2: a broken ref still fails with the git error visible.
+	brokenDir := t.TempDir()
+	err = runGit(brokenDir, nil, "init")
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	// Fetch a non-existent ref — this must fail.
+	err = runGit(brokenDir, nil, "fetch", "--depth", "1", "--quiet",
+		"file://"+upstreamGit, "refs/tags/does-not-exist")
+	if err == nil {
+		t.Error("expected error fetching non-existent ref, got nil")
+	} else {
+		t.Logf("broken ref error (expected): %v", err)
+	}
+}

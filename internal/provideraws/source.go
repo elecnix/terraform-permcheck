@@ -1,6 +1,7 @@
 package provideraws
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -119,6 +120,30 @@ func (p *SourceProvider) Has(tfType string) bool {
 	return ok
 }
 
+// runGit runs a git command in the given directory. If buf is nil, stderr is
+// buffered and only printed when the command fails — so the caller gets a
+// clean, silent run on success and the full git error on failure. The buffer
+// is returned for callers that need to inspect output.
+func runGit(dir string, buf *bytes.Buffer, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stderr
+	if buf == nil {
+		var b bytes.Buffer
+		cmd.Stderr = &b
+		if err := cmd.Run(); err != nil {
+			// Print whatever stderr we captured, then return the error.
+			if b.Len() > 0 {
+				fmt.Fprintf(os.Stderr, "%s", b.String())
+			}
+			return fmt.Errorf("git %v: %w", args, err)
+		}
+		return nil
+	}
+	cmd.Stderr = buf
+	return cmd.Run()
+}
+
 // ensureRepo clones or verifies the terraform-provider-aws checkout.
 func (p *SourceProvider) ensureRepo() error {
 	if p.skipClone {
@@ -132,12 +157,24 @@ func (p *SourceProvider) ensureRepo() error {
 		if err := os.MkdirAll(filepath.Dir(dir), 0755); err != nil {
 			return err
 		}
-		cmd := exec.Command("git", "clone", "--depth", "1",
-			"--branch", DefaultProviderRef, "--quiet",
-			"https://github.com/hashicorp/terraform-provider-aws.git", dir)
-		cmd.Stdout = os.Stderr
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+
+		// Use git init + fetch + checkout instead of git clone so we
+		// can buffer each command's stderr and only show it on
+		// failure. git clone --branch <annotated-tag> leaks detached
+		// HEAD advice and tag-not-a-commit warnings that neither
+		// --quiet nor -c advice.detachedHead=false suppresses.
+		if err := runGit(dir, nil, "init"); err != nil {
+			return err
+		}
+		if err := runGit(dir, nil, "fetch", "--depth", "1", "--quiet",
+			"https://github.com/hashicorp/terraform-provider-aws.git", DefaultProviderRef); err != nil {
+			return err
+		}
+		if err := runGit(dir, nil, "-c", "advice.detachedHead=false",
+			"checkout", "--quiet", "FETCH_HEAD"); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	// Verify at right ref
@@ -147,23 +184,12 @@ func (p *SourceProvider) ensureRepo() error {
 		return nil // already at the right branch/tag
 	}
 
-	// Fetch and checkout
-	cmdFetch := exec.Command("git", "-C", dir, "fetch", "--depth", "1", "--quiet", "origin", DefaultProviderRef)
-	cmdFetch.Stdout = os.Stderr
-	cmdFetch.Stderr = os.Stderr
-	if err := cmdFetch.Run(); err != nil {
+	// Fetch and checkout: use the same buffered-git approach as the
+	// clone path — silent on success, loud on failure.
+	if err := runGit(dir, nil, "fetch", "--depth", "1", "--quiet", "origin", DefaultProviderRef); err != nil {
 		return fmt.Errorf("fetch %s: %w", DefaultProviderRef, err)
 	}
-
-	// Checkout FETCH_HEAD (the commit we just fetched) instead of the tag
-	// name directly to avoid noise from annotated-tag resolution ("warning:
-	// refs/tags/v5.90.0 ... is not a commit!"). --quiet and
-	// advice.detachedHead=false suppress progress output and the detached
-	// HEAD advice, respectively.
-	cmdCO := exec.Command("git", "-C", dir, "-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD")
-	cmdCO.Stdout = os.Stderr
-	cmdCO.Stderr = os.Stderr
-	return cmdCO.Run()
+	return runGit(dir, nil, "-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD")
 }
 
 // parseAll discovers all AWS resource Go files and extracts permissions.
