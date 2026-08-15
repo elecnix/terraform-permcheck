@@ -1,5 +1,7 @@
 # PermCheck
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/elecnix/terraform-permcheck)
+
 **Pre-apply IAM policy validation for Terraform — cloud-agnostic.**
 
 PermCheck ensures your Terraform deploy role has the permissions required
