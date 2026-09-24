@@ -64,6 +64,26 @@ provider source, so PermCheck adds them explicitly:
   callback tagged `[conditional: resource_arn]`. Use `--only-required` to
   suppress that over-approximation.
 
+### Resource-scoped grants
+
+Some IAM grants are scoped to a specific resource ARN rather than the whole
+service. A policy that grants `secretsmanager:PutSecretValue` on one secret's
+ARN does **not** authorize putting a version on a different secret — yet a
+pure action-name check reports it covered, and the apply fails with
+`AccessDeniedException`. When the target resource's ARN is derivable from the
+plan, PermCheck checks the grant's `Resource` patterns against that ARN
+rather than only the action name:
+
+- `aws_secretsmanager_secret_version` derives its target from the referenced
+  secret's configured `name` (or a literal ARN `secret_id`).
+- `aws_secretsmanager_secret` derives its own ARN from its `name`.
+
+A grant whose `Resource` provably cannot apply to the target is reported
+missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).
+Where the target ARN is unknown — the value is computed at apply time with no
+reference to a managed resource, or you're in static HCL mode — PermCheck
+falls back to today's action-only match rather than risk a false positive.
+
 ### Excluding known false positives
 
 Some reported gaps are correct but unactionable — a least-privilege deploy role

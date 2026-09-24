@@ -217,6 +217,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 
 		for _, action := range required {
 			condAttr := conditional[action]
+			service := strings.Split(action, ":")[0]
 
 			// Conditional (attribute-gated) permissions: when the plan carries
 			// attribute info and the gating attribute is NOT meaningfully set,
@@ -226,13 +227,9 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				continue
 			}
 
-			if policy.Covers(action) {
-				continue
-			}
-			// Check wildcard coverage
-			service := strings.Split(action, ":")[0]
-			wildcard := service + ":*"
-			if policy.Covers(wildcard) {
+			// Action coverage, resource-scoped when the target ARN is derivable
+			// from the plan and the policy declares per-resource grants.
+			if coversResourceAction(policy, action, rc, changes) {
 				continue
 			}
 

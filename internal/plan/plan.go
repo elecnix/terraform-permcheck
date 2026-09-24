@@ -25,16 +25,62 @@ type ResourceChange struct {
 	// AttributeValues records the concrete string values of top-level
 	// attributes — from "after" for create/update/replace, from "before" for a
 	// pure delete. Only known, non-empty string values are included (values
-	// computed at apply time are absent). Used to resolve cross-service
-	// callback targets — e.g. the service embedded in an
-	// aws_wafv2_web_acl_association's resource_arn. It is nil when the plan
+	// computed at apply time are absent). Used to resolve resource-scoped
+	// coverage — e.g. the service embedded in an aws_wafv2_web_acl_association's
+	// resource_arn, or a target secret's name referenced by an
+	// aws_secretsmanager_secret_version's secret_id. It is nil when the plan
 	// carries no corresponding state.
 	AttributeValues map[string]string
+
+	// References records, per top-level attribute, the addresses of the
+	// resources it references — from the plan's configuration section, which
+	// keeps the original expressions even when the value is computed at apply
+	// time (e.g. secret_id referencing
+	// ["aws_secretsmanager_secret.b.id", "aws_secretsmanager_secret.b"]).
+	// Nil when no reference data is available (static HCL mode).
+	References map[string][]string
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
 type tfPlanJSON struct {
 	ResourceChanges []tfResourceChange `json:"resource_changes"`
+	Configuration   *tfConfiguration   `json:"configuration"`
+}
+
+// tfConfiguration mirrors the plan's configuration section, which retains the
+// original attribute expressions (including resource references) even when the
+// resulting values are computed at apply time.
+type tfConfiguration struct {
+	RootModule *tfModule `json:"root_module"`
+}
+
+// tfModule mirrors a module's resources and nested module calls in the
+// configuration section.
+type tfModule struct {
+	Resources   []tfConfigResource      `json:"resources"`
+	ModuleCalls map[string]tfModuleCall `json:"module_calls"`
+}
+
+// tfConfigResource mirrors a single resource entry in the configuration
+// section.
+type tfConfigResource struct {
+	Type        string                  `json:"type"`
+	Name        string                  `json:"name"`
+	Mode        string                  `json:"mode"`
+	Expressions map[string]tfExpression `json:"expressions"`
+}
+
+// tfExpression mirrors a single attribute expression; only its references
+// matter here. The references list records every resource the expression
+// references even when the value is computed at apply time.
+type tfExpression struct {
+	References []string `json:"references"`
+}
+
+// tfModuleCall mirrors a module call in the configuration section, whose
+// nested module_calls/resources hold the module's own resources.
+type tfModuleCall struct {
+	Module tfModule `json:"module"`
 }
 
 type tfResourceChange struct {
@@ -100,9 +146,51 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Change:          action,
 			Attributes:      attributePresence(attrSource, afterUnknown),
 			AttributeValues: attributeStringValues(attrSource),
+			References:      resourceReferences(plan.Configuration, rc.Type, rc.Name),
 		})
 	}
 	return changes, nil
+}
+
+// resourceReferences walks the plan's configuration section (root module and
+// nested modules) for a resource of the given type and name and returns, per
+// attribute, the list of addresses the attribute references. Returns nil when
+// the plan carries no configuration section or the resource isn't found.
+func resourceReferences(cfg *tfConfiguration, resType, resName string) map[string][]string {
+	if cfg == nil || cfg.RootModule == nil {
+		return nil
+	}
+	refs := referencesInModule(cfg.RootModule, resType, resName)
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
+}
+
+// referencesInModule searches a config module (recursively) for the resource
+// and returns its per-attribute reference lists.
+func referencesInModule(m *tfModule, resType, resName string) map[string][]string {
+	for _, r := range m.Resources {
+		if r.Mode != "" && r.Mode != "managed" {
+			continue
+		}
+		if r.Type != resType || r.Name != resName {
+			continue
+		}
+		refs := make(map[string][]string)
+		for attr, expr := range r.Expressions {
+			if len(expr.References) > 0 {
+				refs[attr] = expr.References
+			}
+		}
+		return refs
+	}
+	for _, mc := range m.ModuleCalls {
+		if refs := referencesInModule(&mc.Module, resType, resName); refs != nil {
+			return refs
+		}
+	}
+	return nil
 }
 
 // attributePresence reports which top-level attributes of a resource change
