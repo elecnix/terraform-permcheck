@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strings"
 	"testing"
 )
 
@@ -312,7 +313,8 @@ func TestSDKPackageToIAMService(t *testing.T) {
 		{"cloudwatchlogs", "logs"}, // package name differs from IAM namespace
 		{"s3control", "s3"},
 		{"sfn", "states"},
-		{"unknownpkg", ""}, // unknown, no mapping
+		{"eventbridge", "events"}, // IAM prefix is events, not eventbridge
+		{"unknownpkg", ""},        // unknown, no mapping
 	}
 
 	for _, tt := range tests {
@@ -749,4 +751,64 @@ func removeSecretReplicas(ctx context.Context, conn *secretsmanager.Client, id s
 
 	// Also verify that helpers called unconditionally don't get a spurious condition
 	// (the existing IAM Role helper test covers this)
+}
+
+func TestParseResourceFile_EventBridgeRule(t *testing.T) {
+	// The provider's aws_cloudwatch_event_rule resource gets its client from
+	// EventBridgeClient(ctx), typed as *eventbridge.Client. EventBridge authorizes
+	// under the IAM "events" prefix, so actions must come out as events:*, not eventbridge:*.
+	src := `
+package eventbridge
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+)
+
+func resourceRuleCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	var diags diag.Diagnostics
+	conn := meta.(*conns.AWSClient).EventBridgeClient(ctx)
+	_, err := conn.PutRule(ctx, &eventbridge.PutRuleInput{Name: aws.String(name)})
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "creating EventBridge Rule: %s", err)
+	}
+	return append(diags, resourceRuleRead(ctx, conn, d)...)
+}
+
+func resourceRuleRead(ctx context.Context, conn *eventbridge.Client, d *schema.ResourceData) diag.Diagnostics {
+	var diags diag.Diagnostics
+	output, err := conn.DescribeRule(ctx, &eventbridge.DescribeRuleInput{Name: aws.String(name)})
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading EventBridge Rule: %s", err)
+	}
+	_ = output
+	return diags
+}
+`
+
+	actions, err := ParseResourceFile(src, "aws_cloudwatch_event_rule", "rule")
+	if err != nil {
+		t.Fatalf("ParseResourceFile failed: %v", err)
+	}
+
+	createActions := actions["create"]
+	if !containsAction(createActions, "events:PutRule") {
+		t.Errorf("create: expected events:PutRule, got %v", createActions)
+	}
+
+	readActions := actions["read"]
+	if !containsAction(readActions, "events:DescribeRule") {
+		t.Errorf("read: expected events:DescribeRule, got %v", readActions)
+	}
+
+	for op, as := range actions {
+		for _, a := range as {
+			if strings.HasPrefix(a, "eventbridge:") {
+				t.Errorf("%s: action %q uses non-existent IAM prefix \"eventbridge\", want \"events\"", op, a)
+			}
+		}
+	}
 }

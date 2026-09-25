@@ -771,6 +771,7 @@ func paramTypeToService(expr ast.Expr) string {
 func sdkPackageToIAMService(pkg string) string {
 	pkgToService := map[string]string{
 		"cloudwatchlogs":         "logs",
+		"eventbridge":            "events", // EventBridge authorizes under its CloudWatch Events IAM prefix
 		"s3control":              "s3",
 		"elasticloadbalancingv2": "elasticloadbalancing",
 		"sfn":                    "states",
