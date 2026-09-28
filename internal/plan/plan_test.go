@@ -394,6 +394,140 @@ func TestParseEmptyStdin(t *testing.T) {
 	}
 }
 
+func TestParseReferences(t *testing.T) {
+	// A plan carrying a configuration section with an expression that
+	// references another resource: the reference must surface on the change
+	// even though the resulting value is computed at apply time.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {
+					"actions": ["create"],
+					"after": {"secret_string": "placeholder"},
+					"after_unknown": {"secret_id": true, "arn": true}
+				}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{
+						"address": "aws_secretsmanager_secret.b",
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret",
+						"name": "b",
+						"expressions": {"name": {"constant_value": "example-b"}}
+					},
+					{
+						"address": "aws_secretsmanager_secret_version.b",
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "b",
+						"expressions": {
+							"secret_id": {
+								"references": [
+									"aws_secretsmanager_secret.b.id",
+									"aws_secretsmanager_secret.b"
+								]
+							},
+							"secret_string": {"constant_value": "placeholder"}
+						}
+					}
+				]
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+
+	rc := changes[0]
+	refs := rc.References["secret_id"]
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 references for secret_id, got %v", refs)
+	}
+	if refs[0] != "aws_secretsmanager_secret.b.id" || refs[1] != "aws_secretsmanager_secret.b" {
+		t.Errorf("unexpected references: %v", refs)
+	}
+	// A constant-only expression contributes no references.
+	if rc.References["secret_string"] != nil {
+		t.Errorf("expected no references for constant secret_string, got %v", rc.References["secret_string"])
+	}
+}
+
+func TestParseReferencesAbsent(t *testing.T) {
+	// Without a configuration section there are no references (static HCL mode
+	// and minimal plan fixtures behave the same).
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {"actions": ["create"]}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].References != nil {
+		t.Errorf("expected nil References when configuration is absent, got %v", changes[0].References)
+	}
+}
+
+func TestParseReferencesNestedModule(t *testing.T) {
+	// A resource declared inside a module: its references must be found by
+	// walking module_calls.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {"actions": ["create"]}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"module_calls": {
+					"secrets": {
+						"module": {
+							"resources": [
+								{
+									"address": "module.secrets.aws_secretsmanager_secret_version.b",
+									"mode": "managed",
+									"type": "aws_secretsmanager_secret_version",
+									"name": "b",
+									"expressions": {
+										"secret_id": {"references": ["aws_secretsmanager_secret.b"]}
+									}
+								}
+							]
+						}
+					}
+				}
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := changes[0].References["secret_id"]
+	if len(refs) != 1 || refs[0] != "aws_secretsmanager_secret.b" {
+		t.Errorf("expected [aws_secretsmanager_secret.b], got %v", refs)
+	}
+}
+
 func TestParseInvalidJSON(t *testing.T) {
 	_, err := Parse([]byte("not json"), "aws_")
 	if err == nil {
