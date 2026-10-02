@@ -28,6 +28,11 @@ type ResourceBlock struct {
 	Attributes []string // top-level attribute names set in the resource body
 }
 
+// readFile is the single place ParseDir reads a .tf file from disk. It is a
+// variable so tests can observe the read: every view derived from a parse
+// must come from this one read, never from a second walk over the same tree.
+var readFile = os.ReadFile
+
 // resourceRE matches resource and data block declarations in terraform .tf files.
 // Captures: resource "aws_backup_vault" "this" { ... }
 var resourceRE = regexp.MustCompile(`(resource|data)\s+"(aws_[^"]+)"\s+"([^"]+)"`)
@@ -54,7 +59,7 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 			return nil
 		}
 
-		src, err := os.ReadFile(path)
+		src, err := readFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
