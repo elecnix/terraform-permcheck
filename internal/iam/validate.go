@@ -217,6 +217,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 
 		for _, action := range required {
 			condAttr := conditional[action]
+			service := strings.Split(action, ":")[0]
 
 			// Conditional (attribute-gated) permissions: when the plan carries
 			// attribute info and the gating attribute is NOT meaningfully set,
@@ -226,13 +227,9 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				continue
 			}
 
-			if policy.Covers(action) {
-				continue
-			}
-			// Check wildcard coverage
-			service := strings.Split(action, ":")[0]
-			wildcard := service + ":*"
-			if policy.Covers(wildcard) {
+			// Action coverage, resource-scoped when the target ARN is derivable
+			// from the plan and the policy declares per-resource grants.
+			if coversResourceAction(policy, action, rc, changes) {
 				continue
 			}
 
@@ -260,6 +257,19 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				Class:              classTag(class),
 				ConditionAttribute: condAttr,
 			})
+		}
+	}
+
+	// Cross-service callback permissions: actions in a different service that
+	// AWS invokes at apply time (e.g. elasticloadbalancing:SetWebACL for an
+	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
+	// schema/source resolution, so they're checked separately here.
+	for _, rc := range changes {
+		for _, m := range crossServiceMissing(rc, policy) {
+			if filter.ExcludeConditional && m.ConditionAttribute != "" {
+				continue
+			}
+			missing = append(missing, m)
 		}
 	}
 

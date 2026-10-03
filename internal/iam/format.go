@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,6 +12,84 @@ import (
 type FileLocation struct {
 	Path string // file path relative to --terraform-root
 	Line int    // 1-based line number of the resource declaration
+}
+
+// FormatJSONResult is the structured JSON output produced by --format json.
+type FormatJSONResult struct {
+	Status   string               `json:"status"`             // "ok" or "gaps_found"
+	Checked  int                  `json:"checked"`            // number of resources checked
+	Label    string               `json:"label"`              // human-readable label for checked resources
+	Missing  []FormatJSONMissing  `json:"missing"`            // empty when status=ok
+	Excluded []FormatJSONExcluded `json:"excluded,omitempty"` // config-suppressed findings (only when --show-excluded)
+}
+
+// FormatJSONExcluded is a single config-excluded permission in JSON output.
+type FormatJSONExcluded struct {
+	ResourceType   string `json:"resource_type"`
+	ResourceName   string `json:"resource_name"`
+	Change         string `json:"change"`
+	ExcludedAction string `json:"excluded_action"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+// FormatJSONMissing is a single missing permission in JSON output.
+type FormatJSONMissing struct {
+	ResourceType       string `json:"resource_type"`
+	ResourceName       string `json:"resource_name"`
+	Change             string `json:"change"`
+	MissingAction      string `json:"missing_action"`
+	Class              string `json:"class"`
+	ConditionAttribute string `json:"condition_attribute,omitempty"`
+	File               string `json:"file,omitempty"`
+	Line               int    `json:"line,omitempty"`
+}
+
+// FormatJSON produces a machine-readable JSON representation of the
+// validation result. When missing is nil or empty, status is "ok". Excluded
+// actions (config-suppressed) are included only when a non-empty slice is
+// passed; callers pass nil to omit them from the output.
+func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int, label string, locations map[string]FileLocation) string {
+	result := FormatJSONResult{
+		Status:  "ok",
+		Checked: checked,
+		Label:   label,
+	}
+
+	for _, e := range excluded {
+		result.Excluded = append(result.Excluded, FormatJSONExcluded{
+			ResourceType:   e.ResourceType,
+			ResourceName:   e.ResourceName,
+			Change:         e.Change,
+			ExcludedAction: e.Action,
+			Reason:         e.Reason,
+		})
+	}
+
+	if len(missing) > 0 {
+		result.Status = "gaps_found"
+		result.Missing = make([]FormatJSONMissing, 0, len(missing))
+		for _, m := range missing {
+			item := FormatJSONMissing{
+				ResourceType:       m.ResourceType,
+				ResourceName:       m.ResourceName,
+				Change:             m.Change,
+				MissingAction:      m.Action,
+				Class:              m.Class,
+				ConditionAttribute: m.ConditionAttribute,
+			}
+			if locations != nil {
+				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
+				if loc, ok := locations[key]; ok {
+					item.File = loc.Path
+					item.Line = loc.Line
+				}
+			}
+			result.Missing = append(result.Missing, item)
+		}
+	}
+
+	out, _ := json.MarshalIndent(result, "", "  ")
+	return string(out) + "\n"
 }
 
 // stripResourceIndex removes count / for_each index suffixes from a terraform

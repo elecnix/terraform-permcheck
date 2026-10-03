@@ -1,8 +1,11 @@
 package provideraws
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
@@ -360,5 +363,166 @@ func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 	if schema.TypeName != "aws_backup_vault" {
 		t.Errorf("expected TypeName aws_backup_vault, got %q", schema.TypeName)
+	}
+}
+
+// TestCheckoutAnnotatedTagNoise verifies that git checkout of an annotated
+// tag does not leak noise (detached HEAD advice, tag-not-a-commit warnings)
+// into stderr when the checkout is properly quieted. Checking out an annotated
+// provider tag (e.g. v5.90.0) otherwise emits:
+//   - warning: refs/tags/v5.90.0 ... is not a commit!
+//   - Note: switching to '<hash>'.
+//   - detached HEAD advice block
+func TestCheckoutAnnotatedTagNoise(t *testing.T) {
+	// Create a temporary git repo with an annotated tag.
+	repoDir := t.TempDir()
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "test")
+	runGit("config", "user.email", "test@test")
+	runGit("commit", "--allow-empty", "-m", "initial")
+	// Pin the branch name — `git init` defaults to `master` on some hosts and
+	// `main` on others, and the checkout below is by name.
+	runGit("branch", "-M", "main")
+
+	// Create an annotated tag (NOT lightweight) — this is what triggers the
+	// "not a commit" warning and the detached HEAD advice.
+	runGit("tag", "-a", "v1.0.0", "-m", "annotated tag")
+
+	// Simulate the old checkout command (no --quiet, no -c advice.detachedHead=false).
+	oldCmd := exec.Command("git", "-C", repoDir, "checkout", "v1.0.0")
+	var oldStderr bytes.Buffer
+	oldCmd.Stderr = &oldStderr
+	_ = oldCmd.Run() // exit code may be non-zero on some git versions
+
+	oldOutput := oldStderr.String()
+	t.Logf("old checkout stderr:\n%s", oldOutput)
+
+	// The old checkout should produce noise.
+	hasNoise := strings.Contains(oldOutput, "detached HEAD") ||
+		strings.Contains(oldOutput, "not a commit") ||
+		strings.Contains(oldOutput, "switching to")
+	if !hasNoise {
+		t.Log("note: old checkout did not produce noise (git version may differ)")
+	}
+
+	// Reset HEAD back to main so we can checkout the tag again.
+	runGit("checkout", "main")
+
+	// Simulate the new checkout command: use FETCH_HEAD-style approach.
+	// Since we didn't fetch, use the resolved commit hash to avoid the tag.
+	resolveCmd := exec.Command("git", "-C", repoDir, "rev-parse", "v1.0.0^{commit}")
+	resolveOut, err := resolveCmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse v1.0.0^{commit}: %v", err)
+	}
+	commitHash := strings.TrimSpace(string(resolveOut))
+
+	// Checkout using the commit hash directly (FETCH_HEAD equivalent).
+	newCmd := exec.Command("git", "-C", repoDir,
+		"-c", "advice.detachedHead=false",
+		"checkout", "--quiet",
+		commitHash,
+	)
+	var newStderr bytes.Buffer
+	newCmd.Stderr = &newStderr
+	err = newCmd.Run()
+	if err != nil {
+		t.Fatalf("quiet checkout failed: %v\nstderr: %s", err, newStderr.String())
+	}
+
+	newOutput := newStderr.String()
+	t.Logf("new checkout stderr:\n%s", newOutput)
+
+	// The new checkout must produce no noise on stderr.
+	if newOutput != "" {
+		t.Errorf("expected empty stderr from quiet checkout, got:\n%s", newOutput)
+	}
+}
+
+// TestCloneAnnotatedTagNoise verifies that the git init + fetch + checkout
+// pipeline used in place of git clone --branch X does not leak noise into
+// stderr on success (the clone path in ensureRepo). It also proves that a
+// deliberately broken ref still produces an error with the git message
+// visible.
+func TestCloneAnnotatedTagNoise(t *testing.T) {
+	// Create a bare upstream repo (simulates a cold-cache clone).
+	upstream := t.TempDir()
+	runGitDir := func(dir string, args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	// Create upstream.git as a bare repo so we can fetch from it.
+	upstreamGit := filepath.Join(upstream, "upstream.git")
+	if err := os.MkdirAll(upstreamGit, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDir(upstreamGit, "init", "--bare")
+
+	// Create a workdir to populate the bare repo with a commit and an
+	// annotated tag.
+	workDir := filepath.Join(upstream, "work")
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDir(workDir, "-c", "init.defaultBranch=main", "init")
+	runGitDir(workDir, "config", "user.name", "test")
+	runGitDir(workDir, "config", "user.email", "test@test")
+	runGitDir(workDir, "commit", "--allow-empty", "-m", "initial")
+	runGitDir(workDir, "remote", "add", "origin", upstreamGit)
+	runGitDir(workDir, "push", "origin", "HEAD:refs/heads/main")
+	runGitDir(workDir, "tag", "-a", "v1.0.0", "-m", "annotated tag")
+	runGitDir(workDir, "push", "origin", "v1.0.0")
+
+	// Test 1: successful clone path is silent.
+	cloneDir := t.TempDir()
+	var successBuf bytes.Buffer
+	err := runGit(cloneDir, &successBuf, "-c", "init.defaultBranch=main", "init")
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	err = runGit(cloneDir, &successBuf, "fetch", "--depth", "1", "--quiet",
+		"file://"+upstreamGit, "v1.0.0")
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	err = runGit(cloneDir, &successBuf, "-c", "advice.detachedHead=false",
+		"checkout", "--quiet", "FETCH_HEAD")
+	if err != nil {
+		t.Fatalf("checkout: %v", err)
+	}
+
+	if successBuf.Len() > 0 {
+		t.Errorf("expected empty stderr from clone path, got:\n%s", successBuf.String())
+	}
+
+	// Test 2: a broken ref still fails with the git error visible.
+	brokenDir := t.TempDir()
+	err = runGit(brokenDir, nil, "-c", "init.defaultBranch=main", "init")
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	// Fetch a non-existent ref — this must fail.
+	err = runGit(brokenDir, nil, "fetch", "--depth", "1", "--quiet",
+		"file://"+upstreamGit, "refs/tags/does-not-exist")
+	if err == nil {
+		t.Error("expected error fetching non-existent ref, got nil")
+	} else {
+		t.Logf("broken ref error (expected): %v", err)
 	}
 }

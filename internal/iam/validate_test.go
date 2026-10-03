@@ -211,6 +211,47 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	}
 }
 
+func TestValidate_ConditionalGatedOnAttribute_Delete(t *testing.T) {
+	// A conditional permission on a delete change must be evaluated against
+	// prior state (change.before), not treated as unknown.
+	schema := fakeSchema{
+		perms: map[string][]string{
+			"delete": {"secretsmanager:DeleteSecret", "secretsmanager:UpdateSecretVersionStage"},
+		},
+		cond: map[string]map[string]string{
+			"delete": {"secretsmanager:UpdateSecretVersionStage": "version_stages"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Case 1: before-state has version_stages set → permission still required.
+	withStages := []*plan.ResourceChange{
+		{Type: "aws_secretsmanager_secret_version", Name: "v", Change: "delete", Attributes: map[string]bool{"version_stages": true}},
+	}
+	missing, err := Validate(withStages, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
+		t.Error("expected UpdateSecretVersionStage to be required when before-state has version_stages set")
+	}
+
+	// Case 2: before-state has version_stages unset → permission suppressed.
+	withoutStages := []*plan.ResourceChange{
+		{Type: "aws_secretsmanager_secret_version", Name: "v", Change: "delete", Attributes: map[string]bool{"secret_id": true}},
+	}
+	missing, err = Validate(withoutStages, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
+		t.Error("expected UpdateSecretVersionStage to be suppressed when before-state has version_stages unset")
+	}
+	if !hasAction(missing, "secretsmanager:DeleteSecret") {
+		t.Error("expected unconditional DeleteSecret to remain required")
+	}
+}
+
 func TestFormatMissing_Grouped(t *testing.T) {
 	missing := []MissingAction{
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},

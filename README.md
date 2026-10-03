@@ -1,5 +1,7 @@
 # PermCheck
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/elecnix/terraform-permcheck)
+
 **Pre-apply IAM policy validation for Terraform — cloud-agnostic.**
 
 PermCheck ensures your Terraform deploy role has the permissions required
@@ -40,7 +42,86 @@ provider, for example, makes an extra `kms:TagResource` call when an
 primary `kms:CreateKey` action. PermCheck reads the planned attribute values
 and only requires such permissions when their gating attribute is actually
 present, so you neither miss them (when tags are set) nor get false positives
-(when they aren't).
+(when they aren't). A `tags` value computed at apply time (known after apply)
+still counts as set — the tags get applied, so the permission is still required.
+
+### Cross-service callback permissions
+
+Some AWS APIs require an IAM action from a *different* service than the one the
+Terraform provider calls. `aws_wafv2_web_acl_association` calls
+`wafv2:AssociateWebACL`, but AWS WAFv2 then calls into the target service to
+attach the ACL — so associating a Web ACL with an **ALB** additionally requires
+`elasticloadbalancing:SetWebACL`, an **API Gateway stage** requires
+`apigateway:SetWebACL`, and an **AppSync API** requires `appsync:SetWebACL`.
+These callbacks are invisible to both the CloudFormation schema and the
+provider source, so PermCheck adds them explicitly:
+
+- When the target's `resource_arn` is a known ARN, only the callback for that
+  ARN's service is required.
+- When `resource_arn` is computed at apply time (it references a resource
+  created in the same plan) or you're in static HCL mode, PermCheck can't tell
+  which target applies, so it over-approximates and reports every candidate
+  callback tagged `[conditional: resource_arn]`. Use `--only-required` to
+  suppress that over-approximation.
+
+### Resource-scoped grants
+
+Some IAM grants are scoped to a specific resource ARN rather than the whole
+service. A policy that grants `secretsmanager:PutSecretValue` on one secret's
+ARN does **not** authorize putting a version on a different secret — yet a
+pure action-name check reports it covered, and the apply fails with
+`AccessDeniedException`. When the target resource's ARN is derivable from the
+plan, PermCheck checks the grant's `Resource` patterns against that ARN
+rather than only the action name:
+
+- `aws_secretsmanager_secret_version` derives its target from the referenced
+  secret's configured `name` (or a literal ARN `secret_id`).
+- `aws_secretsmanager_secret` derives its own ARN from its `name`.
+
+A grant whose `Resource` provably cannot apply to the target is reported
+missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).
+Where the target ARN is unknown — the value is computed at apply time with no
+reference to a managed resource, or you're in static HCL mode — PermCheck
+falls back to today's action-only match rather than risk a false positive.
+
+### Excluding known false positives
+
+Some reported gaps are correct but unactionable — a least-privilege deploy role
+may intentionally lack a permission for a resource it never manages (e.g. a role
+scoped to application resources that can't touch a separate audit/CloudTrail
+module's S3 buckets). Those findings are noise. PermCheck reads an exclusion
+list from a config file (`permcheck.json`, auto-discovered in the working
+directory, or pointed at with `--config`):
+
+```json
+{
+  "exclude": [
+    {
+      "permission": "s3:DeleteBucketPublicAccessBlock",
+      "reason": "CloudTrail bucket lifecycle managed by a separate audit role"
+    },
+    {
+      "permission": "secretsmanager:UpdateSecretVersionStage",
+      "resource": "aws_secretsmanager_secret.forwarder",
+      "reason": "Forwarder key version stages managed out-of-band"
+    }
+  ]
+}
+```
+
+- **`permission`** (required) — the IAM action to suppress. Supports glob
+  patterns, e.g. `s3:*`.
+- **`resource`** (optional) — scopes the exclusion to matching terraform
+  resources. Matched against the resource type (`aws_secretsmanager_secret`) or
+  the full address (`aws_secretsmanager_secret.forwarder`); supports globs like
+  `aws_secretsmanager_*`. Omit to apply the exclusion to every resource.
+- **`reason`** (optional) — a note kept for the audit trail.
+
+Excluded permissions are dropped from the gap report and no longer fail the run,
+but the suppression is **not** silent by default — pass `--show-excluded` to
+list what was suppressed (and why) so reviewers can audit it. In `--format json`
+the suppressed entries appear under an `excluded` array; in `github-annotations`
+mode they surface as `::notice::` lines.
 
 ## Supported clouds
 
@@ -71,8 +152,10 @@ terraform-permcheck validate \
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--format` | `text` | Output format: `text` or `github-annotations` |
+| `--format` | `text` | Output format: `text`, `github-annotations`, or `json` |
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
+| `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
+| `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 
 ### Exit codes
 
