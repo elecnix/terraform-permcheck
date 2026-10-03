@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ResourceBlock is a single resource or data block extracted from a .tf file.
@@ -31,7 +32,37 @@ type ResourceBlock struct {
 // readFile is the single place ParseDir reads a .tf file from disk. It is a
 // variable so tests can observe the read: every view derived from a parse
 // must come from this one read, never from a second walk over the same tree.
-var readFile = os.ReadFile
+//
+// The swap is guarded because a test that replaces this function would
+// otherwise write it while another test's ParseDir reads it. No test in this
+// package runs in parallel today, so the race is latent rather than active,
+// but it is one t.Parallel() away from being real. Production reads go
+// through readFileAt, which takes the read lock.
+var (
+	readFileMu sync.RWMutex
+	readFile   = os.ReadFile
+)
+
+// swapReadFile installs fn as the reader and returns a function that restores
+// the original. Intended for tests.
+func swapReadFile(fn func(string) ([]byte, error)) func() {
+	readFileMu.Lock()
+	original := readFile
+	readFile = fn
+	readFileMu.Unlock()
+	return func() {
+		readFileMu.Lock()
+		readFile = original
+		readFileMu.Unlock()
+	}
+}
+
+// readFileAt reads path through the current seam.
+func readFileAt(path string) ([]byte, error) {
+	readFileMu.RLock()
+	defer readFileMu.RUnlock()
+	return readFile(path)
+}
 
 // resourceRE matches resource and data block declarations in terraform .tf files.
 // Captures: resource "aws_backup_vault" "this" { ... }
@@ -59,7 +90,7 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 			return nil
 		}
 
-		src, err := readFile(path)
+		src, err := readFileAt(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}

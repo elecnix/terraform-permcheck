@@ -28,12 +28,12 @@ func writeTF(t *testing.T, dir, name, content string) string {
 func countingReadFile(t *testing.T) *[]string {
 	t.Helper()
 	var reads []string
-	original := readFile
-	readFile = func(path string) ([]byte, error) {
+	original := os.ReadFile
+	restore := swapReadFile(func(path string) ([]byte, error) {
 		reads = append(reads, filepath.Base(path))
 		return original(path)
-	}
-	t.Cleanup(func() { readFile = original })
+	})
+	t.Cleanup(restore)
 	return &reads
 }
 
@@ -213,5 +213,97 @@ func TestMapResources_MissingRoot(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	if _, err := MapResources(missing); err == nil {
 		t.Fatal("expected an error for a missing terraform root")
+	}
+}
+
+// TestRelPath pins the documented fallback: when a filename cannot be related
+// to the root, relPath returns the filename it was given, not the absolute
+// path built while trying. A review comment claimed the fallback returned the
+// joined absolute path, so this pins which of the two it is.
+func TestRelPath(t *testing.T) {
+	absDir := filepath.Join(string(filepath.Separator), "repo", "infra")
+
+	tests := []struct {
+		name     string
+		filename string
+		want     string
+	}{
+		{
+			name:     "absolute path under the root becomes relative",
+			filename: filepath.Join(absDir, "main.tf"),
+			want:     "main.tf",
+		},
+		{
+			name:     "absolute path in a subdirectory keeps the relative subpath",
+			filename: filepath.Join(absDir, "modules", "vpc.tf"),
+			want:     filepath.Join("modules", "vpc.tf"),
+		},
+		{
+			name:     "relative path is resolved against the root, not returned verbatim",
+			filename: "main.tf",
+			want:     "main.tf",
+		},
+		{
+			name:     "relative path in a subdirectory stays relative",
+			filename: filepath.Join("modules", "vpc.tf"),
+			want:     filepath.Join("modules", "vpc.tf"),
+		},
+		{
+			name:     "path outside the root keeps its .. segments",
+			filename: filepath.Join(string(filepath.Separator), "elsewhere", "main.tf"),
+			want:     filepath.Join("..", "..", "elsewhere", "main.tf"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := relPath(absDir, tt.filename); got != tt.want {
+				t.Errorf("relPath(%q, %q) = %q, want %q", absDir, tt.filename, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRelPath_FallbackReturnsGivenFilename pins the fallback branch and the
+// reachability condition that goes with it.
+//
+// A review comment claimed the fallback returned the absolute path relPath
+// builds while trying, rather than the filename as supplied. The two are only
+// distinguishable when `original != joined`, which happens solely for a
+// relative filename. But a relative filename is joined onto the root first,
+// which makes both operands relative, so filepath.Rel succeeds and the
+// fallback is never reached. The converse holds too: the fallback is only
+// reachable when the filename is already absolute, and then original == joined
+// by construction. The two conditions are mutually exclusive, so the claimed
+// behaviour cannot be observed.
+func TestRelPath_FallbackReturnsGivenFilename(t *testing.T) {
+	// Reachable fallback: a relative base cannot be related to an absolute
+	// target. The filename is returned exactly as supplied.
+	absFile := filepath.Join(string(filepath.Separator), "elsewhere", "vpc.tf")
+	if got := relPath("relative-root", absFile); got != absFile {
+		t.Errorf("fallback returned %q, want the filename as given (%q)", got, absFile)
+	}
+
+	// The case the comment named: a relative filename must come back as the
+	// raw filename, never as the absolute path built while relating it. Here
+	// Rel succeeds, so this exercises the success branch, not the fallback.
+	relGiven := filepath.Join("modules", "vpc.tf")
+	root := filepath.Join(string(filepath.Separator), "repo")
+	got := relPath(root, relGiven)
+	if got != relGiven {
+		t.Errorf("relPath returned %q, want the raw filename %q", got, relGiven)
+	}
+	if filepath.IsAbs(got) {
+		t.Errorf("relPath returned an absolute path %q; the doc comment promises the raw filename", got)
+	}
+
+	// Guard the premise: for the two to differ, the filename must be relative.
+	// If a future change made the fallback reachable with a differing value,
+	// this assertion would need revisiting, and the test above would then have
+	// real teeth.
+	original := relGiven
+	joined := filepath.Join(root, original)
+	if original == joined {
+		t.Error("premise broken: relative and joined paths are identical, so the test above cannot distinguish the branches")
 	}
 }

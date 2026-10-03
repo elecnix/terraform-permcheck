@@ -61,12 +61,13 @@ func resourceLocations(absDir string, blocks []ResourceBlock) map[string]iam.Fil
 // rooted at absDir, so they are absolute in normal use; the relative case is
 // handled so the projection stays correct for any input.
 func relPath(absDir, filename string) string {
+	original := filename
 	if !filepath.IsAbs(filename) {
 		filename = filepath.Join(absDir, filename)
 	}
 	rel, err := filepath.Rel(absDir, filename)
 	if err != nil {
-		return filename
+		return original
 	}
 	return rel
 }
