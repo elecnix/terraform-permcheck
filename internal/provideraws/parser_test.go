@@ -1077,3 +1077,50 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 		t.Errorf("helper calls mismatch\n got: %+v\nwant: %+v", got, want)
 	}
 }
+
+// plainIfReassignsConnSrc pins the connection-scope restore for if-statements
+// that do NOT gate on d.GetOk or d.Get. The service of an extracted action
+// comes from the mutable walk context rather than from the receiver in the
+// call expression, so an unrestored client assignment inside a plain if would
+// silently misattribute every later call to the wrong service.
+const plainIfReassignsConnSrc = `package walk
+
+import (
+	"context"
+)
+
+func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+
+	if err != nil {
+		kmsConn := meta.(*conns.AWSClient).KMSClient(ctx)
+		kmsConn.CreateGrant(ctx, nil)
+	}
+
+	// Must still resolve to backup, not to the kms scope the block above left
+	// behind. If the restore is missing this becomes kms:CreateBackupVault,
+	// which is not a real IAM action and would never be satisfied by a policy.
+	conn.CreateBackupVault(ctx, nil)
+	return nil
+}
+`
+
+func TestParseResourceFileStructured_PlainIfRestoresConnScope(t *testing.T) {
+	actions, err := ParseResourceFileStructured(plainIfReassignsConnSrc, "aws_backup_vault", "Walk")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	want := []ExtractedAction{
+		// Inside the plain if: kms scope is in effect, and a plain if is not a
+		// conditional gate, so the action is unconditional.
+		{Action: "kms:CreateGrant"},
+		// After the block: conn scope must be restored.
+		{Action: "backup:CreateBackupVault"},
+	}
+
+	got := actions["create"]
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("create actions mismatch\n got: %s\nwant: %s", formatActions(got), formatActions(want))
+	}
+}
