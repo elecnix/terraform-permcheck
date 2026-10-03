@@ -681,3 +681,48 @@ func TestValidate_AutoDiscoverConfig(t *testing.T) {
 		t.Errorf("expected status=ok via auto-discovered config, got %v", result["status"])
 	}
 }
+
+// TestStaticHCL_ValidatesDeletePermissions verifies that static HCL mode
+// (--terraform-root) validates delete and update operations, not just create.
+// A policy missing kms:ScheduleKeyDeletion (delete-only permission) should
+// be flagged, since the deploy role may need to destroy KMS keys.
+func TestStaticHCL_ValidatesDeletePermissions(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/main.tf", []byte(`
+resource "aws_kms_key" "example" {
+  description = "test"
+}
+`), 0644); err != nil {
+		t.Fatalf("write main.tf: %v", err)
+	}
+
+	// policy_create_only.json is a minimal policy that only covers
+	// KMS create operations — intentionally missing delete and update perms.
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["kms:CreateKey","kms:TagResource","kms:UntagResource","kms:CreateAlias","kms:DescribeKey","kms:GetKeyPolicy","kms:GetKeyRotationStatus","kms:ListResourceTags"],"Resource":"*"}]}`
+	policyPath := root + "/policy.json"
+	if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	// Use --format github-annotations so output goes to stdout (capturable).
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if err != nil && !errors.Is(err, errGapsFound) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// Verify the delete-specific permission is flagged.
+	if !strings.Contains(out, "kms:ScheduleKeyDeletion") {
+		t.Errorf("expected kms:ScheduleKeyDeletion (delete-only) to be flagged as missing\ngot: %s", out)
+	}
+	// Verify it's correctly classified as a delete operation.
+	if !strings.Contains(out, "(delete)") {
+		t.Errorf("expected (delete) operation in output\ngot: %s", out)
+	}
+}

@@ -401,27 +401,36 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return nil
 	}
 
-	// Build ResourceChange entries: over-approximate by treating all as create.
-	// Deduplicate by (Type) — one entry per resource type, regardless of count.
-	// Populate Attributes from parsed HCL to enable conditional permission
-	// filtering (e.g., s3:PutBucketWebsite is only reported when a website
-	// block is actually configured).
+	// Build ResourceChange entries: validate all mutation operation types
+	// (create, update, delete) for each unique resource type. The validator
+	// gracefully skips operations with no permissions defined in the
+	// CloudFormation schema (falls back to "create", then skips if that is
+	// also absent). Deduplicate by (Type) — one entry per resource type,
+	// regardless of count, but with entries for each operation.
+	// Attributes are populated from the parsed HCL so conditional permission
+	// filtering also works in static mode (e.g., s3:PutBucketWebsite is only
+	// reported when a website block is actually configured).
 	seen := make(map[string]bool)
 	var changes []*plan.ResourceChange
 	for _, b := range blocks {
-		if !seen[b.Type] {
-			seen[b.Type] = true
-			var attrs map[string]bool
-			if len(b.Attributes) > 0 {
-				attrs = make(map[string]bool, len(b.Attributes))
-				for _, a := range b.Attributes {
-					attrs[a] = true
-				}
+		if seen[b.Type] {
+			continue
+		}
+		seen[b.Type] = true
+
+		var attrs map[string]bool
+		if len(b.Attributes) > 0 {
+			attrs = make(map[string]bool, len(b.Attributes))
+			for _, a := range b.Attributes {
+				attrs[a] = true
 			}
+		}
+
+		for _, op := range []string{"create", "update", "delete"} {
 			changes = append(changes, &plan.ResourceChange{
 				Type:       b.Type,
 				Name:       b.Name,
-				Change:     "create",
+				Change:     op,
 				Attributes: attrs,
 			})
 		}
