@@ -307,3 +307,35 @@ func TestRelPath_FallbackReturnsGivenFilename(t *testing.T) {
 		t.Error("premise broken: relative and joined paths are identical, so the test above cannot distinguish the branches")
 	}
 }
+
+// TestMapResources_MissingRootErrorContract pins the error MapResources
+// returns for a root that does not exist.
+//
+// MapResources used to do its own walk and returned that walk's error verbatim.
+// It is now a projection over ParseDir, so this guards that delegation did not
+// change the error a caller sees. A review comment claimed the error text had
+// changed; it had not. The expected string below was captured from the
+// pre-refactor implementation.
+func TestMapResources_MissingRootErrorContract(t *testing.T) {
+	const missing = "/definitely/not/here"
+
+	_, err := MapResources(missing)
+	if err == nil {
+		t.Fatal("MapResources: expected an error for a missing root")
+	}
+	const want = "lstat /definitely/not/here: no such file or directory"
+	if err.Error() != want {
+		t.Errorf("MapResources error = %q, want %q (unchanged from the pre-refactor walk)", err.Error(), want)
+	}
+
+	// The projection must surface ParseDir's error unmodified, since that is
+	// what the old walk used to return.
+	_, parseErr := ParseDir(missing)
+	if parseErr == nil {
+		t.Fatal("ParseDir: expected an error for a missing directory")
+	}
+	if err.Error() != parseErr.Error() {
+		t.Errorf("MapResources error %q differs from ParseDir's %q; the delegation should not rewrite it",
+			err.Error(), parseErr.Error())
+	}
+}
