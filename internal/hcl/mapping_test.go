@@ -339,3 +339,58 @@ func TestMapResources_MissingRootErrorContract(t *testing.T) {
 			err.Error(), parseErr.Error())
 	}
 }
+
+// TestSwapReadFile_RestoreDoesNotClobberLaterSwap pins the restore guard. If
+// two swaps overlap, the first restore must not reinstate the original reader
+// while the second swap's reader is still installed, because the second test's
+// ParseDir calls would then run against the wrong seam.
+func TestSwapReadFile_RestoreDoesNotClobberLaterSwap(t *testing.T) {
+	first := func(path string) ([]byte, error) { return []byte("first"), nil }
+	second := func(path string) ([]byte, error) { return []byte("second"), nil }
+
+	restoreFirst := swapReadFile(first)
+	restoreSecond := swapReadFile(second)
+	// Both seams must come down regardless of what the test below does.
+	t.Cleanup(restoreSecond)
+	t.Cleanup(restoreFirst)
+
+	restoreFirst()
+
+	got, err := readFileAt("anything")
+	if err != nil {
+		t.Fatalf("readFileAt: %v", err)
+	}
+	if string(got) != "second" {
+		t.Errorf("after the first restore, reader = %q, want the second swap still installed", got)
+	}
+}
+
+// TestReadFileAt_UsesTheInstalledReader is the positive control: with no
+// overlapping swap the restore does put the original reader back, so a real
+// file reads normally afterwards.
+func TestReadFileAt_UsesTheInstalledReader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "probe.tf")
+	if err := os.WriteFile(path, []byte("real contents"), 0644); err != nil {
+		t.Fatalf("write probe: %v", err)
+	}
+
+	restore := swapReadFile(func(path string) ([]byte, error) { return []byte("swapped"), nil })
+
+	got, err := readFileAt(path)
+	if err != nil {
+		t.Fatalf("readFileAt under the swap: %v", err)
+	}
+	if string(got) != "swapped" {
+		t.Errorf("reader = %q, want the swapped reader", got)
+	}
+
+	restore()
+
+	got, err = readFileAt(path)
+	if err != nil {
+		t.Fatalf("readFileAt after restore: %v", err)
+	}
+	if string(got) != "real contents" {
+		t.Errorf("after restore, reader = %q, want the real file contents back", got)
+	}
+}

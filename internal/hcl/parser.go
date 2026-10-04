@@ -39,29 +39,52 @@ type ResourceBlock struct {
 // but it is one t.Parallel() away from being real. Production reads go
 // through readFileAt, which takes the read lock.
 var (
-	readFileMu sync.RWMutex
-	readFile   = os.ReadFile
+	readFileMu  sync.RWMutex
+	readFile    = os.ReadFile
+	readFileGen uint64
 )
+
+// baseReadFile is what every swap restores. It is deliberately the package
+// default rather than the reader that happened to be installed at swap time:
+// unwinding into another swap's fake reader would leave a test running against
+// a seam it did not install, which is never what a caller wants.
+var baseReadFile = os.ReadFile
 
 // swapReadFile installs fn as the reader and returns a function that restores
 // the original. Intended for tests.
+//
+// The restore only takes effect when this swap is still the installed one, and
+// only the first time it is called. Both guards matter: restoring out of order
+// must not discard a swap that is still in use, and restoring twice must not
+// write back a stale reader.
 func swapReadFile(fn func(string) ([]byte, error)) func() {
 	readFileMu.Lock()
-	original := readFile
 	readFile = fn
+	readFileGen++
+	gen := readFileGen
 	readFileMu.Unlock()
+
+	restored := false
 	return func() {
 		readFileMu.Lock()
-		readFile = original
-		readFileMu.Unlock()
+		defer readFileMu.Unlock()
+		if restored || readFileGen != gen {
+			return
+		}
+		restored = true
+		readFile = baseReadFile
+		readFileGen++
 	}
 }
 
-// readFileAt reads path through the current seam.
+// readFileAt reads path through the current seam. The reader is copied out
+// under the lock and then called, so the swap can never change the function
+// midway through a read.
 func readFileAt(path string) ([]byte, error) {
 	readFileMu.RLock()
-	defer readFileMu.RUnlock()
-	return readFile(path)
+	read := readFile
+	readFileMu.RUnlock()
+	return read(path)
 }
 
 // resourceRE matches resource and data block declarations in terraform .tf files.
