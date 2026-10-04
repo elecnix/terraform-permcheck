@@ -53,10 +53,19 @@ var baseReadFile = os.ReadFile
 // swapReadFile installs fn as the reader and returns a function that restores
 // the original. Intended for tests.
 //
+// Precondition: a swap must not be installed while another swap is still in
+// force. Overlapping swaps are a caller error, not something this seam papers
+// over — the second swap replaces the first reader, the first restore then
+// correctly does nothing, and the second restore returns the package default.
+// Every caller swaps once and restores once, and no test in this package runs
+// in parallel, so the precondition holds. Callers that need nesting should
+// coordinate at their own level rather than rely on this seam.
+//
 // The restore only takes effect when this swap is still the installed one, and
 // only the first time it is called. Both guards matter: restoring out of order
 // must not discard a swap that is still in use, and restoring twice must not
-// write back a stale reader.
+// write back a stale reader. The `restored` flag is read and written under
+// readFileMu, so two goroutines calling the same restore cannot both proceed.
 func swapReadFile(fn func(string) ([]byte, error)) func() {
 	readFileMu.Lock()
 	readFile = fn
