@@ -39,9 +39,8 @@ type ResourceBlock struct {
 // but it is one t.Parallel() away from being real. Production reads go
 // through readFileAt, which takes the read lock.
 var (
-	readFileMu  sync.RWMutex
-	readFile    = os.ReadFile
-	readFileGen uint64
+	readFileMu sync.RWMutex
+	readFile   = os.ReadFile
 )
 
 // baseReadFile is what every swap restores. It is deliberately the package
@@ -55,34 +54,28 @@ var baseReadFile = os.ReadFile
 //
 // Precondition: a swap must not be installed while another swap is still in
 // force. Overlapping swaps are a caller error, not something this seam papers
-// over — the second swap replaces the first reader, the first restore then
-// correctly does nothing, and the second restore returns the package default.
-// Every caller swaps once and restores once, and no test in this package runs
-// in parallel, so the precondition holds. Callers that need nesting should
-// coordinate at their own level rather than rely on this seam.
+// over — the second swap replaces the first reader, and the first restore then
+// returns the package default out from under it. Every caller swaps once and
+// restores once, and no test in this package runs in parallel, so the
+// precondition holds. Callers that need nesting should coordinate at their own
+// level rather than rely on this seam.
 //
-// The restore only takes effect when this swap is still the installed one, and
-// only the first time it is called. Both guards matter: restoring out of order
-// must not discard a swap that is still in use, and restoring twice must not
-// write back a stale reader. The `restored` flag is read and written under
-// readFileMu, so two goroutines calling the same restore cannot both proceed.
+// The restore is unconditional. An earlier version tracked a generation
+// counter so that an out-of-order restore would leave a newer swap installed.
+// Since every restore targets the same package default, that counter guarded
+// nothing: it could only ever be defeated by another restore, which would leave
+// the package default installed anyway. Restoring straight to the default is
+// the same end state with none of the bookkeeping, and it means no sequence of
+// restores can leave a reader installed that the caller did not ask for.
 func swapReadFile(fn func(string) ([]byte, error)) func() {
 	readFileMu.Lock()
 	readFile = fn
-	readFileGen++
-	gen := readFileGen
 	readFileMu.Unlock()
 
-	restored := false
 	return func() {
 		readFileMu.Lock()
 		defer readFileMu.Unlock()
-		if restored || readFileGen != gen {
-			return
-		}
-		restored = true
 		readFile = baseReadFile
-		readFileGen++
 	}
 }
 

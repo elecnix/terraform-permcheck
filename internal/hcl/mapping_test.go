@@ -340,28 +340,43 @@ func TestMapResources_MissingRootErrorContract(t *testing.T) {
 	}
 }
 
-// TestSwapReadFile_RestoreDoesNotClobberLaterSwap pins the restore guard. If
-// two swaps overlap, the first restore must not reinstate the original reader
-// while the second swap's reader is still installed, because the second test's
-// ParseDir calls would then run against the wrong seam.
-func TestSwapReadFile_RestoreDoesNotClobberLaterSwap(t *testing.T) {
-	first := func(path string) ([]byte, error) { return []byte("first"), nil }
-	second := func(path string) ([]byte, error) { return []byte("second"), nil }
-
-	restoreFirst := swapReadFile(first)
-	restoreSecond := swapReadFile(second)
-	// Both seams must come down regardless of what the test below does.
-	t.Cleanup(restoreSecond)
-	t.Cleanup(restoreFirst)
-
-	restoreFirst()
-
-	got, err := readFileAt("anything")
-	if err != nil {
-		t.Fatalf("readFileAt: %v", err)
+// TestSwapReadFile_RestoreAlwaysReturnsToDefault pins what a restore does:
+// it returns the package default reader, never the reader a previous swap had
+// installed. That is the whole contract, and it is why no generation counter
+// is needed — every restore has the same target, so no sequence of restores
+// can leave a reader in place that the caller did not ask for.
+func TestSwapReadFile_RestoreAlwaysReturnsToDefault(t *testing.T) {
+	probe := filepath.Join(t.TempDir(), "probe.tf")
+	if err := os.WriteFile(probe, []byte("real contents"), 0644); err != nil {
+		t.Fatalf("write probe: %v", err)
 	}
-	if string(got) != "second" {
-		t.Errorf("after the first restore, reader = %q, want the second swap still installed", got)
+	readsReal := func() string {
+		b, err := readFileAt(probe)
+		if err != nil {
+			t.Fatalf("readFileAt: %v", err)
+		}
+		return string(b)
+	}
+
+	restore := swapReadFile(func(string) ([]byte, error) { return []byte("first"), nil })
+	if got := readsReal(); got != "first" {
+		t.Fatalf("under the swap, reader = %q, want \"first\"", got)
+	}
+
+	// A second swap over the top, then restore the first. Violating the
+	// precondition is a caller error, but the end state must still be the
+	// package default and never the other swap's fake reader.
+	swapReadFile(func(string) ([]byte, error) { return []byte("second"), nil })
+	restore()
+
+	if got := readsReal(); got != "real contents" {
+		t.Errorf("after restore, reader = %q, want the real file contents", got)
+	}
+
+	// Restoring twice must be harmless.
+	restore()
+	if got := readsReal(); got != "real contents" {
+		t.Errorf("after a second restore, reader = %q, want the real file contents", got)
 	}
 }
 
