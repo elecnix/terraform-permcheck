@@ -3,6 +3,7 @@ package iam
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -121,6 +122,20 @@ func TestParseConfig_Operations(t *testing.T) {
 	}
 	if cfg.Exclude[1].Operations != nil {
 		t.Errorf("absent operations = %+v, want nil", cfg.Exclude[1].Operations)
+	}
+}
+
+// TestParseConfig_OperationsNormalized pins that the trimmed, lowercased
+// operation names land in the returned config, so a caller reading
+// Config.Exclude[i].Operations never sees "Delete" or " delete ".
+func TestParseConfig_OperationsNormalized(t *testing.T) {
+	cfg, err := parseConfig([]byte(`{"exclude":[{"permission":"s3:*","operations":["Delete"," UPDATE "]}]}`))
+	if err != nil {
+		t.Fatalf("parseConfig: %v", err)
+	}
+	want := []string{"delete", "update"}
+	if !slices.Equal(cfg.Exclude[0].Operations, want) {
+		t.Fatalf("operations = %q, want %q", cfg.Exclude[0].Operations, want)
 	}
 }
 

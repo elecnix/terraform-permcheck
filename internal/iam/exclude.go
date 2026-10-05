@@ -64,7 +64,8 @@ func parseConfig(raw []byte) (*Config, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	for i, e := range c.Exclude {
+	for i := range c.Exclude {
+		e := &c.Exclude[i]
 		if strings.TrimSpace(e.Permission) == "" {
 			return nil, fmt.Errorf("exclude[%d]: permission is required", i)
 		}
@@ -76,10 +77,10 @@ func parseConfig(raw []byte) (*Config, error) {
 				return nil, fmt.Errorf("exclude[%d]: invalid resource pattern %q: %w", i, e.Resource, err)
 			}
 		}
-		for j, op := range e.Operations {
-			op = strings.ToLower(strings.TrimSpace(op))
+		for j, raw := range e.Operations {
+			op := strings.ToLower(strings.TrimSpace(raw))
 			if !knownOperations[op] {
-				return nil, fmt.Errorf("exclude[%d]: unknown operation %q in operations (want create, update, delete, or read)", i, e.Operations[j])
+				return nil, fmt.Errorf("exclude[%d]: unknown operation %q in operations (want create, update, delete, or read)", i, raw)
 			}
 			e.Operations[j] = op
 		}
