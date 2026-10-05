@@ -289,23 +289,31 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 
 	// Build the cloud.Schema with both Permissions and Conditional metadata
 	schema := &cloud.Schema{
-		TypeName:    tfType,
-		Permissions: make(map[string][]string),
-		Conditional: make(map[string]map[string]string),
+		TypeName:         tfType,
+		Permissions:      make(map[string][]string),
+		Conditional:      make(map[string]map[string]string),
+		ValueConditional: make(map[string]map[string]bool),
 	}
 
 	for op, eas := range actions {
 		perms := make([]string, 0, len(eas))
 		conds := make(map[string]string, len(eas))
+		valueConds := make(map[string]bool, len(eas))
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
 			if ea.Conditional && ea.Condition != "" {
 				conds[ea.Action] = ea.Condition
+				if ea.ValueGuarded {
+					valueConds[ea.Action] = true
+				}
 			}
 		}
 		schema.Permissions[op] = perms
 		if len(conds) > 0 {
 			schema.Conditional[op] = conds
+		}
+		if len(valueConds) > 0 {
+			schema.ValueConditional[op] = valueConds
 		}
 	}
 

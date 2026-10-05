@@ -8,6 +8,11 @@ type Schema struct {
 	TypeName    string
 	Permissions map[string][]string          // key: "create", "read", "update", "delete", "list" → action strings
 	Conditional map[string]map[string]string // op → action → condition attribute name (empty if unconditional)
+
+	// ValueConditional marks the conditional actions whose gating attribute is
+	// compared by value, not by presence (op → action → true). The attribute
+	// carries a default, so the call only runs when the author configured it.
+	ValueConditional map[string]map[string]bool
 }
 
 // GetPermissions returns the permission map (implements iam.SchemaLike).
@@ -19,6 +24,12 @@ func (s *Schema) GetPermissions() map[string][]string {
 // op → action → gating attribute name (implements iam.SchemaLike).
 func (s *Schema) GetConditional() map[string]map[string]string {
 	return s.Conditional
+}
+
+// GetValueConditional returns the actions whose gating attribute is compared by
+// value (implements iam.SchemaLike).
+func (s *Schema) GetValueConditional() map[string]map[string]bool {
+	return s.ValueConditional
 }
 
 // Provider resolves cloud resource types to their required IAM permissions.

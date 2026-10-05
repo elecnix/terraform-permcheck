@@ -143,10 +143,16 @@ func TestS3SubresourceAbsorbed(t *testing.T) {
 type fakeSchema struct {
 	perms map[string][]string
 	cond  map[string]map[string]string
+	// valueCond marks actions whose gating attribute is compared by value, so
+	// the gate needs the attribute configured rather than merely present.
+	valueCond map[string]map[string]bool
 }
 
 func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
 func (f fakeSchema) GetConditional() map[string]map[string]string { return f.cond }
+func (f fakeSchema) GetValueConditional() map[string]map[string]bool {
+	return f.valueCond
+}
 
 type fakeResolver struct{ s SchemaLike }
 
@@ -638,5 +644,77 @@ func TestFormatMissing_StripIndexForLookup(t *testing.T) {
 
 	if !strings.Contains(got, "    → aws_s3_bucket.cloudtrail[0] (create) [main.tf:10]\n") {
 		t.Errorf("expected stripped index lookup with file location, got:\n%s", got)
+	}
+}
+
+func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
+	// A call guarded by a comparison on the attribute's value (a set that must
+	// be non-empty) fires only when the author configured it. The attribute's
+	// default keeps the value non-zero, so presence in state proves nothing.
+	schema := fakeSchema{
+		perms: map[string][]string{
+			"delete": {"secretsmanager:DeleteSecret", "secretsmanager:UpdateSecretVersionStage"},
+		},
+		cond: map[string]map[string]string{
+			"delete": {"secretsmanager:UpdateSecretVersionStage": "version_stages"},
+		},
+		valueCond: map[string]map[string]bool{
+			"delete": {"secretsmanager:UpdateSecretVersionStage": true},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Case 1: before-state holds the default label, but the author wrote no
+	// version_stages → the provider makes no call → the action is not reported.
+	defaulted := []*plan.ResourceChange{{
+		Type:            "aws_secretsmanager_secret_version",
+		Name:            "v",
+		Change:          "delete",
+		Attributes:      map[string]bool{"version_stages": true},
+		AttributeValues: map[string]string{"id": "sv-1"},
+		Configured:      map[string]bool{"secret_string": true},
+	}}
+	missing, err := Validate(defaulted, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
+		t.Error("expected UpdateSecretVersionStage suppressed when version_stages is only a default")
+	}
+	if !hasAction(missing, "secretsmanager:DeleteSecret") {
+		t.Error("expected unconditional DeleteSecret to remain required")
+	}
+
+	// Case 2: the author wrote version_stages → the call is real.
+	configured := []*plan.ResourceChange{{
+		Type:            "aws_secretsmanager_secret_version",
+		Name:            "v",
+		Change:          "delete",
+		Attributes:      map[string]bool{"version_stages": true},
+		AttributeValues: map[string]string{"id": "sv-1"},
+		Configured:      map[string]bool{"secret_string": true, "version_stages": true},
+	}}
+	missing, err = Validate(configured, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
+		t.Error("expected UpdateSecretVersionStage required when version_stages is configured")
+	}
+
+	// Case 3: no configuration section (static HCL mode) → fall back to
+	// presence, which reports the action.
+	noConfig := []*plan.ResourceChange{{
+		Type:       "aws_secretsmanager_secret_version",
+		Name:       "v",
+		Change:     "delete",
+		Attributes: map[string]bool{"version_stages": true},
+	}}
+	missing, err = Validate(noConfig, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
+		t.Error("expected UpdateSecretVersionStage kept when the configuration is unknown")
 	}
 }

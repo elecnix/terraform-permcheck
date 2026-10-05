@@ -600,3 +600,130 @@ func TestParseStateOutputNoOutputs(t *testing.T) {
 		t.Fatal("expected error for state JSON without outputs")
 	}
 }
+
+func TestParseConfiguredAttributes(t *testing.T) {
+	// A destroy plan: the configuration section keeps only the attributes the
+	// author wrote, while the prior state carries every computed default. The
+	// gap between the two tells a defaulted attribute from a configured one.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {
+					"actions": ["delete"],
+					"before": {"id": "sv-1", "version_stages": ["AWSCURRENT"]}
+				}
+			},
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "c",
+				"change": {
+					"actions": ["delete"],
+					"before": {"id": "sv-2", "version_stages": ["AWSCURRENT", "AWSPREVIOUS"]}
+				}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "b",
+						"expressions": {"secret_string": {"constant_value": "placeholder"}}
+					},
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "c",
+						"expressions": {
+							"secret_string": {"constant_value": "placeholder"},
+							"version_stages": {"constant_value": ["AWSPREVIOUS"]}
+						}
+					}
+				]
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	// b: only secret_string written, so version_stages holds its default.
+	if changes[0].Configured["version_stages"] {
+		t.Error("version_stages should not count as configured for b")
+	}
+	if !changes[0].Configured["secret_string"] {
+		t.Error("secret_string should count as configured for b")
+	}
+
+	// c: version_stages written, so the call's guard can turn true.
+	if !changes[1].Configured["version_stages"] {
+		t.Error("version_stages should count as configured for c")
+	}
+}
+
+func TestParseConfiguredAttributesAbsent(t *testing.T) {
+	// Without a configuration section, nothing is known about what the author
+	// wrote, so Configured stays nil and callers must not treat it as absent.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {"actions": ["delete"], "before": {"id": "sv-1"}}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured != nil {
+		t.Errorf("expected nil Configured when configuration is absent, got %v", changes[0].Configured)
+	}
+}
+
+func TestParseConfiguredAttributesCreate(t *testing.T) {
+	// A create keeps the same rule: the configuration section, not the planned
+	// state, records what the author wrote.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {
+					"actions": ["create"],
+					"after": {"version_stages": ["AWSCURRENT"], "secret_string": "placeholder"}
+				}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "b",
+						"expressions": {"secret_string": {"constant_value": "placeholder"}}
+					}
+				]
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured["version_stages"] {
+		t.Error("version_stages should not count as configured when the author left it out")
+	}
+}

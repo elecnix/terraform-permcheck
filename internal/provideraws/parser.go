@@ -20,6 +20,15 @@ type ExtractedAction struct {
 	Action      string // e.g., "backup:CreateBackupVault"
 	Conditional bool   // true if this SDK call is inside a conditional block
 	Condition   string // attribute name guarding the call, e.g. "kms_key_arn"
+
+	// ValueGuarded is true when the guard compares the attribute's value
+	// rather than its presence — a set that must be non-empty, say. The
+	// attribute then carries a default, so a non-zero value in the planned
+	// state says nothing about the configuration and the call only happens
+	// when the author set the attribute. Scalar comparisons are not flagged:
+	// a defaulted scalar is usually non-zero, which would make the call
+	// required, so presence stays the gate there.
+	ValueGuarded bool
 }
 
 // helperCall records a helper function call and the conditional context at the
@@ -179,6 +188,10 @@ type extractionState struct {
 	actions    []ExtractedAction
 	condDepth  int    // how many conditional if-blocks deep we are
 	condReason string // attribute name from the innermost conditional guard
+
+	// valueGuard is the attribute from the innermost value-comparison guard,
+	// empty when the call is not under one.
+	valueGuard string
 }
 
 // walkWithConditionals recursively walks an AST node, tracking conditional
@@ -204,11 +217,18 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 
 		// Check if this if-statement is conditional on d.GetOk() or d.Get()
 		condAttr := extractConditionAttribute(n)
-		if condAttr != "" {
+		valueAttr := extractValueGuardAttribute(n)
+		if condAttr != "" || valueAttr != "" {
 			// Enter conditional context
 			state.condDepth++
 			if state.condReason == "" {
 				state.condReason = condAttr
+				if state.condReason == "" {
+					state.condReason = valueAttr
+				}
+			}
+			if state.valueGuard == "" {
+				state.valueGuard = valueAttr
 			}
 
 			// Walk body inside conditional context
@@ -221,6 +241,7 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 			state.condDepth--
 			if state.condDepth == 0 {
 				state.condReason = ""
+				state.valueGuard = ""
 			}
 		} else {
 			// Normal if — walk without changing conditional state
@@ -257,9 +278,10 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 		// Check for SDK API call: conn.MethodName(ctx, ...)
 		if action := extractCallAction(n, state.connVar, state.service); action != "" {
 			ea := ExtractedAction{
-				Action:      action,
-				Conditional: state.condDepth > 0,
-				Condition:   state.condReason,
+				Action:       action,
+				Conditional:  state.condDepth > 0,
+				Condition:    state.condReason,
+				ValueGuarded: state.valueGuard != "",
 			}
 			state.actions = append(state.actions, ea)
 			return
@@ -335,7 +357,7 @@ func extractConditionAttribute(ifStmt *ast.IfStmt) string {
 
 // extractGetOkAttribute checks if an expression is d.GetOk("attr") or
 // d.Get("attr") and returns the attribute name.
-func extractGetOkAttribute(expr ast.Expr) string {
+func extractGetOkAttribute(expr ast.Node) string {
 	call, ok := expr.(*ast.CallExpr)
 	if !ok {
 		return ""
@@ -370,6 +392,151 @@ func extractGetOkAttribute(expr ast.Expr) string {
 
 	// Return the attribute name without quotes
 	return strings.Trim(bl.Value, "\"")
+}
+
+// extractValueGuardAttribute returns the attribute a guard tests for emptiness,
+// e.g. `ok && v.(*schema.Set).Len() > 0` on a d.GetOk("version_stages") call.
+// The call it guards only runs when the author set the attribute, because the
+// provider's default alone leaves the value non-zero.
+//
+// Only emptiness tests count. A comparison on a scalar (`d.Get("x") != ""`,
+// `n > 0`) reads a value the default usually satisfies, so treating those as
+// needing configuration would drop permissions the provider really needs.
+// Returns "" when the guard tests presence alone, or compares something the
+// parser cannot tie back to an attribute.
+func extractValueGuardAttribute(ifStmt *ast.IfStmt) string {
+	if ifStmt == nil {
+		return ""
+	}
+
+	bindings := localAttrBindings(ifStmt.Init)
+
+	var attr string
+	found := false
+	scan := func(node ast.Node) {
+		if found || node == nil {
+			return
+		}
+		ast.Inspect(node, func(n ast.Node) bool {
+			if found {
+				return false
+			}
+			bin, ok := n.(*ast.BinaryExpr)
+			if !ok || !isEmptinessTest(bin) {
+				return true
+			}
+			if a := attributeUnderLengthCall(bin, bindings); a != "" {
+				attr, found = a, true
+				return false
+			}
+			return true
+		})
+	}
+
+	scan(ifStmt.Init)
+	scan(ifStmt.Cond)
+	return attr
+}
+
+// isEmptinessTest reports whether a binary expression compares a length
+// against zero — the shape of "the collection holds something" tests.
+func isEmptinessTest(bin *ast.BinaryExpr) bool {
+	switch bin.Op {
+	case token.GTR, token.GEQ, token.NEQ, token.LSS, token.LEQ:
+	default:
+		return false
+	}
+	left, right := isLengthCall(bin.X), isLengthCall(bin.Y)
+	if (left == nil) == (right == nil) {
+		return false
+	}
+	// The other side is a near-zero literal, so the test asks "any elements?"
+	// and not "more than ten".
+	other := bin.Y
+	if left == nil {
+		other = bin.X
+	}
+	lit, ok := other.(*ast.BasicLit)
+	return ok && lit.Kind == token.INT && (lit.Value == "0" || lit.Value == "1")
+}
+
+// attributeUnderLengthCall returns the attribute whose collection size an
+// emptiness test compares against zero.
+func attributeUnderLengthCall(bin *ast.BinaryExpr, bindings map[string]string) string {
+	if side := isLengthCall(bin.X); side != nil {
+		return attributeUnder(side, bindings)
+	}
+	return attributeUnder(isLengthCall(bin.Y), bindings)
+}
+
+// isLengthCall reports whether an expression reads a collection's size
+// (v.Len(), v.Length(), len(v)) and returns the collection expression itself,
+// or "" when the expression reads no size.
+func isLengthCall(expr ast.Node) ast.Expr {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+
+	// len(v) — the builtin.
+	if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "len" {
+		return call.Args[0]
+	}
+
+	// v.Len() / v.Length() — a method on the collection.
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || (sel.Sel.Name != "Len" && sel.Sel.Name != "Length") {
+		return nil
+	}
+	return sel.X
+}
+
+// attributeUnder returns the attribute a collection expression reads, either
+// through a d.Get/d.GetOk call or through a local bound to one. Returns "" when
+// the collection has no traceable attribute read.
+func attributeUnder(collection ast.Expr, bindings map[string]string) string {
+	if collection == nil {
+		return ""
+	}
+	var attr string
+	ast.Inspect(collection, func(n ast.Node) bool {
+		if attr != "" {
+			return false
+		}
+		if a := extractGetOkAttribute(n); a != "" {
+			attr = a
+			return false
+		}
+		if ident, ok := n.(*ast.Ident); ok {
+			if a, bound := bindings[ident.Name]; bound {
+				attr = a
+				return false
+			}
+		}
+		return true
+	})
+	return attr
+}
+
+// localAttrBindings maps the locals an if-statement's init assigns from a
+// d.Get/d.GetOk call to their attribute names, e.g. the "v" of
+// `if v, ok := d.GetOk("version_stages"); ok`.
+func localAttrBindings(init ast.Stmt) map[string]string {
+	bindings := make(map[string]string)
+	assign, ok := init.(*ast.AssignStmt)
+	if !ok {
+		return bindings
+	}
+	for i, rhs := range assign.Rhs {
+		attr := extractGetOkAttribute(rhs)
+		if attr == "" || i >= len(assign.Lhs) {
+			continue
+		}
+		if ident, ok := assign.Lhs[i].(*ast.Ident); ok {
+			bindings[ident.Name] = attr
+		}
+	}
+	return bindings
 }
 
 // findClientAssignment detects a client connection assignment like:

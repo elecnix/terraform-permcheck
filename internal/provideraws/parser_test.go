@@ -812,3 +812,141 @@ func resourceRuleRead(ctx context.Context, conn *eventbridge.Client, d *schema.R
 		}
 	}
 }
+
+func TestParseResourceFileStructured_ValueGuardOnDefaultedSet(t *testing.T) {
+	// A guard that compares the attribute's value, not its presence:
+	// `ok && v.(*schema.Set).Len() > 0`. The attribute carries a provider
+	// default, so a non-zero value proves nothing about the configuration.
+	src := `
+package secretsmanager
+
+func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SecretsManagerClient(ctx)
+
+	if v, ok := d.GetOk("version_stages"); ok && v.(*schema.Set).Len() > 0 {
+		for _, stage := range flex.ExpandStringValueSet(v.(*schema.Set)) {
+			conn.UpdateSecretVersionStage(ctx, &secretsmanager.UpdateSecretVersionStageInput{
+				RemoveFromVersionId: aws.String("id"),
+				SecretId:            aws.String("sid"),
+				VersionStage:        aws.String(stage),
+			})
+		}
+	}
+
+	conn.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{})
+	return nil
+}
+`
+
+	actions, err := ParseResourceFileStructured(src, "aws_secretsmanager_secret_version", "SecretVersion")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	var updateStage *ExtractedAction
+	for i := range actions["delete"] {
+		if actions["delete"][i].Action == "secretsmanager:UpdateSecretVersionStage" {
+			updateStage = &actions["delete"][i]
+		}
+	}
+
+	if updateStage == nil {
+		t.Fatal("expected secretsmanager:UpdateSecretVersionStage in delete actions")
+	}
+	if updateStage.Condition != "version_stages" {
+		t.Errorf("Condition = %q, want version_stages", updateStage.Condition)
+	}
+	if !updateStage.ValueGuarded {
+		t.Error("UpdateSecretVersionStage should be flagged as value-guarded: its guard is a comparison on the value")
+	}
+
+	// The plain call outside the guard keeps its unconditional mark.
+	for _, ea := range actions["delete"] {
+		if ea.Action == "secretsmanager:DeleteSecret" && ea.ValueGuarded {
+			t.Error("DeleteSecret should not be value-guarded")
+		}
+	}
+}
+
+func TestExtractValueGuardAttribute(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "set length comparison",
+			src:  `func f() { if v, ok := d.GetOk("version_stages"); ok && v.(*schema.Set).Len() > 0 { foo() } }`,
+			want: "version_stages",
+		},
+		{
+			name: "len() over the attribute",
+			src:  `func f() { if len(d.Get("rules").(*schema.Set).List()) > 0 { foo() } }`,
+			want: "rules",
+		},
+		{
+			name: "length call on a GetOk local",
+			src:  `func f() { if v, ok := d.GetOk("targets"); ok && v.([]interface{}).Length() != 0 { foo() } }`,
+			want: "targets",
+		},
+		{
+			name: "scalar comparison keeps presence gating",
+			src:  `func f() { if d.Get("bucket").(string) != "" { foo() } }`,
+			want: "",
+		},
+		{
+			name: "equality against a literal keeps presence gating",
+			src:  `func f() { if d.Get("stage").(string) == "AWSPREVIOUS" { foo() } }`,
+			want: "",
+		},
+		{
+			name: "numeric comparison on a scalar keeps presence gating",
+			src:  `func f() { if n := d.Get("size").(int); n > 0 { foo() } }`,
+			want: "",
+		},
+		{
+			name: "presence guard only",
+			src:  `func f() { if v, ok := d.GetOk("kms_key_arn"); ok { foo() } }`,
+			want: "",
+		},
+		{
+			name: "comparison with no attribute",
+			src:  `func f() { if n > 3 { foo() } }`,
+			want: "",
+		},
+		{
+			name: "length against a threshold is not an emptiness test",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() > 10 { foo() } }`,
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ifStmt := firstIfStmt(t, tt.src)
+			if got := extractValueGuardAttribute(ifStmt); got != tt.want {
+				t.Errorf("extractValueGuardAttribute = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// firstIfStmt parses src and returns its first if-statement.
+func firstIfStmt(t *testing.T, src string) *ast.IfStmt {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "t.go", "package p\n"+src, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var found *ast.IfStmt
+	ast.Inspect(f, func(n ast.Node) bool {
+		if ifs, ok := n.(*ast.IfStmt); ok && found == nil {
+			found = ifs
+		}
+		return true
+	})
+	if found == nil {
+		t.Fatal("no if-statement in source")
+	}
+	return found
+}

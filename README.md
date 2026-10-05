@@ -45,6 +45,17 @@ present, so you neither miss them (when tags are set) nor get false positives
 (when they aren't). A `tags` value computed at apply time (known after apply)
 still counts as set — the tags get applied, so the permission is still required.
 
+A guard that compares the attribute's value rather than its presence — a set
+that must be non-empty, say — reads a value the provider's own default already
+fills. Deleting an `aws_secretsmanager_secret_version` whose `version_stages`
+was never written still shows `["AWSCURRENT"]` in the prior state, and the
+provider skips `UpdateSecretVersionStage` for that label, so presence alone
+reported a permission the apply never needs. For those guards PermCheck reads
+the plan's configuration section instead: an attribute the configuration does
+not write is one holding a default, and the call does not run. With no
+configuration to read — static HCL mode — both kinds of guard fall back to
+presence and the permission is reported.
+
 ### Cross-service callback permissions
 
 Some AWS APIs require an IAM action from a *different* service than the one the

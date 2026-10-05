@@ -39,6 +39,15 @@ type ResourceChange struct {
 	// ["aws_secretsmanager_secret.b.id", "aws_secretsmanager_secret.b"]).
 	// Nil when no reference data is available (static HCL mode).
 	References map[string][]string
+
+	// Configured records which top-level attributes the author wrote, taken
+	// from the plan's configuration section: it lists an attribute only when
+	// the configuration sets it. The gap to the state is what separates a
+	// configured attribute from one holding a default — an unconfigured
+	// version_stages still reads as ["AWSCURRENT"] in the prior state. It is
+	// nil when the plan carries no configuration section, meaning the set of
+	// configured attributes is unknown.
+	Configured map[string]bool
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -147,6 +156,7 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Attributes:      attributePresence(attrSource, afterUnknown),
 			AttributeValues: attributeStringValues(attrSource),
 			References:      resourceReferences(plan.Configuration, rc.Type, rc.Name),
+			Configured:      configuredAttributes(plan.Configuration, rc.Type, rc.Name),
 		})
 	}
 	return changes, nil
@@ -165,6 +175,44 @@ func resourceReferences(cfg *tfConfiguration, resType, resName string) map[strin
 		return nil
 	}
 	return refs
+}
+
+// configuredAttributes returns the set of top-level attributes a resource's
+// configuration writes. Returns nil when the plan carries no configuration
+// section or the resource isn't found, which reads as "unknown", not "none".
+func configuredAttributes(cfg *tfConfiguration, resType, resName string) map[string]bool {
+	if cfg == nil || cfg.RootModule == nil {
+		return nil
+	}
+	configured, _ := configuredInModule(cfg.RootModule, resType, resName)
+	return configured
+}
+
+// configuredInModule searches a config module (recursively) for the resource
+// and returns the set of attributes its expressions mention. The second result
+// reports whether the resource was found: a resource in the configuration with
+// no expressions at all is configured with nothing, which is not the same as
+// absent from the configuration.
+func configuredInModule(m *tfModule, resType, resName string) (map[string]bool, bool) {
+	for _, r := range m.Resources {
+		if r.Mode != "" && r.Mode != "managed" {
+			continue
+		}
+		if r.Type != resType || r.Name != resName {
+			continue
+		}
+		configured := make(map[string]bool, len(r.Expressions))
+		for attr := range r.Expressions {
+			configured[attr] = true
+		}
+		return configured, true
+	}
+	for _, mc := range m.ModuleCalls {
+		if configured, found := configuredInModule(&mc.Module, resType, resName); found {
+			return configured, true
+		}
+	}
+	return nil, false
 }
 
 // referencesInModule searches a config module (recursively) for the resource

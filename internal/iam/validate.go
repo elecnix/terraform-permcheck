@@ -165,6 +165,10 @@ type SchemaLike interface {
 	// non-empty gating attribute is only required when that attribute is set in
 	// the planned resource.
 	GetConditional() map[string]map[string]string
+	// GetValueConditional maps op → action → true when the gating attribute is
+	// compared by value, so its default keeps the guard satisfied on its own.
+	// Such an action is only required when the author configured the attribute.
+	GetValueConditional() map[string]map[string]bool
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -214,6 +218,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			continue
 		}
 		conditional := schema.GetConditional()[op]
+		valueConditional := schema.GetValueConditional()[op]
 
 		for _, action := range required {
 			condAttr := conditional[action]
@@ -223,7 +228,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			// attribute info and the gating attribute is NOT meaningfully set,
 			// skip the permission. When Attributes is nil (e.g. static HCL
 			// mode), presence is unknown and the permission is kept.
-			if condAttr != "" && rc.Attributes != nil && !rc.Attributes[condAttr] {
+			if condAttr != "" && !conditionMet(condAttr, valueConditional[action], rc) {
 				continue
 			}
 
@@ -277,6 +282,28 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	missing = filterS3Subresources(missing, changes)
 
 	return missing, nil
+}
+
+// conditionMet reports whether a guard on an attribute lets its call run for
+// this resource change.
+//
+// A presence guard (d.GetOk) needs the attribute to hold a non-zero value in
+// the planned or prior state.
+//
+// A value guard — a set that must be non-empty, say — reads the attribute's
+// value, and the provider's default already supplies a non-zero one. Only the
+// configuration can tell a set the author wrote from one the provider filled,
+// so a value guard asks the configuration section instead. With no
+// configuration to read, both kinds fall back to presence, which keeps the
+// permission rather than dropping one the provider may still need.
+func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool {
+	if valueGuarded && rc.Configured != nil {
+		return rc.Configured[attr]
+	}
+	if rc.Attributes == nil {
+		return true
+	}
+	return rc.Attributes[attr]
 }
 
 // missingGroupKey is a grouping key for deduplicating missing actions.
