@@ -23,10 +23,19 @@ type Exclusion struct {
 	// ("aws_secretsmanager_secret.forwarder"), e.g. "aws_secretsmanager_*".
 	// Empty means the exclusion applies to every resource.
 	Resource string `json:"resource,omitempty"`
+	// Operations optionally limits the exclusion to matching terraform
+	// operations ("create", "update", "delete", "read"), so a role can lack a
+	// permission for one operation only. Empty means the exclusion applies to
+	// every operation, which is the meaning of an entry written before this
+	// field existed.
+	Operations []string `json:"operations,omitempty"`
 	// Reason is an optional audit-trail note explaining why the permission is
 	// safe to suppress.
 	Reason string `json:"reason,omitempty"`
 }
+
+// knownOperations lists the terraform operations a MissingAction can carry.
+var knownOperations = map[string]bool{"create": true, "update": true, "delete": true, "read": true}
 
 // Config is the permcheck config file schema (permcheck.json).
 type Config struct {
@@ -67,6 +76,13 @@ func parseConfig(raw []byte) (*Config, error) {
 				return nil, fmt.Errorf("exclude[%d]: invalid resource pattern %q: %w", i, e.Resource, err)
 			}
 		}
+		for j, op := range e.Operations {
+			op = strings.ToLower(strings.TrimSpace(op))
+			if !knownOperations[op] {
+				return nil, fmt.Errorf("exclude[%d]: unknown operation %q in operations (want create, update, delete, or read)", i, e.Operations[j])
+			}
+			e.Operations[j] = op
+		}
 	}
 	return &c, nil
 }
@@ -94,9 +110,24 @@ func matchExclusion(m MissingAction, exclusions []Exclusion) (Exclusion, bool) {
 		if e.Resource != "" && !resourceMatches(e.Resource, m) {
 			continue
 		}
+		if len(e.Operations) > 0 && !operationMatches(e.Operations, m.Change) {
+			continue
+		}
 		return e, true
 	}
 	return Exclusion{}, false
+}
+
+// operationMatches reports whether the excluded operation list covers m's
+// terraform operation. Names are compared case-insensitively so a config may
+// write "Delete".
+func operationMatches(operations []string, change string) bool {
+	for _, op := range operations {
+		if strings.EqualFold(op, change) {
+			return true
+		}
+	}
+	return false
 }
 
 // resourceMatches reports whether the resource glob matches m's resource type
