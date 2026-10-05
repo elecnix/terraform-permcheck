@@ -681,6 +681,25 @@ func TestParseChangedAttributes(t *testing.T) {
 			want: map[string]bool{"permissions_boundary": true},
 		},
 		{
+			// Terraform writes no diff for an attribute that is null on a
+			// create, so the provider's d.HasChange reads false for it.
+			name: "create counts an attribute planned as null as unchanged",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["create"],
+							"before": null,
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "description": null}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true, "description": false},
+		},
+		{
 			name: "delete has no planned state, so the change is unknown",
 			raw: `{
 				"resource_changes": [

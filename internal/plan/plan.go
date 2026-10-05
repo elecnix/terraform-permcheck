@@ -246,8 +246,10 @@ func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
 // computed at apply time in after_unknown counts as changed, because terraform
 // applies a diff for it either way. Values are compared structurally, so a
 // re-ordered but identical object counts as unchanged. before is null on a
-// create, where every planned attribute reads as a change. Returns nil when
-// there is no planned state, meaning change is unknown.
+// create, so every attribute planned with a value counts as a change; an
+// attribute planned as null counts as unchanged, matching the absent diff entry
+// the provider sees. Returns nil when there is no planned state, meaning change
+// is unknown.
 func changedAttributes(before, after, afterUnknown json.RawMessage) map[string]bool {
 	afterFields, ok := stateFields(after)
 	if !ok {

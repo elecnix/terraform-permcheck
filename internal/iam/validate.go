@@ -227,12 +227,9 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		for _, action := range required {
 			condAttr := conditional[action]
 			changeAttr := changeGated[action]
-			// The attribute that gates the action, whatever its kind — reported
-			// alongside the action so a reader sees why it is conditional.
-			gateAttr := condAttr
-			if gateAttr == "" {
-				gateAttr = changeAttr
-			}
+			// Both gates must hold, so the report names both gating
+			// attributes — either one on its own can suppress the action.
+			gateAttr := gateAttribute(condAttr, changeAttr)
 			service := strings.Split(action, ":")[0]
 
 			// Conditional (attribute-gated) permissions: when the plan carries
@@ -302,6 +299,21 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	missing = filterS3Subresources(missing, changes)
 
 	return missing, nil
+}
+
+// gateAttribute names the attributes gating an action, for the
+// [conditional: <attr>] tag. An action can carry a presence gate, a change
+// gate, or both, so both names appear when both apply. Empty when neither
+// gate applies.
+func gateAttribute(presenceAttr, changeAttr string) string {
+	switch {
+	case presenceAttr == "":
+		return changeAttr
+	case changeAttr == "" || changeAttr == presenceAttr:
+		return presenceAttr
+	default:
+		return presenceAttr + "+" + changeAttr
+	}
 }
 
 // missingGroupKey is a grouping key for deduplicating missing actions.

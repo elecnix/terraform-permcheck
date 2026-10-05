@@ -758,3 +758,74 @@ func TestValidate_ChangeGatedKeepsPresenceGates(t *testing.T) {
 		t.Error("expected kms:TagResource to remain: its gate is a change, not presence")
 	}
 }
+
+// TestValidate_BothGatesOnOneAction covers an action that carries both a
+// presence gate and a change gate. Both must hold, and the report must name
+// both attributes, since either one can suppress the action.
+func TestValidate_BothGatesOnOneAction(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{"update": {"iam:UpdateRolePolicy"}},
+		cond:  map[string]map[string]string{"update": {"iam:UpdateRolePolicy": "tags"}},
+		changeGated: map[string]map[string]string{
+			"update": {"iam:UpdateRolePolicy": "policy"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Both gates hold → reported, naming both attributes.
+	bothHold := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": true, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": true},
+		},
+	}
+	missing, err := Validate(bothHold, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "iam:UpdateRolePolicy") {
+		t.Fatal("expected the action to be reported when both gates hold")
+	}
+	if got := missing[0].ConditionAttribute; got != "tags+policy" {
+		t.Errorf("ConditionAttribute = %q, want %q naming both gating attributes", got, "tags+policy")
+	}
+
+	// The presence gate fails → dropped, even though the change gate holds.
+	presenceFails := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": false, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": true},
+		},
+	}
+	missing, err = Validate(presenceFails, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "iam:UpdateRolePolicy") {
+		t.Error("expected the action to be dropped when the presence gate fails")
+	}
+
+	// The change gate fails → dropped, even though the presence gate holds.
+	changeFails := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": true, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": false},
+		},
+	}
+	missing, err = Validate(changeFails, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "iam:UpdateRolePolicy") {
+		t.Error("expected the action to be dropped when the change gate fails")
+	}
+}
