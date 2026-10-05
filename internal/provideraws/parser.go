@@ -220,14 +220,18 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 		valueAttr := extractValueGuardAttribute(n)
 		if condAttr != "" || valueAttr != "" {
 			// Enter conditional context
+			savedReason, savedValueGuard := state.condReason, state.valueGuard
 			state.condDepth++
-			if state.condReason == "" {
+
+			// The outermost guard names the condition, except under a value
+			// guard: its default already satisfies it, so a nested guard decides
+			// the call. When an if carries both kinds, the value-tested
+			// attribute is the one the configuration must set.
+			if state.condReason == "" || state.valueGuard != "" {
 				state.condReason = condAttr
-				if state.condReason == "" {
+				if valueAttr != "" {
 					state.condReason = valueAttr
 				}
-			}
-			if state.valueGuard == "" {
 				state.valueGuard = valueAttr
 			}
 
@@ -239,10 +243,7 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 
 			// Leave conditional context
 			state.condDepth--
-			if state.condDepth == 0 {
-				state.condReason = ""
-				state.valueGuard = ""
-			}
+			state.condReason, state.valueGuard = savedReason, savedValueGuard
 		} else {
 			// Normal if — walk without changing conditional state
 			walkWithConditionals(n.Body, state)
@@ -439,25 +440,43 @@ func extractValueGuardAttribute(ifStmt *ast.IfStmt) string {
 }
 
 // isEmptinessTest reports whether a binary expression compares a length
-// against zero — the shape of "the collection holds something" tests.
+// against a bound that holds exactly when the collection is non-empty
+// (`> 0`, `!= 0`, `>= 1`, or the mirrored forms).
 func isEmptinessTest(bin *ast.BinaryExpr) bool {
-	switch bin.Op {
-	case token.GTR, token.GEQ, token.NEQ, token.LSS, token.LEQ:
-	default:
-		return false
-	}
 	left, right := isLengthCall(bin.X), isLengthCall(bin.Y)
 	if (left == nil) == (right == nil) {
 		return false
 	}
-	// The other side is a near-zero literal, so the test asks "any elements?"
-	// and not "more than ten".
-	other := bin.Y
+
+	// Normalise to `length OP literal`, mirroring the operator when the
+	// length sits on the right.
+	op, other := bin.Op, bin.Y
 	if left == nil {
 		other = bin.X
+		switch op {
+		case token.LSS:
+			op = token.GTR
+		case token.LEQ:
+			op = token.GEQ
+		case token.GTR:
+			op = token.LSS
+		case token.GEQ:
+			op = token.LEQ
+		}
 	}
 	lit, ok := other.(*ast.BasicLit)
-	return ok && lit.Kind == token.INT && (lit.Value == "0" || lit.Value == "1")
+	if !ok || lit.Kind != token.INT {
+		return false
+	}
+
+	// Only the forms that hold exactly when the collection is non-empty.
+	switch {
+	case lit.Value == "0" && (op == token.GTR || op == token.NEQ):
+		return true
+	case lit.Value == "1" && op == token.GEQ:
+		return true
+	}
+	return false
 }
 
 // attributeUnderLengthCall returns the attribute whose collection size an

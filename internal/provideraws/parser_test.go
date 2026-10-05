@@ -915,6 +915,41 @@ func TestExtractValueGuardAttribute(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "less-than zero is never true",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() < 0 { foo() } }`,
+			want: "",
+		},
+		{
+			name: "at most zero means empty",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() <= 0 { foo() } }`,
+			want: "",
+		},
+		{
+			name: "greater than one is not an emptiness test",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() > 1 { foo() } }`,
+			want: "",
+		},
+		{
+			name: "at least one",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() >= 1 { foo() } }`,
+			want: "rules",
+		},
+		{
+			name: "mirrored zero less than length",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && 0 < v.(*schema.Set).Len() { foo() } }`,
+			want: "rules",
+		},
+		{
+			name: "mirrored one at most length",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && 1 <= v.(*schema.Set).Len() { foo() } }`,
+			want: "rules",
+		},
+		{
+			name: "length against length is not an emptiness test",
+			src:  `func f() { if len(d.Get("a").([]any)) > len(d.Get("b").([]any)) { foo() } }`,
+			want: "",
+		},
+		{
 			name: "length against a threshold is not an emptiness test",
 			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() > 10 { foo() } }`,
 			want: "",
@@ -949,4 +984,53 @@ func firstIfStmt(t *testing.T, src string) *ast.IfStmt {
 		t.Fatal("no if-statement in source")
 	}
 	return found
+}
+
+func TestParseResourceFileStructured_NestedGuards(t *testing.T) {
+	src := `
+package secretsmanager
+
+func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SecretsManagerClient(ctx)
+
+	if v, ok := d.GetOk("version_stages"); ok && v.(*schema.Set).Len() > 0 {
+		if _, ok := d.GetOk("other"); ok {
+			conn.PutSecretValue(ctx, nil)
+		}
+		conn.UpdateSecretVersionStage(ctx, nil)
+	}
+
+	if v, ok := d.GetOk("a"); ok && len(d.Get("b").(*schema.Set).List()) > 0 {
+		conn.DeleteSecret(ctx, nil)
+	}
+	return nil
+}
+`
+	actions, err := ParseResourceFileStructured(src, "aws_secretsmanager_secret_version", "SecretVersion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ExtractedAction{}
+	for _, ea := range actions["delete"] {
+		got[ea.Action] = ea
+	}
+
+	// A presence guard nested in a value guard decides on its own attribute:
+	// the outer guard holds by default, so only "other" gates the call.
+	nested := got["secretsmanager:PutSecretValue"]
+	if nested.Condition != "other" || nested.ValueGuarded {
+		t.Errorf("nested presence call = %+v, want Condition other, not value-guarded", nested)
+	}
+
+	// The sibling call under only the value guard stays value-guarded.
+	outer := got["secretsmanager:UpdateSecretVersionStage"]
+	if outer.Condition != "version_stages" || !outer.ValueGuarded {
+		t.Errorf("outer call = %+v, want Condition version_stages, value-guarded", outer)
+	}
+
+	// When one if has both guards, the value-tested attribute names the condition.
+	both := got["secretsmanager:DeleteSecret"]
+	if both.Condition != "b" || !both.ValueGuarded {
+		t.Errorf("combined guard call = %+v, want Condition b, value-guarded", both)
+	}
 }
