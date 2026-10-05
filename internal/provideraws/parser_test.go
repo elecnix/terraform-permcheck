@@ -1,9 +1,11 @@
 package provideraws
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -751,6 +753,377 @@ func removeSecretReplicas(ctx context.Context, conn *secretsmanager.Client, id s
 
 	// Also verify that helpers called unconditionally don't get a spurious condition
 	// (the existing IAM Role helper test covers this)
+}
+
+// traversalCoverageSrc exercises every node type the AST traversal knows how
+// to descend into, plus the shapes the traversal deliberately skips. Both
+// walkers (SDK call extraction and helper call discovery) run over this same
+// source in the tests below, so the expectations pin one traversal's behaviour
+// for both observers at once.
+const traversalCoverageSrc = `package walk
+
+import (
+	"context"
+)
+
+func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+	var diags diag.Diagnostics
+	ch := make(chan string, 1)
+	modes := []string{"a", "b"}
+
+	// BlockStmt + ExprStmt + CallExpr.
+	conn.CreateBackupVault(ctx, nil)
+
+	// AssignStmt: client assignment inside a conditional block. The outer
+	// connection variable must be restored once the block ends.
+	if _, ok := d.GetOk("kms_key_arn"); ok {
+		kmsConn := meta.(*conns.AWSClient).KMSClient(ctx)
+		kmsConn.CreateGrant(ctx, nil)
+	}
+	conn.TagResource(ctx, nil)
+
+	// Nested conditionals keep the outermost guard as the reason.
+	if _, ok := d.GetOk("outer"); ok {
+		if _, ok := d.GetOk("inner"); ok {
+			conn.PutBackupVaultAccessPolicy(ctx, nil)
+		}
+	}
+
+	// else / else-if are walked inside the first guard's conditional context.
+	if d.Get("primary").(bool) {
+		conn.DeleteBackupVaultCopyPoint(ctx, nil)
+	} else if d.Get("secondary").(bool) {
+		conn.StartBackupVaultCopyPoint(ctx, nil)
+	} else {
+		conn.DescribeCopyPoint(ctx, nil)
+	}
+
+	// An if-statement that does not guard on d.Get/d.GetOk is not conditional.
+	if err != nil {
+		conn.DescribeBackupVault(ctx, nil)
+	}
+
+	// ForStmt body is walked; the init statement is not.
+	for i := 0; i < 3; i++ {
+		conn.ListTags(ctx, nil)
+	}
+	for i := startIndex(conn.ListBackupPlanTemplates(ctx, nil)); i < 3; i++ {
+		_ = i
+	}
+
+	// RangeStmt body is walked; the range expression is not.
+	for _, m := range modes {
+		if m == "a" {
+			conn.ListTagsForResource(ctx, nil)
+		}
+	}
+	for _, m := range modeNames(conn.ListProtectedPlanTemplates(ctx, nil)) {
+		_ = m
+	}
+
+	// SwitchStmt / CaseClause.
+	switch modes[0] {
+	case "a":
+		conn.PutBackupVaultNotification(ctx, nil)
+	default:
+		conn.GetBackupVaultNotification(ctx, nil)
+	}
+
+	// LabeledStmt wrapping a loop; break is a no-op.
+outer:
+	for {
+		conn.ListRecoveryPointsByBackupVault(ctx, nil)
+		break outer
+	}
+
+	// DeferStmt and GoStmt.
+	defer conn.DeleteBackupVault(ctx, nil)
+	go conn.DescribeRegionSettings(ctx, nil)
+
+	// AssignStmt right-hand side.
+	accountSettings := conn.DescribeGlobalSettings(ctx, nil)
+	_ = accountSettings
+
+	// Call arguments are walked when the outer call is not an SDK call.
+	_ = wrapError(conn.DescribeBackupVaultAccountSettings(ctx, nil))
+
+	// SendStmt is not walked.
+	ch <- conn.ListBackupVaults(ctx, nil)
+
+	// Anonymous function bodies are not walked.
+	_ = func() { conn.ListTagsForResource(ctx, nil) }
+
+	// A call to a file-local helper; the helper's own SDK calls are resolved
+	// separately by the transitive resolution pass.
+	walkHelper(ctx, conn, "id")
+
+	// ReturnStmt results are walked.
+	return append(diags, wrapError(conn.GetBackupVaultAccessPolicy(ctx, nil)))
+}
+
+func walkHelper(ctx context.Context, conn *backup.Client, id string) error {
+	_, err := conn.GetBackupVault(ctx, nil)
+	return err
+}
+
+func startIndex(n int) int {
+	return n
+}
+
+func modeNames(xs []string) []string {
+	return xs
+}
+
+func wrapError(err error) error {
+	return err
+}
+`
+
+// TestParseResourceFileStructured_TraversalCoverage pins the exact actions the
+// traversal reports for the SDK-call observer, including which shapes are
+// deliberately not descended into.
+func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
+	actions, err := ParseResourceFileStructured(traversalCoverageSrc, "aws_backup_vault", "Walk")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	want := []ExtractedAction{
+		{Action: "backup:CreateBackupVault"},
+		{Action: "kms:CreateGrant", Conditional: true, Condition: "kms_key_arn"},
+		{Action: "backup:TagResource"},
+		{Action: "backup:PutBackupVaultAccessPolicy", Conditional: true, Condition: "outer"},
+		{Action: "backup:DeleteBackupVaultCopyPoint", Conditional: true, Condition: "primary"},
+		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "primary"},
+		{Action: "backup:DescribeCopyPoint", Conditional: true, Condition: "primary"},
+		{Action: "backup:DescribeBackupVault"},
+		{Action: "backup:ListTags"},
+		{Action: "backup:ListTagsForResource"},
+		{Action: "backup:PutBackupVaultNotification"},
+		{Action: "backup:GetBackupVaultNotification"},
+		{Action: "backup:ListRecoveryPointsByBackupVault"},
+		{Action: "backup:DeleteBackupVault"},
+		{Action: "backup:DescribeRegionSettings"},
+		{Action: "backup:DescribeGlobalSettings"},
+		{Action: "backup:DescribeBackupVaultAccountSettings"},
+		{Action: "backup:GetBackupVaultAccessPolicy"},
+		{Action: "backup:GetBackupVault"},
+	}
+
+	got := actions["create"]
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("create actions mismatch\n got: %s\nwant: %s", formatActions(got), formatActions(want))
+	}
+}
+
+func formatActions(actions []ExtractedAction) string {
+	var b strings.Builder
+	for i, ea := range actions {
+		if i > 0 {
+			b.WriteString("\n     ")
+		}
+		fmt.Fprintf(&b, "%s (conditional=%v reason=%q)", ea.Action, ea.Conditional, ea.Condition)
+	}
+	return b.String()
+}
+
+// TestWalkSkipsAnonymousFunctionBodies documents the limitation that the
+// traversal does not descend into anonymous function bodies, such as the
+// closure passed to tfresource.RetryWhen. SDK calls made inside such a closure
+// are not reported.
+func TestWalkSkipsAnonymousFunctionBodies(t *testing.T) {
+	src := `package walk
+
+func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+	err := tfresource.RetryWhen(ctx, timeout, func(ctx context.Context) *tf.RetryableError {
+		_, err := conn.CreateBackupVault(ctx, nil)
+		return tf.RetryableError(err)
+	})
+	_ = err
+	return nil
+}
+`
+
+	actions, err := ParseResourceFileStructured(src, "aws_backup_vault", "Vault")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	if got := actions["create"]; len(got) != 0 {
+		t.Errorf("expected no actions from inside the anonymous function body, got %s", formatActions(got))
+	}
+}
+
+const traversalHelperSrc = `package walk
+
+func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+	ch := make(chan string, 1)
+	modes := []string{"a", "b"}
+
+	helperBlock(ctx, conn)
+
+	if _, ok := d.GetOk("guard"); ok {
+		helperBlock(ctx, conn)
+		helperNested(ctx, conn)
+	}
+
+	if err != nil {
+		helperPlain(ctx, conn)
+	}
+
+	if d.Get("primary").(bool) {
+		helperBlock(ctx, conn)
+	} else {
+		helperPrimary(ctx, conn)
+	}
+
+	for i := 0; i < 3; i++ {
+		helperLoop(ctx, conn)
+	}
+	for _, m := range modes {
+		if m == "a" {
+			helperRange(ctx, conn)
+		}
+	}
+
+	switch modes[0] {
+	case "a":
+		helperSwitch(ctx, conn)
+	default:
+		helperDefault(ctx, conn)
+	}
+
+outer:
+	for {
+		helperLabeled(ctx, conn)
+		break outer
+	}
+
+	defer helperDefer(ctx, conn)
+	go helperGo(ctx, conn)
+
+	// The outer call is not a helper call, so its arguments are walked.
+	helperOuter(wrapError(helperInner(ctx, conn)))
+
+	// Send statements and anonymous function bodies are not walked.
+	ch <- helperSend(ctx, conn)
+	_ = func() { helperFuncLit(ctx, conn) }
+
+	return append(diags, wrapError(helperReturned(ctx, conn)))
+}
+
+func helperBlock(ctx context.Context, conn *backup.Client) error  { return nil }
+func helperNested(ctx context.Context, conn *backup.Client) error { return nil }
+func helperPlain(ctx context.Context, conn *backup.Client) error  { return nil }
+func helperPrimary(ctx context.Context, conn *backup.Client) error { return nil }
+func helperLoop(ctx context.Context, conn *backup.Client) error    { return nil }
+func helperRange(ctx context.Context, conn *backup.Client) error   { return nil }
+func helperSwitch(ctx context.Context, conn *backup.Client) error  { return nil }
+func helperDefault(ctx context.Context, conn *backup.Client) error { return nil }
+func helperLabeled(ctx context.Context, conn *backup.Client) error { return nil }
+func helperDefer(ctx context.Context, conn *backup.Client) error   { return nil }
+func helperGo(ctx context.Context, conn *backup.Client) error       { return nil }
+func helperInner(ctx context.Context, conn *backup.Client) error    { return nil }
+func helperSend(ctx context.Context, conn *backup.Client) error     { return nil }
+func helperFuncLit(ctx context.Context, conn *backup.Client) error  { return nil }
+func helperReturned(ctx context.Context, conn *backup.Client) error { return nil }
+
+func helperOuter(ctx context.Context, err error) error { return err }
+`
+
+// TestFindHelperCalls_TraversalCoverage pins the exact helper calls reported for
+// the helper observer, with the conditional reason recorded at each call site.
+func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "walk.go", traversalHelperSrc, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var fd *ast.FuncDecl
+	for _, decl := range f.Decls {
+		if d, ok := decl.(*ast.FuncDecl); ok && d.Name.Name == "resourceWalkCreate" {
+			fd = d
+		}
+	}
+	if fd == nil {
+		t.Fatal("resourceWalkCreate not found")
+	}
+
+	want := []helperCall{
+		{Name: "helperBlock"},
+		{Name: "helperBlock", CondReason: "guard"},
+		{Name: "helperNested", CondReason: "guard"},
+		{Name: "helperPlain"},
+		{Name: "helperBlock", CondReason: "primary"},
+		{Name: "helperPrimary", CondReason: "primary"},
+		{Name: "helperLoop"},
+		{Name: "helperRange"},
+		{Name: "helperSwitch"},
+		{Name: "helperDefault"},
+		{Name: "helperLabeled"},
+		{Name: "helperDefer"},
+		{Name: "helperGo"},
+		// helperOuter is defined in the file but does not receive conn, so it
+		// is not a helper call; its arguments are still walked.
+		{Name: "helperInner"},
+		{Name: "helperReturned"},
+	}
+
+	got := findHelperCalls(fd, "conn", f)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("helper calls mismatch\n got: %+v\nwant: %+v", got, want)
+	}
+}
+
+// plainIfReassignsConnSrc pins the connection-scope restore for if-statements
+// that do NOT gate on d.GetOk or d.Get. The service of an extracted action
+// comes from the mutable walk context rather than from the receiver in the
+// call expression, so an unrestored client assignment inside a plain if would
+// silently misattribute every later call to the wrong service.
+const plainIfReassignsConnSrc = `package walk
+
+import (
+	"context"
+)
+
+func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).BackupClient(ctx)
+
+	if err != nil {
+		kmsConn := meta.(*conns.AWSClient).KMSClient(ctx)
+		kmsConn.CreateGrant(ctx, nil)
+	}
+
+	// Must still resolve to backup, not to the kms scope the block above left
+	// behind. If the restore is missing this becomes kms:CreateBackupVault,
+	// which is not a real IAM action and would never be satisfied by a policy.
+	conn.CreateBackupVault(ctx, nil)
+	return nil
+}
+`
+
+func TestParseResourceFileStructured_PlainIfRestoresConnScope(t *testing.T) {
+	actions, err := ParseResourceFileStructured(plainIfReassignsConnSrc, "aws_backup_vault", "Walk")
+	if err != nil {
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
+	}
+
+	want := []ExtractedAction{
+		// Inside the plain if: kms scope is in effect, and a plain if is not a
+		// conditional gate, so the action is unconditional.
+		{Action: "kms:CreateGrant"},
+		// After the block: conn scope must be restored.
+		{Action: "backup:CreateBackupVault"},
+	}
+
+	got := actions["create"]
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("create actions mismatch\n got: %s\nwant: %s", formatActions(got), formatActions(want))
+	}
 }
 
 func TestParseResourceFile_EventBridgeRule(t *testing.T) {

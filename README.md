@@ -115,6 +115,12 @@ directory, or pointed at with `--config`):
       "permission": "secretsmanager:UpdateSecretVersionStage",
       "resource": "aws_secretsmanager_secret.forwarder",
       "reason": "Forwarder key version stages managed out-of-band"
+    },
+    {
+      "permission": "s3:DeleteBucketEncryption",
+      "resource": "aws_s3_bucket_server_side_encryption_configuration.*",
+      "operations": ["delete"],
+      "reason": "Buckets under object lock must never lose their encryption config"
     }
   ]
 }
@@ -126,7 +132,15 @@ directory, or pointed at with `--config`):
   resources. Matched against the resource type (`aws_secretsmanager_secret`) or
   the full address (`aws_secretsmanager_secret.forwarder`); supports globs like
   `aws_secretsmanager_*`. Omit to apply the exclusion to every resource.
+- **`operations`** (optional) — limits the exclusion to the named terraform
+  operations: `create`, `update`, `delete`, or `read`. Omit to apply the
+  exclusion to every operation.
 - **`reason`** (optional) — a note kept for the audit trail.
+
+`operations` lets you suppress a permission for one operation only, so a role
+that must never delete a resource still gets checked on create and update. An
+unknown operation name is a config error, so a typo fails the run instead of
+silently excluding nothing.
 
 Excluded permissions are dropped from the gap report and no longer fail the run,
 but the suppression is **not** silent by default — pass `--show-excluded` to

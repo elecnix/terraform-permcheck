@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ResourceBlock is a single resource or data block extracted from a .tf file.
@@ -26,6 +27,66 @@ type ResourceBlock struct {
 	Filename   string   // path to the .tf file (populated by ParseDir)
 	Line       int      // 1-based line number of the resource declaration
 	Attributes []string // top-level attribute names set in the resource body
+}
+
+// readFile is the single place ParseDir reads a .tf file from disk. It is a
+// variable so tests can observe the read: every view derived from a parse
+// must come from this one read, never from a second walk over the same tree.
+//
+// The swap is guarded because a test that replaces this function would
+// otherwise write it while another test's ParseDir reads it. No test in this
+// package runs in parallel today, so the race is latent rather than active,
+// but it is one t.Parallel() away from being real. Production reads go
+// through readFileAt, which takes the read lock.
+var (
+	readFileMu sync.RWMutex
+	readFile   = os.ReadFile
+)
+
+// baseReadFile is what every swap restores. It is deliberately the package
+// default rather than the reader that happened to be installed at swap time:
+// unwinding into another swap's fake reader would leave a test running against
+// a seam it did not install, which is never what a caller wants.
+var baseReadFile = os.ReadFile
+
+// swapReadFile installs fn as the reader and returns a function that restores
+// the original. Intended for tests.
+//
+// Precondition: a swap must not be installed while another swap is still in
+// force. Overlapping swaps are a caller error, not something this seam papers
+// over — the second swap replaces the first reader, and the first restore then
+// returns the package default out from under it. Every caller swaps once and
+// restores once, and no test in this package runs in parallel, so the
+// precondition holds. Callers that need nesting should coordinate at their own
+// level rather than rely on this seam.
+//
+// The restore is unconditional. An earlier version tracked a generation
+// counter so that an out-of-order restore would leave a newer swap installed.
+// Since every restore targets the same package default, that counter guarded
+// nothing: it could only ever be defeated by another restore, which would leave
+// the package default installed anyway. Restoring straight to the default is
+// the same end state with none of the bookkeeping, and it means no sequence of
+// restores can leave a reader installed that the caller did not ask for.
+func swapReadFile(fn func(string) ([]byte, error)) func() {
+	readFileMu.Lock()
+	readFile = fn
+	readFileMu.Unlock()
+
+	return func() {
+		readFileMu.Lock()
+		defer readFileMu.Unlock()
+		readFile = baseReadFile
+	}
+}
+
+// readFileAt reads path through the current seam. The reader is copied out
+// under the lock and then called, so the swap can never change the function
+// midway through a read.
+func readFileAt(path string) ([]byte, error) {
+	readFileMu.RLock()
+	read := readFile
+	readFileMu.RUnlock()
+	return read(path)
 }
 
 // resourceRE matches resource and data block declarations in terraform .tf files.
@@ -54,7 +115,7 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 			return nil
 		}
 
-		src, err := os.ReadFile(path)
+		src, err := readFileAt(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}

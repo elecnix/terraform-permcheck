@@ -252,6 +252,12 @@ func validateCmd(args []string) error {
 	return report(missing, exclusions, len(changes), "resource changes", *format, *exitZero, *showExcluded, locations)
 }
 
+// schemaResolver maps a terraform resource type to the permissions its cloud
+// schema requires. schemaAdapter implements it over cloud.Provider.
+type schemaResolver interface {
+	Resolve(tfType string) (iam.SchemaLike, error)
+}
+
 // schemaAdapter bridges cloud.Provider to iam.SchemaLike for the validator.
 type schemaAdapter struct {
 	p cloud.Provider
@@ -401,32 +407,6 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return nil
 	}
 
-	// Build ResourceChange entries: over-approximate by treating all as create.
-	// Deduplicate by (Type) — one entry per resource type, regardless of count.
-	// Populate Attributes from parsed HCL to enable conditional permission
-	// filtering (e.g., s3:PutBucketWebsite is only reported when a website
-	// block is actually configured).
-	seen := make(map[string]bool)
-	var changes []*plan.ResourceChange
-	for _, b := range blocks {
-		if !seen[b.Type] {
-			seen[b.Type] = true
-			var attrs map[string]bool
-			if len(b.Attributes) > 0 {
-				attrs = make(map[string]bool, len(b.Attributes))
-				for _, a := range b.Attributes {
-					attrs[a] = true
-				}
-			}
-			changes = append(changes, &plan.ResourceChange{
-				Type:       b.Type,
-				Name:       b.Name,
-				Change:     "create",
-				Attributes: attrs,
-			})
-		}
-	}
-
 	// Parse policy
 	policyRaw, err := os.ReadFile(policyFile)
 	if err != nil {
@@ -437,11 +417,12 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return fmt.Errorf("parse policy: %w", err)
 	}
 
-	// Resolve schemas
-	resolver := cloud.NewChainProvider(
+	// Resolve schemas, then build the resource changes those schemas ask for
+	adapter := &schemaAdapter{cloud.NewChainProvider(
 		provideraws.NewSourceProvider(),
 		cloud.NewAWSProvider(),
-	)
+	)}
+	changes, checked := staticChanges(blocks, adapter)
 
 	// Validate
 	filter := iam.DefaultFilter()
@@ -451,10 +432,99 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 	if onlyRequired {
 		filter.ExcludeConditional = true
 	}
-	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
+	missing, err := iam.Validate(changes, policy, adapter, filter)
 	if err != nil {
 		return err
 	}
 
-	return report(missing, exclusions, len(changes), "resource types (static HCL mode)", format, exitZero, showExcluded, locations)
+	return report(missing, exclusions, checked, "resource types (static HCL mode)", format, exitZero, showExcluded, locations)
+}
+
+// staticMutationOps are the operations static mode checks, in report order.
+var staticMutationOps = []string{"create", "update", "delete"}
+
+// staticChanges turns the parsed HCL blocks into the resource changes worth
+// validating. It deduplicates by resource type, resolves each type's schema
+// once, and emits one entry per operation that adds a permission the create
+// check does not already cover. It returns the changes and the number of
+// distinct resource types checked, which is not len(changes): a single type
+// can carry several entries.
+//
+// A type the resolver cannot map is skipped, since validation has nothing to
+// check it against.
+func staticChanges(blocks []hcl.ResourceBlock, resolver schemaResolver) ([]*plan.ResourceChange, int) {
+	var changes []*plan.ResourceChange
+	checked := 0
+
+	seen := make(map[string]bool)
+	for _, b := range blocks {
+		if seen[b.Type] {
+			continue
+		}
+		seen[b.Type] = true
+
+		schema, err := resolver.Resolve(b.Type)
+		if err != nil {
+			continue
+		}
+		ops := staticOpsFor(schema.GetPermissions())
+		if len(ops) == 0 {
+			continue
+		}
+		checked++
+
+		var attrs map[string]bool
+		if len(b.Attributes) > 0 {
+			attrs = make(map[string]bool, len(b.Attributes))
+			for _, a := range b.Attributes {
+				attrs[a] = true
+			}
+		}
+
+		for _, op := range ops {
+			changes = append(changes, &plan.ResourceChange{
+				Type:       b.Type,
+				Name:       b.Name,
+				Change:     op,
+				Attributes: attrs,
+			})
+		}
+	}
+
+	return changes, checked
+}
+
+// staticOpsFor picks the mutation operations a schema makes worth checking.
+// "create" is always worth it when the schema defines it. Another operation is
+// worth it only when it carries at least one action the create set does not:
+// the validator falls back to create when an operation is absent, and an
+// operation whose actions the create check already reports would repeat that
+// result. Read and list are not mutation operations and are never checked.
+func staticOpsFor(perms map[string][]string) []string {
+	create := make(map[string]bool, len(perms["create"]))
+	for _, a := range perms["create"] {
+		create[a] = true
+	}
+
+	var ops []string
+	for _, op := range staticMutationOps {
+		actions := perms[op]
+		if len(actions) == 0 {
+			continue
+		}
+		if op != "create" {
+			distinct := false
+			for _, a := range actions {
+				if !create[a] {
+					distinct = true
+					break
+				}
+			}
+			if !distinct {
+				continue
+			}
+		}
+		ops = append(ops, op)
+	}
+	return ops
 }
