@@ -6,6 +6,8 @@ import (
 	"go/token"
 	"strings"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 func TestParseResourceFile_BackupVault(t *testing.T) {
@@ -261,6 +263,10 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 		{"GetPublicAccessBlock", "s3", "s3:GetBucketPublicAccessBlock"},
 		{"DeletePublicAccessBlock", "s3", "s3:DeleteBucketPublicAccessBlock"},
 		{"PutBucketNotificationConfiguration", "s3", "s3:PutBucketNotification"},
+		// S3 encryption configuration: the SDK method names do not exist in IAM
+		{"GetBucketEncryption", "s3", "s3:GetEncryptionConfiguration"},
+		{"PutBucketEncryption", "s3", "s3:PutEncryptionConfiguration"},
+		{"DeleteBucketEncryption", "s3", "s3:DeleteEncryptionConfiguration"},
 	}
 
 	for _, tt := range tests {
@@ -270,6 +276,97 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 				t.Errorf("sdKMethodToIAMAction(%q, %q) = %q, want %q", tt.method, tt.service, got, tt.want)
 			}
 		})
+	}
+}
+
+// s3EncryptionConfigurationSource mimics the provider file for
+// aws_s3_bucket_server_side_encryption_configuration, which calls the three
+// SDK methods that S3 authorizes through the EncryptionConfiguration actions.
+const s3EncryptionConfigurationSource = `
+package s3
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+)
+
+func resourceBucketServerSideEncryptionConfigurationCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).S3Client(ctx)
+	input := &s3.PutBucketEncryptionInput{Bucket: aws.String(bucket)}
+	_, err := conn.PutBucketEncryption(ctx, input)
+	if err != nil {
+		return diag.Errorf("setting bucket encryption: %s", err)
+	}
+	return resourceBucketServerSideEncryptionConfigurationRead(ctx, d, meta)
+}
+
+func resourceBucketServerSideEncryptionConfigurationRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).S3Client(ctx)
+	input := &s3.GetBucketEncryptionInput{Bucket: aws.String(bucket)}
+	_, err := conn.GetBucketEncryption(ctx, input)
+	if err != nil {
+		return diag.Errorf("reading bucket encryption: %s", err)
+	}
+	return nil
+}
+
+func resourceBucketServerSideEncryptionConfigurationDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).S3Client(ctx)
+	input := &s3.DeleteBucketEncryptionInput{Bucket: aws.String(bucket)}
+	_, err := conn.DeleteBucketEncryption(ctx, input)
+	if err != nil {
+		return diag.Errorf("removing bucket encryption: %s", err)
+	}
+	return nil
+}
+`
+
+// The encryption actions are the canonical IAM names, so a policy that grants
+// them must cover every action the resource needs.
+func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
+	actions, err := ParseResourceFile(
+		s3EncryptionConfigurationSource,
+		"aws_s3_bucket_server_side_encryption_configuration",
+		"ServerSideEncryptionConfiguration",
+	)
+	if err != nil {
+		t.Fatalf("ParseResourceFile failed: %v", err)
+	}
+
+	policy, err := iam.ParsePolicy([]byte(`{
+	  "Version": "2012-10-17",
+	  "Statement": [{
+	    "Effect": "Allow",
+	    "Action": [
+	      "s3:GetEncryptionConfiguration",
+	      "s3:PutEncryptionConfiguration",
+	      "s3:DeleteEncryptionConfiguration"
+	    ],
+	    "Resource": "arn:aws:s3:::example-bucket"
+	  }]
+	}`))
+	if err != nil {
+		t.Fatalf("ParsePolicy failed: %v", err)
+	}
+
+	// Every change must name at least one action, or the test proves nothing.
+	if len(actions) == 0 {
+		t.Fatal("no actions parsed for the encryption configuration resource")
+	}
+	for _, change := range []string{"create", "read", "delete"} {
+		changeActions := actions[change]
+		if len(changeActions) == 0 {
+			t.Errorf("%s: no actions parsed", change)
+			continue
+		}
+		for _, action := range changeActions {
+			if !policy.Covers(action) {
+				t.Errorf("%s: policy does not cover %s", change, action)
+			}
+		}
 	}
 }
 

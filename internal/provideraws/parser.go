@@ -556,6 +556,11 @@ func s3SDKMethodNormalization(original string) string {
 		"PutBucketTagging":                   "PutBucketTagging",
 		"GetBucketTagging":                   "GetBucketTagging",
 		"DeleteBucketTagging":                "DeleteBucketTagging",
+		// The encryption calls name the operation, not the resource, so S3
+		// spells them ...EncryptionConfiguration in IAM.
+		"GetBucketEncryption":    "GetEncryptionConfiguration",
+		"PutBucketEncryption":    "PutEncryptionConfiguration",
+		"DeleteBucketEncryption": "DeleteEncryptionConfiguration",
 	}
 	if canonical, ok := s3Names[original]; ok {
 		return canonical
