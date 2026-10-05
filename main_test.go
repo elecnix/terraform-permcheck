@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/hcl"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
 // captureStdout runs fn while capturing everything written to os.Stdout.
@@ -679,5 +683,184 @@ func TestValidate_AutoDiscoverConfig(t *testing.T) {
 	}
 	if result["status"] != "ok" {
 		t.Errorf("expected status=ok via auto-discovered config, got %v", result["status"])
+	}
+}
+
+// TestStaticHCL_ValidatesDeletePermissions verifies that static HCL mode
+// (--terraform-root) validates delete and update operations, not just create.
+// A policy missing kms:ScheduleKeyDeletion (delete-only permission) should
+// be flagged, since the deploy role may need to destroy KMS keys.
+func TestStaticHCL_ValidatesDeletePermissions(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/main.tf", []byte(`
+resource "aws_kms_key" "example" {
+  description = "test"
+}
+`), 0644); err != nil {
+		t.Fatalf("write main.tf: %v", err)
+	}
+
+	// policy_create_only.json is a minimal policy that only covers
+	// KMS create operations — intentionally missing delete and update perms.
+	policyJSON := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["kms:CreateKey","kms:TagResource","kms:UntagResource","kms:CreateAlias","kms:DescribeKey","kms:GetKeyPolicy","kms:GetKeyRotationStatus","kms:ListResourceTags"],"Resource":"*"}]}`
+	policyPath := root + "/policy.json"
+	if err := os.WriteFile(policyPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	// Use --format github-annotations so output goes to stdout (capturable).
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if err != nil && !errors.Is(err, errGapsFound) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// Verify the delete-specific permission is flagged.
+	if !strings.Contains(out, "kms:ScheduleKeyDeletion") {
+		t.Errorf("expected kms:ScheduleKeyDeletion (delete-only) to be flagged as missing\ngot: %s", out)
+	}
+	// Verify it's correctly classified as a delete operation.
+	if !strings.Contains(out, "(delete)") {
+		t.Errorf("expected (delete) operation in output\ngot: %s", out)
+	}
+}
+
+// fakePermSchema is a test SchemaLike carrying a fixed permission map.
+type fakePermSchema struct {
+	perms map[string][]string
+}
+
+func (s fakePermSchema) GetPermissions() map[string][]string { return s.perms }
+
+func (s fakePermSchema) GetConditional() map[string]map[string]string { return nil }
+
+// fakePermResolver resolves terraform resource types from a fixed table.
+type fakePermResolver map[string]map[string][]string
+
+func (r fakePermResolver) Resolve(t string) (iam.SchemaLike, error) {
+	perms, ok := r[t]
+	if !ok {
+		return nil, errors.New("unknown type " + t)
+	}
+	return fakePermSchema{perms: perms}, nil
+}
+
+// staticOpChanges collapses changes to "type.change" for readable assertions.
+func staticOpChanges(changes []*plan.ResourceChange) []string {
+	out := make([]string, 0, len(changes))
+	for _, rc := range changes {
+		out = append(out, rc.Type+"."+rc.Change)
+	}
+	return out
+}
+
+// TestStaticChanges_OnlyEmitsOperationsWithDistinctPermissions verifies that
+// static mode emits a ResourceChange only for operations whose permissions add
+// something the create check does not already cover. An operation identical to
+// create would produce the same result, so three entries per resource type
+// would be noise.
+func TestStaticChanges_OnlyEmitsOperationsWithDistinctPermissions(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Type: "aws_kms_key", Name: "example", Attributes: []string{"description"}},
+	}
+	resolver := fakePermResolver{
+		"aws_kms_key": {
+			"create": {"kms:CreateKey", "kms:TagResource"},
+			"read":   {"kms:DescribeKey"},
+			"update": {"kms:CreateKey", "kms:TagResource", "kms:EnableKeyRotation"},
+			"delete": {"kms:ScheduleKeyDeletion"},
+		},
+	}
+
+	changes, checked := staticChanges(blocks, resolver)
+
+	want := []string{"aws_kms_key.create", "aws_kms_key.update", "aws_kms_key.delete"}
+	got := staticOpChanges(changes)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("changes = %v, want %v", got, want)
+	}
+	// One resource type, three operations: the count reports types, not entries.
+	if checked != 1 {
+		t.Errorf("checked = %d, want 1 resource type", checked)
+	}
+}
+
+// TestStaticChanges_SkipsOperationsCoveredByCreate verifies that operations
+// whose permissions are empty or already contained in the create set produce
+// no entry, so the output stays proportional.
+func TestStaticChanges_SkipsOperationsCoveredByCreate(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Type: "aws_s3_bucket", Name: "logs"},
+	}
+	resolver := fakePermResolver{
+		"aws_s3_bucket": {
+			"create": {"s3:CreateBucket", "s3:PutBucketWebsite"},
+			"update": {"s3:CreateBucket", "s3:PutBucketWebsite"},
+			"delete": nil,
+		},
+	}
+
+	changes, checked := staticChanges(blocks, resolver)
+
+	if got, want := staticOpChanges(changes), "aws_s3_bucket.create"; strings.Join(got, ",") != want {
+		t.Errorf("changes = %v, want [%s]", got, want)
+	}
+	if checked != 1 {
+		t.Errorf("checked = %d, want 1", checked)
+	}
+}
+
+// TestStaticChanges_SkipsUnresolvableTypes verifies that a type the resolver
+// cannot map produces no entry, and that a type repeated across several blocks
+// still counts once.
+func TestStaticChanges_SkipsUnresolvableTypes(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Type: "aws_s3_bucket", Name: "a"},
+		{Type: "aws_s3_bucket", Name: "b"},
+		{Type: "aws_unknown_service_thing", Name: "c"},
+	}
+	resolver := fakePermResolver{
+		"aws_s3_bucket": {"create": {"s3:CreateBucket"}},
+	}
+
+	changes, checked := staticChanges(blocks, resolver)
+
+	if got, want := staticOpChanges(changes), "aws_s3_bucket.create"; strings.Join(got, ",") != want {
+		t.Errorf("changes = %v, want [%s]", got, want)
+	}
+	if checked != 1 {
+		t.Errorf("checked = %d, want 1 (only the resolvable type was checked)", checked)
+	}
+}
+
+// TestStaticChanges_CarriesParsedAttributes verifies that every emitted entry
+// carries the parsed top-level attributes, so conditional permission filtering
+// works for update and delete as well as create.
+func TestStaticChanges_CarriesParsedAttributes(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Type: "aws_dynamodb_table", Name: "items", Attributes: []string{"name", "tags"}},
+	}
+	resolver := fakePermResolver{
+		"aws_dynamodb_table": {
+			"create": {"dynamodb:CreateTable"},
+			"delete": {"dynamodb:DeleteTable", "dynamodb:TagResource"},
+		},
+	}
+
+	changes, _ := staticChanges(blocks, resolver)
+
+	if len(changes) != 2 {
+		t.Fatalf("changes = %v, want 2 entries", staticOpChanges(changes))
+	}
+	for _, rc := range changes {
+		if !rc.Attributes["tags"] || !rc.Attributes["name"] || rc.Attributes["absent"] {
+			t.Errorf("%s attributes = %v, want name and tags set", rc.Change, rc.Attributes)
+		}
 	}
 }
