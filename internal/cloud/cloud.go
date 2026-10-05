@@ -8,6 +8,12 @@ type Schema struct {
 	TypeName    string
 	Permissions map[string][]string          // key: "create", "read", "update", "delete", "list" → action strings
 	Conditional map[string]map[string]string // op → action → condition attribute name (empty if unconditional)
+	// ChangeGated maps op → action → the attribute whose change gates the
+	// action (a d.HasChange guard in the provider). It is separate from
+	// Conditional because an action gated on presence is evaluated from the
+	// planned state, while an action gated on change is evaluated from the
+	// difference between prior and planned state.
+	ChangeGated map[string]map[string]string
 }
 
 // GetPermissions returns the permission map (implements iam.SchemaLike).
@@ -19,6 +25,13 @@ func (s *Schema) GetPermissions() map[string][]string {
 // op → action → gating attribute name (implements iam.SchemaLike).
 func (s *Schema) GetConditional() map[string]map[string]string {
 	return s.Conditional
+}
+
+// GetChangeGated returns the change-gated permission metadata, mapping
+// op → action → the attribute whose change gates the action
+// (implements iam.SchemaLike).
+func (s *Schema) GetChangeGated() map[string]map[string]string {
+	return s.ChangeGated
 }
 
 // Provider resolves cloud resource types to their required IAM permissions.

@@ -14,19 +14,36 @@ import (
 	"strings"
 )
 
+// ConditionKind says what a gated SDK call needs from its gating attribute.
+// The two kinds are evaluated from different data: presence from the planned
+// state, change from the difference between prior and planned state.
+type ConditionKind string
+
+const (
+	// ConditionPresence gates on the attribute being set, from a d.GetOk or
+	// d.Get guard.
+	ConditionPresence ConditionKind = "presence"
+	// ConditionChange gates on the attribute having changed, from a d.HasChange
+	// guard.
+	ConditionChange ConditionKind = "change"
+)
+
 // ExtractedAction represents an AWS IAM action extracted from a provider
-// source file, with metadata about whether it is conditionally called.
+// source file, with metadata about whether it is conditionally called and on
+// what.
 type ExtractedAction struct {
-	Action      string // e.g., "backup:CreateBackupVault"
-	Conditional bool   // true if this SDK call is inside a conditional block
-	Condition   string // attribute name guarding the call, e.g. "kms_key_arn"
+	Action        string        // e.g., "backup:CreateBackupVault"
+	Conditional   bool          // true if this SDK call is inside a conditional block
+	Condition     string        // attribute name guarding the call, e.g. "kms_key_arn"
+	ConditionKind ConditionKind // what the guard requires of that attribute; empty if unconditional
 }
 
 // helperCall records a helper function call and the conditional context at the
 // call site (e.g., if d.GetOk("replica") { removeSecretReplicas(...) }).
 type helperCall struct {
-	Name       string // helper function name
-	CondReason string // attribute from call-site d.GetOk/d.Get guard, empty if unconditional
+	Name       string        // helper function name
+	CondReason string        // attribute from call-site d.GetOk/d.Get/d.HasChange guard, empty if unconditional
+	CondKind   ConditionKind // kind of the call-site guard, empty if unconditional
 }
 
 // ParseResourceFile parses a Go source file from the terraform-provider-aws
@@ -34,7 +51,7 @@ type helperCall struct {
 //
 // It handles:
 // - Direct conn.Method() calls in CRUD function bodies
-// - Conditional calls gated by d.GetOk() or d.Get()
+// - Conditional calls gated by d.GetOk(), d.Get(), or d.HasChange()
 // - Helper function calls: retryCreateRole(ctx, conn, ...) → conn.CreateRole
 // - Recursive helper chains: findRoleByName → findRole → conn.GetRole
 // - Anonymous function bodies (via tfresource.RetryWhen)
@@ -57,9 +74,9 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 }
 
 // ParseResourceFileStructured parses a Go source file and returns extracted
-// actions with conditional metadata (whether the call is inside an if-statement
-// guarded by d.GetOk() or d.Get()). Follows helper function call chains
-// transitively within the same file.
+// actions with conditional metadata (whether the call sits inside a block gated
+// by d.GetOk(), d.Get(), or d.HasChange(), and on which attribute). Follows
+// helper function call chains transitively within the same file.
 func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, tfType+".go", src, parser.ParseComments)
@@ -160,8 +177,8 @@ func ParseResourceFileStructured(src string, tfType string, resourceName string)
 }
 
 // extractSDKCalls walks the body of a function and extracts all AWS SDK API
-// calls, distinguishing unconditional calls from those inside conditional
-// blocks (e.g., if d.GetOk("attribute") or d.Get(...)).
+// calls, distinguishing unconditional calls from those inside a block gated on
+// an attribute (e.g., if d.GetOk("attribute"), d.Get(...), d.HasChange(...)).
 func extractSDKCalls(fd *ast.FuncDecl) []ExtractedAction {
 	if fd.Body == nil {
 		return nil
@@ -177,12 +194,13 @@ type extractionState struct {
 	service    string
 	connVar    string
 	actions    []ExtractedAction
-	condDepth  int    // how many conditional if-blocks deep we are
-	condReason string // attribute name from the innermost conditional guard
+	condDepth  int           // how many conditional if-blocks deep we are
+	condReason string        // attribute name from the innermost conditional guard
+	condKind   ConditionKind // kind of that guard
 }
 
-// walkWithConditionals recursively walks an AST node, tracking conditional
-// context from if-statements that gate on d.GetOk() or d.Get().
+// walkWithConditionals recursively walks an AST node, tracking the guard
+// context from if-statements that gate on d.GetOk(), d.Get(), or d.HasChange().
 func walkWithConditionals(node ast.Node, state *extractionState) {
 	if node == nil {
 		return
@@ -202,13 +220,14 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 		savedConnVar := state.connVar
 		savedService := state.service
 
-		// Check if this if-statement is conditional on d.GetOk() or d.Get()
-		condAttr := extractConditionAttribute(n)
-		if condAttr != "" {
+		// Check if this if-statement gates the body on an attribute
+		guard := extractConditionGuard(n)
+		if guard.Attribute != "" {
 			// Enter conditional context
 			state.condDepth++
 			if state.condReason == "" {
-				state.condReason = condAttr
+				state.condReason = guard.Attribute
+				state.condKind = guard.Kind
 			}
 
 			// Walk body inside conditional context
@@ -221,6 +240,7 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 			state.condDepth--
 			if state.condDepth == 0 {
 				state.condReason = ""
+				state.condKind = ""
 			}
 		} else {
 			// Normal if — walk without changing conditional state
@@ -257,9 +277,10 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 		// Check for SDK API call: conn.MethodName(ctx, ...)
 		if action := extractCallAction(n, state.connVar, state.service); action != "" {
 			ea := ExtractedAction{
-				Action:      action,
-				Conditional: state.condDepth > 0,
-				Condition:   state.condReason,
+				Action:        action,
+				Conditional:   state.condDepth > 0,
+				Condition:     state.condReason,
+				ConditionKind: state.condKind,
 			}
 			state.actions = append(state.actions, ea)
 			return
@@ -306,70 +327,100 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 	}
 }
 
-// extractConditionAttribute checks if an if-statement's condition involves
-// d.GetOk("attribute") or d.Get("attribute") and returns the attribute name.
-func extractConditionAttribute(ifStmt *ast.IfStmt) string {
+// condGuard is a gating attribute found on an if-statement, with the kind of
+// gate the provider applies to it.
+type condGuard struct {
+	Attribute string
+	Kind      ConditionKind
+}
+
+// extractConditionGuard checks if an if-statement's condition involves a
+// d.GetOk("attr"), d.Get("attr"), or d.HasChange("attr") guard and returns the
+// gating attribute together with the kind of gate.
+func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
 	// Check Init statement: if v, ok := d.GetOk("attr"); ok { ...
 	if ifStmt.Init != nil {
 		if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
 			for _, rhs := range assign.Rhs {
-				if attr := extractGetOkAttribute(rhs); attr != "" {
-					return attr
+				if guard := extractGuardAttribute(rhs); guard.Attribute != "" {
+					return guard
 				}
 			}
 		}
 	}
 
 	// Check condition expression: d.Get("attr").(bool)
-	// The condition may be wrapped in a TypeAssertExpr
+	// The condition may be wrapped in a type assertion or a negation.
 	cond := ifStmt.Cond
 	if ta, ok := cond.(*ast.TypeAssertExpr); ok {
 		cond = ta.X
 	}
-	if attr := extractGetOkAttribute(cond); attr != "" {
-		return attr
-	}
-
-	return ""
+	return extractGuardAttribute(cond)
 }
 
-// extractGetOkAttribute checks if an expression is d.GetOk("attr") or
-// d.Get("attr") and returns the attribute name.
-func extractGetOkAttribute(expr ast.Expr) string {
+// extractGuardAttribute checks if an expression is d.GetOk("attr"),
+// d.Get("attr"), or d.HasChange("attr") on the resource data and returns the
+// attribute name with the kind of gate. Parenthesised and negated expressions
+// are unwrapped, so `!d.HasChange("attr")` reads the same as the plain form.
+func extractGuardAttribute(expr ast.Expr) condGuard {
+	expr = unwrapExpr(expr)
+
 	call, ok := expr.(*ast.CallExpr)
 	if !ok {
-		return ""
+		return condGuard{}
 	}
 
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return ""
+		return condGuard{}
 	}
 
 	// Must be a method call on something named "d"
 	ident, ok := sel.X.(*ast.Ident)
 	if !ok || ident.Name != "d" {
-		return ""
+		return condGuard{}
 	}
 
-	// Method must be GetOk or Get
-	method := sel.Sel.Name
-	if method != "GetOk" && method != "Get" {
-		return ""
+	// Map the guard method to the kind of gate it applies. Only the
+	// single-attribute forms count: d.HasChanges spans several attributes and
+	// d.HasChangesExcept is a filter, so neither names one gating attribute.
+	var kind ConditionKind
+	switch sel.Sel.Name {
+	case "GetOk", "Get":
+		kind = ConditionPresence
+	case "HasChange":
+		kind = ConditionChange
+	default:
+		return condGuard{}
 	}
 
 	// First argument must be a string literal
 	if len(call.Args) < 1 {
-		return ""
+		return condGuard{}
 	}
 
 	bl, ok := call.Args[0].(*ast.BasicLit)
 	if !ok || bl.Kind != token.STRING {
-		return ""
+		return condGuard{}
 	}
 
 	// Return the attribute name without quotes
-	return strings.Trim(bl.Value, "\"")
+	return condGuard{Attribute: strings.Trim(bl.Value, "\""), Kind: kind}
+}
+
+// unwrapExpr strips parentheses and negations from an expression, so a guard
+// written as `!(d.HasChange("attr"))` or `!d.HasChange("attr")` is recognized.
+func unwrapExpr(expr ast.Expr) ast.Expr {
+	for {
+		switch n := expr.(type) {
+		case *ast.ParenExpr:
+			expr = n.X
+		case *ast.UnaryExpr:
+			expr = n.X
+		default:
+			return expr
+		}
+	}
 }
 
 // findClientAssignment detects a client connection assignment like:
@@ -680,6 +731,7 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 				if out[i].Action == ea.Action && !ea.Conditional {
 					out[i].Conditional = false
 					out[i].Condition = ""
+					out[i].ConditionKind = ""
 				}
 			}
 		}
@@ -803,6 +855,7 @@ type findHelperState struct {
 	helpers    []helperCall
 	condDepth  int
 	condReason string
+	condKind   ConditionKind
 }
 
 // walkForHelpers is a recursive AST walker that finds helper function calls
@@ -827,13 +880,15 @@ func walkForHelpers(node ast.Node, state *findHelperState) {
 		// Save state for restoration after the if-block
 		savedCondDepth := state.condDepth
 		savedCondReason := state.condReason
+		savedCondKind := state.condKind
 
-		// Check if this if-statement is conditional on d.GetOk() or d.Get()
-		condAttr := extractConditionAttribute(n)
-		if condAttr != "" {
+		// Check if this if-statement gates the body on an attribute
+		guard := extractConditionGuard(n)
+		if guard.Attribute != "" {
 			state.condDepth++
 			if state.condReason == "" {
-				state.condReason = condAttr
+				state.condReason = guard.Attribute
+				state.condKind = guard.Kind
 			}
 
 			walkForHelpers(n.Body, state)
@@ -842,6 +897,7 @@ func walkForHelpers(node ast.Node, state *findHelperState) {
 			state.condDepth--
 			if state.condDepth == 0 {
 				state.condReason = ""
+				state.condKind = ""
 			}
 		} else {
 			walkForHelpers(n.Body, state)
@@ -851,9 +907,10 @@ func walkForHelpers(node ast.Node, state *findHelperState) {
 		// Restore state (inner if-blocks might have changed it)
 		state.condDepth = savedCondDepth
 		state.condReason = savedCondReason
+		state.condKind = savedCondKind
 
 	case *ast.CallExpr:
-		if hc := findHelperCall(n, state.connVar, state.f, state.condReason); hc != nil {
+		if hc := findHelperCall(n, state.connVar, state.f, state.condReason, state.condKind); hc != nil {
 			state.helpers = append(state.helpers, *hc)
 			return
 		}
@@ -902,8 +959,8 @@ func walkForHelpers(node ast.Node, state *findHelperState) {
 
 // findHelperCall checks if a CallExpr is a call to a helper function (defined
 // in the same file) that passes connVar. If so, returns a helperCall populated
-// with the current condReason.
-func findHelperCall(call *ast.CallExpr, connVar string, f *ast.File, condReason string) *helperCall {
+// with the current guard.
+func findHelperCall(call *ast.CallExpr, connVar string, f *ast.File, condReason string, condKind ConditionKind) *helperCall {
 	fnName := ""
 	switch fn := call.Fun.(type) {
 	case *ast.Ident:
@@ -920,7 +977,7 @@ func findHelperCall(call *ast.CallExpr, connVar string, f *ast.File, condReason 
 
 	for _, arg := range call.Args {
 		if ident, ok := arg.(*ast.Ident); ok && ident.Name == connVar {
-			return &helperCall{Name: fnName, CondReason: condReason}
+			return &helperCall{Name: fnName, CondReason: condReason, CondKind: condKind}
 		}
 	}
 
@@ -941,9 +998,9 @@ func funcDefinedInFile(f *ast.File, name string) bool {
 
 // resolveTransitiveExtracted recursively collects SDK calls from a function and
 // all helpers it transitively calls. When a helper is called at a call site
-// inside a conditional block (if d.GetOk("attr")), the call-site condition is
-// propagated to the helper's resolved actions — unless the helper already has
-// a more specific condition on the action itself.
+// inside a guarded block (if d.GetOk("attr") or if d.HasChange("attr")), the
+// call-site guard is propagated to the helper's resolved actions — unless the
+// helper already has a more specific guard on the action itself.
 // Uses a depth limit (5) and a visited set to prevent infinite recursion.
 func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]ExtractedAction, callGraph map[string][]helperCall, visited map[string]bool, depth int) []ExtractedAction {
 	const maxHelperDepth = 5
@@ -978,6 +1035,7 @@ func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]Extrac
 					if helperActions[i].Condition == "" {
 						helperActions[i].Conditional = true
 						helperActions[i].Condition = hc.CondReason
+						helperActions[i].ConditionKind = hc.CondKind
 					}
 				}
 			}

@@ -526,3 +526,100 @@ func TestCloneAnnotatedTagNoise(t *testing.T) {
 		t.Logf("broken ref error (expected): %v", err)
 	}
 }
+
+// TestParseFileGateKinds checks that the two gate kinds stay apart on the
+// resolved schema: a d.GetOk guard lands in Conditional, a d.HasChange guard
+// lands in ChangeGated. A caller must be able to tell them apart, since plan
+// mode evaluates them from different data.
+func TestParseFileGateKinds(t *testing.T) {
+	dir := t.TempDir()
+
+	iamDir := filepath.Join(dir, "internal", "service", "iam")
+	if err := os.MkdirAll(iamDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	src := `
+// @SDKResource("aws_iam_role", name="Role")
+package iam
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+)
+
+func resourceRoleCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.CreateRole(ctx, &iam.CreateRoleInput{})
+	if err != nil { return nil }
+	return nil
+}
+
+func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+
+	_, err := conn.UpdateRole(ctx, &iam.UpdateRoleInput{})
+	if err != nil { return nil }
+
+	if d.HasChange("permissions_boundary") {
+		_, err := conn.PutRolePermissionsBoundary(ctx, &iam.PutRolePermissionsBoundaryInput{})
+		if err != nil { return nil }
+	}
+
+	if v, ok := d.GetOk("description"); ok {
+		_ = v
+		_, err := conn.DeleteRolePolicy(ctx, &iam.DeleteRolePolicyInput{})
+		if err != nil { return nil }
+	}
+
+	return nil
+}
+`
+	if err := os.WriteFile(filepath.Join(iamDir, "role.go"), []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewSourceProviderWithPath(dir)
+	if err := p.Ensure(); err != nil {
+		t.Fatalf("Ensure failed: %v", err)
+	}
+
+	schema, err := p.Resolve("aws_iam_role")
+	if err != nil {
+		t.Fatalf("resolve aws_iam_role: %v", err)
+	}
+
+	updatePerms := schema.GetPermissions()["update"]
+	for _, action := range []string{
+		"iam:UpdateRole",
+		"iam:PutRolePermissionsBoundary",
+		"iam:DeleteRolePolicy",
+	} {
+		if !containsAction(updatePerms, action) {
+			t.Errorf("update: expected %s, got %v", action, updatePerms)
+		}
+	}
+
+	cond := schema.GetConditional()["update"]
+	if got := cond["iam:DeleteRolePolicy"]; got != "description" {
+		t.Errorf("Conditional[update][iam:DeleteRolePolicy] = %q, want description", got)
+	}
+	if _, ok := cond["iam:PutRolePermissionsBoundary"]; ok {
+		t.Error("a change-gated action must not appear in Conditional")
+	}
+	if _, ok := cond["iam:UpdateRole"]; ok {
+		t.Error("an unconditional action must not appear in Conditional")
+	}
+
+	changed := schema.GetChangeGated()["update"]
+	if got := changed["iam:PutRolePermissionsBoundary"]; got != "permissions_boundary" {
+		t.Errorf("ChangeGated[update][iam:PutRolePermissionsBoundary] = %q, want permissions_boundary", got)
+	}
+	if _, ok := changed["iam:DeleteRolePolicy"]; ok {
+		t.Error("a presence-gated action must not appear in ChangeGated")
+	}
+	if _, ok := changed["iam:UpdateRole"]; ok {
+		t.Error("an unconditional action must not appear in ChangeGated")
+	}
+}

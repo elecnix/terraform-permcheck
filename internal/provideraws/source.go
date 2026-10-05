@@ -287,25 +287,37 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		return
 	}
 
-	// Build the cloud.Schema with both Permissions and Conditional metadata
+	// Build the cloud.Schema with permissions plus both gate kinds: presence
+	// gates (d.GetOk) and change gates (d.HasChange).
 	schema := &cloud.Schema{
 		TypeName:    tfType,
 		Permissions: make(map[string][]string),
 		Conditional: make(map[string]map[string]string),
+		ChangeGated: make(map[string]map[string]string),
 	}
 
 	for op, eas := range actions {
 		perms := make([]string, 0, len(eas))
 		conds := make(map[string]string, len(eas))
+		changes := make(map[string]string, len(eas))
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
-			if ea.Conditional && ea.Condition != "" {
+			if !ea.Conditional || ea.Condition == "" {
+				continue
+			}
+			switch ea.ConditionKind {
+			case ConditionChange:
+				changes[ea.Action] = ea.Condition
+			default:
 				conds[ea.Action] = ea.Condition
 			}
 		}
 		schema.Permissions[op] = perms
 		if len(conds) > 0 {
 			schema.Conditional[op] = conds
+		}
+		if len(changes) > 0 {
+			schema.ChangeGated[op] = changes
 		}
 	}
 
@@ -342,6 +354,9 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 	// Ensure Conditional map exists even if no entries for this op.
 	if schema.Conditional == nil {
 		schema.Conditional = make(map[string]map[string]string)
+	}
+	if schema.ChangeGated == nil {
+		schema.ChangeGated = make(map[string]map[string]string)
 	}
 	for _, action := range actions {
 		if !existing[action] {
