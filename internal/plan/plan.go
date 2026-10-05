@@ -48,6 +48,15 @@ type ResourceChange struct {
 	// ["aws_secretsmanager_secret.b.id", "aws_secretsmanager_secret.b"]).
 	// Nil when no reference data is available (static HCL mode).
 	References map[string][]string
+
+	// Configured records which top-level attributes the author wrote, taken
+	// from the plan's configuration section: it lists an attribute only when
+	// the configuration sets it. The gap to the state is what separates a
+	// configured attribute from one holding a default — an unconfigured
+	// version_stages still reads as ["AWSCURRENT"] in the prior state. It is
+	// nil when the plan carries no configuration section, meaning the set of
+	// configured attributes is unknown.
+	Configured map[string]bool
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -93,9 +102,10 @@ type tfModuleCall struct {
 }
 
 type tfResourceChange struct {
-	Type   string `json:"type"`
-	Name   string `json:"name"`
-	Change struct {
+	ModuleAddress string `json:"module_address"`
+	Type          string `json:"type"`
+	Name          string `json:"name"`
+	Change        struct {
 		Actions      []string        `json:"actions"`
 		Before       json.RawMessage `json:"before"`
 		After        json.RawMessage `json:"after"`
@@ -157,6 +167,7 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			ChangedAttributes: changedAttributes(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown),
 			AttributeValues:   attributeStringValues(attrSource),
 			References:        resourceReferences(plan.Configuration, rc.Type, rc.Name),
+			Configured:        configuredAttributes(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
 		})
 	}
 	return changes, nil
@@ -175,6 +186,90 @@ func resourceReferences(cfg *tfConfiguration, resType, resName string) map[strin
 		return nil
 	}
 	return refs
+}
+
+// configuredAttributes returns the set of top-level attributes a resource's
+// configuration writes. The module address picks the module instance the
+// resource lives in, so two modules declaring the same type and name each read
+// their own configuration. Returns nil when the plan carries no configuration
+// section or the resource isn't found, which reads as "unknown", not "none".
+func configuredAttributes(cfg *tfConfiguration, moduleAddr, resType, resName string) map[string]bool {
+	if cfg == nil || cfg.RootModule == nil {
+		return nil
+	}
+	m := moduleForAddress(cfg.RootModule, moduleAddr)
+	if m == nil {
+		return nil
+	}
+	for _, r := range m.Resources {
+		if r.Mode != "" && r.Mode != "managed" {
+			continue
+		}
+		if r.Type != resType || r.Name != resName {
+			continue
+		}
+		// A resource in the configuration with no expressions is configured
+		// with nothing, which is not the same as absent from it.
+		configured := make(map[string]bool, len(r.Expressions))
+		for attr := range r.Expressions {
+			configured[attr] = true
+		}
+		return configured
+	}
+	return nil
+}
+
+// moduleForAddress follows a resource change's module_address (for example
+// `module.a[0].module.b["k"]`) down the configuration's module calls. Instance
+// keys are dropped: the configuration describes a module call, not its
+// instances. Returns nil when a module in the path is not in the configuration.
+func moduleForAddress(root *tfModule, addr string) *tfModule {
+	m := root
+	for _, name := range moduleCallNames(addr) {
+		mc, ok := m.ModuleCalls[name]
+		if !ok {
+			return nil
+		}
+		next := mc.Module
+		m = &next
+	}
+	return m
+}
+
+// moduleCallNames returns the module call names in a module address, in order,
+// without instance keys. It splits on dots outside brackets, since a key may
+// itself contain dots.
+func moduleCallNames(addr string) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i := 0; i <= len(addr); i++ {
+		if i < len(addr) {
+			switch addr[i] {
+			case '[':
+				depth++
+			case ']':
+				depth--
+			}
+			if addr[i] != '.' || depth > 0 {
+				continue
+			}
+		}
+		parts = append(parts, addr[start:i])
+		start = i + 1
+	}
+
+	var names []string
+	for i := 0; i+1 < len(parts); i += 2 {
+		if parts[i] != "module" {
+			return nil
+		}
+		name := parts[i+1]
+		if j := strings.IndexByte(name, '['); j >= 0 {
+			name = name[:j]
+		}
+		names = append(names, name)
+	}
+	return names
 }
 
 // referencesInModule searches a config module (recursively) for the resource

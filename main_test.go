@@ -741,6 +741,8 @@ func (s fakePermSchema) GetPermissions() map[string][]string { return s.perms }
 func (s fakePermSchema) GetConditional() map[string]map[string]string { return nil }
 func (s fakePermSchema) GetChangeGated() map[string]map[string]string { return nil }
 
+func (s fakePermSchema) GetValueConditional() map[string]map[string]bool { return nil }
+
 // fakePermResolver resolves terraform resource types from a fixed table.
 type fakePermResolver map[string]map[string][]string
 

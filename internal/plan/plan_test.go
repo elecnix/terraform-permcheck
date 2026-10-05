@@ -749,3 +749,205 @@ func TestParseChangedAttributes(t *testing.T) {
 		})
 	}
 }
+
+func TestParseConfiguredAttributes(t *testing.T) {
+	// A destroy plan: the configuration section keeps only the attributes the
+	// author wrote, while the prior state carries every computed default. The
+	// gap between the two tells a defaulted attribute from a configured one.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {
+					"actions": ["delete"],
+					"before": {"id": "sv-1", "version_stages": ["AWSCURRENT"]}
+				}
+			},
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "c",
+				"change": {
+					"actions": ["delete"],
+					"before": {"id": "sv-2", "version_stages": ["AWSCURRENT", "AWSPREVIOUS"]}
+				}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "b",
+						"expressions": {"secret_string": {"constant_value": "placeholder"}}
+					},
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "c",
+						"expressions": {
+							"secret_string": {"constant_value": "placeholder"},
+							"version_stages": {"constant_value": ["AWSPREVIOUS"]}
+						}
+					}
+				]
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	// b: only secret_string written, so version_stages holds its default.
+	if changes[0].Configured["version_stages"] {
+		t.Error("version_stages should not count as configured for b")
+	}
+	if !changes[0].Configured["secret_string"] {
+		t.Error("secret_string should count as configured for b")
+	}
+
+	// c: version_stages written, so the call's guard can turn true.
+	if !changes[1].Configured["version_stages"] {
+		t.Error("version_stages should count as configured for c")
+	}
+}
+
+func TestParseConfiguredAttributesAbsent(t *testing.T) {
+	// Without a configuration section, nothing is known about what the author
+	// wrote, so Configured stays nil and callers must not treat it as absent.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {"actions": ["delete"], "before": {"id": "sv-1"}}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured != nil {
+		t.Errorf("expected nil Configured when configuration is absent, got %v", changes[0].Configured)
+	}
+}
+
+func TestParseConfiguredAttributesCreate(t *testing.T) {
+	// A create keeps the same rule: the configuration section, not the planned
+	// state, records what the author wrote.
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_secretsmanager_secret_version",
+				"name": "b",
+				"change": {
+					"actions": ["create"],
+					"after": {"version_stages": ["AWSCURRENT"], "secret_string": "placeholder"}
+				}
+			}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{
+						"mode": "managed",
+						"type": "aws_secretsmanager_secret_version",
+						"name": "b",
+						"expressions": {"secret_string": {"constant_value": "placeholder"}}
+					}
+				]
+			}
+		}
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured["version_stages"] {
+		t.Error("version_stages should not count as configured when the author left it out")
+	}
+}
+
+func TestParseConfiguredAttributesIgnoresDataSource(t *testing.T) {
+	// A data source sharing the managed resource's type and name must not
+	// supply the configured set.
+	raw := []byte(`{
+		"resource_changes": [
+			{"type": "aws_secretsmanager_secret_version", "name": "b",
+			 "change": {"actions": ["delete"], "before": {"version_stages": ["AWSCURRENT"]}}}
+		],
+		"configuration": {"root_module": {"resources": [
+			{"mode": "data", "type": "aws_secretsmanager_secret_version", "name": "b",
+			 "expressions": {"version_stages": {"constant_value": ["AWSPREVIOUS"]}}},
+			{"mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "b",
+			 "expressions": {"secret_string": {"constant_value": "x"}}}
+		]}}
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured["version_stages"] {
+		t.Error("data source expressions leaked into the managed resource's configured set")
+	}
+	if !changes[0].Configured["secret_string"] {
+		t.Error("managed resource expressions should be configured")
+	}
+}
+
+func TestParseConfiguredAttributesSameNameInTwoModules(t *testing.T) {
+	// Two module instances declare the same type and name; each change must
+	// read its own module's configuration, picked by module_address.
+	raw := []byte(`{
+		"resource_changes": [
+			{"module_address": "module.second", "type": "aws_secretsmanager_secret_version", "name": "this",
+			 "change": {"actions": ["delete"], "before": {"version_stages": ["AWSCURRENT"]}}},
+			{"module_address": "module.outer[0].module.inner[\"k\"]", "type": "aws_secretsmanager_secret_version", "name": "this",
+			 "change": {"actions": ["delete"], "before": {"version_stages": ["AWSCURRENT"]}}},
+			{"type": "aws_secretsmanager_secret_version", "name": "this",
+			 "change": {"actions": ["delete"], "before": {"version_stages": ["AWSCURRENT"]}}}
+		],
+		"configuration": {"root_module": {
+			"resources": [
+				{"mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "this",
+				 "expressions": {"secret_string": {"constant_value": "root"}}}
+			],
+			"module_calls": {
+				"first": {"module": {"resources": [
+					{"mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "this",
+					 "expressions": {"version_stages": {"constant_value": ["AWSPREVIOUS"]}}}
+				]}},
+				"second": {"module": {"resources": [
+					{"mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "this",
+					 "expressions": {"secret_string": {"constant_value": "second"}}}
+				]}},
+				"outer": {"module": {"module_calls": {"inner": {"module": {"resources": [
+					{"mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "this",
+					 "expressions": {"version_stages": {"constant_value": ["AWSPREVIOUS"]}}}
+				]}}}}}
+			}
+		}}
+	}`)
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes[0].Configured["version_stages"] || !changes[0].Configured["secret_string"] {
+		t.Errorf("module.second read the wrong module: %v", changes[0].Configured)
+	}
+	if !changes[1].Configured["version_stages"] {
+		t.Errorf("nested indexed module address not resolved: %v", changes[1].Configured)
+	}
+	if changes[2].Configured["version_stages"] || !changes[2].Configured["secret_string"] {
+		t.Errorf("root resource read a module's configuration: %v", changes[2].Configured)
+	}
+}
