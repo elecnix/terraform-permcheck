@@ -37,8 +37,11 @@ type helperCall struct {
 // - Conditional calls gated by d.GetOk() or d.Get()
 // - Helper function calls: retryCreateRole(ctx, conn, ...) → conn.CreateRole
 // - Recursive helper chains: findRoleByName → findRole → conn.GetRole
-// - Anonymous function bodies (via tfresource.RetryWhen)
 // - Function return following (Create returns Read → include Read permissions)
+//
+// It does not descend into anonymous function bodies, so SDK calls made inside
+// a closure (for example the function passed to tfresource.RetryWhen) are not
+// reported.
 //
 // Returns all actions (both unconditional and conditional) as plain strings.
 func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
@@ -167,23 +170,74 @@ func extractSDKCalls(fd *ast.FuncDecl) []ExtractedAction {
 		return nil
 	}
 
-	state := &extractionState{}
-	walkWithConditionals(fd.Body, state)
-	return state.actions
+	ctx := &walkContext{}
+	obs := &sdkCallObserver{}
+	walkBody(fd.Body, ctx, obs)
+	return obs.actions
 }
 
-// extractionState tracks the current state during conditional-aware AST walking.
-type extractionState struct {
-	service    string
-	connVar    string
-	actions    []ExtractedAction
+// walkContext is the state the traversal owns: how many conditional blocks
+// deep the traversal is, the attribute name of the guard that put it there,
+// and the connection variable and service currently in scope. Observers read
+// it to label what they find; the traversal restores it when an if-statement
+// ends.
+type walkContext struct {
 	condDepth  int    // how many conditional if-blocks deep we are
-	condReason string // attribute name from the innermost conditional guard
+	condReason string // attribute name from the outermost conditional guard
+	connVar    string // connection variable in scope, e.g. "conn"
+	service    string // AWS service connVar talks to, e.g. "backup"
 }
 
-// walkWithConditionals recursively walks an AST node, tracking conditional
-// context from if-statements that gate on d.GetOk() or d.Get().
-func walkWithConditionals(node ast.Node, state *extractionState) {
+// walker observes one traversal of a function body. The traversal owns body
+// walking and conditional tracking; an observer only decides what to do with
+// the call expressions and assignments it is handed, and never sees the
+// recursion itself.
+//
+// Each observer gets its own traversal pass, so an observer that consumes a
+// call expression prunes exactly the subtree it pruned when the traversal was
+// specialised for that observer alone.
+type walker interface {
+	// onCall is called for every call expression the traversal reaches.
+	// Returning true means the observer consumed the node, and the traversal
+	// will not descend into the call's arguments.
+	onCall(call *ast.CallExpr, ctx *walkContext) bool
+
+	// onAssign is called for every assignment statement, before the traversal
+	// descends into its operands.
+	onAssign(assign *ast.AssignStmt, ctx *walkContext)
+}
+
+// sdkCallObserver collects the AWS SDK calls the traversal reaches, each tagged
+// with the conditional context it was reached under.
+type sdkCallObserver struct {
+	actions []ExtractedAction
+}
+
+func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
+	// SDK API call: conn.MethodName(ctx, ...)
+	action := extractCallAction(call, ctx.connVar, ctx.service)
+	if action == "" {
+		return false
+	}
+	o.actions = append(o.actions, ExtractedAction{
+		Action:      action,
+		Conditional: ctx.condDepth > 0,
+		Condition:   ctx.condReason,
+	})
+	return true
+}
+
+func (o *sdkCallObserver) onAssign(assign *ast.AssignStmt, ctx *walkContext) {
+	if svc, conn := findClientAssignment(assign); svc != "" {
+		ctx.service = svc
+		ctx.connVar = conn
+	}
+}
+
+// walkBody is the single AST traversal of this package. It walks statement
+// bodies and tracks conditional context from if-statements that gate on
+// d.GetOk() or d.Get(), reporting call expressions and assignments to obs.
+func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 	if node == nil {
 		return
 	}
@@ -191,118 +245,95 @@ func walkWithConditionals(node ast.Node, state *extractionState) {
 	switch n := node.(type) {
 	case *ast.BlockStmt:
 		for _, stmt := range n.List {
-			walkWithConditionals(stmt, state)
+			walkBody(stmt, ctx, obs)
 		}
 
 	case *ast.ExprStmt:
-		walkWithConditionals(n.X, state)
+		walkBody(n.X, ctx, obs)
 
 	case *ast.IfStmt:
-		// Save current connVar/service so they can be restored after the if-block
-		savedConnVar := state.connVar
-		savedService := state.service
+		// Save the whole context so nested guards and nested client
+		// assignments cannot leak out of the block.
+		saved := *ctx
 
-		// Check if this if-statement is conditional on d.GetOk() or d.Get()
-		condAttr := extractConditionAttribute(n)
-		if condAttr != "" {
-			// Enter conditional context
-			state.condDepth++
-			if state.condReason == "" {
-				state.condReason = condAttr
+		// If this if-statement is conditional on d.GetOk() or d.Get(), enter
+		// conditional context. The outermost guard wins as the reason.
+		if condAttr := extractConditionAttribute(n); condAttr != "" {
+			ctx.condDepth++
+			if ctx.condReason == "" {
+				ctx.condReason = condAttr
 			}
-
-			// Walk body inside conditional context
-			walkWithConditionals(n.Body, state)
-
-			// Also walk else if present (also conditional, could be different attribute)
-			walkWithConditionals(n.Else, state)
-
-			// Leave conditional context
-			state.condDepth--
-			if state.condDepth == 0 {
-				state.condReason = ""
-			}
-		} else {
-			// Normal if — walk without changing conditional state
-			walkWithConditionals(n.Body, state)
-			walkWithConditionals(n.Else, state)
 		}
 
-		// Restore connVar/service in case inner assignments changed them
-		state.connVar = savedConnVar
-		state.service = savedService
+		// The body and the else branch (including an else-if chain) are
+		// walked in the same conditional context.
+		walkBody(n.Body, ctx, obs)
+		walkBody(n.Else, ctx, obs)
+
+		// Restore conditional depth/reason and connection scope.
+		*ctx = saved
 
 	case *ast.AssignStmt:
-		// Also walk the init statement of if-statements (which may contain d.GetOk)
-		// This is covered by the IfStmt.Init handling, but general assignments
-		// need to be checked for client assignments
-		if svc, conn := findClientAssignment(n); svc != "" {
-			state.service = svc
-			state.connVar = conn
-		}
-		// Walk children (RHS might have calls)
+		// The observer may install a new connection scope, as in
+		// conn := meta.(*conns.AWSClient).BackupClient(ctx).
+		obs.onAssign(n, ctx)
+		// Walk operands (the right-hand side might hold calls).
 		for _, expr := range n.Lhs {
-			walkWithConditionals(expr, state)
+			walkBody(expr, ctx, obs)
 		}
 		for _, expr := range n.Rhs {
-			walkWithConditionals(expr, state)
+			walkBody(expr, ctx, obs)
 		}
 
 	case *ast.ReturnStmt:
 		for _, expr := range n.Results {
-			walkWithConditionals(expr, state)
+			walkBody(expr, ctx, obs)
 		}
 
 	case *ast.CallExpr:
-		// Check for SDK API call: conn.MethodName(ctx, ...)
-		if action := extractCallAction(n, state.connVar, state.service); action != "" {
-			ea := ExtractedAction{
-				Action:      action,
-				Conditional: state.condDepth > 0,
-				Condition:   state.condReason,
-			}
-			state.actions = append(state.actions, ea)
+		if obs.onCall(n, ctx) {
 			return
 		}
-		// Walk arguments (recursive calls might contain more SDK calls)
+		// Walk arguments (recursive calls might contain more calls)
 		for _, arg := range n.Args {
-			walkWithConditionals(arg, state)
+			walkBody(arg, ctx, obs)
 		}
 
 	case *ast.ForStmt:
-		walkWithConditionals(n.Body, state)
+		walkBody(n.Body, ctx, obs)
 
 	case *ast.RangeStmt:
-		walkWithConditionals(n.Body, state)
+		walkBody(n.Body, ctx, obs)
 
 	case *ast.SwitchStmt:
-		walkWithConditionals(n.Body, state)
+		walkBody(n.Body, ctx, obs)
 
 	case *ast.CaseClause:
 		for _, stmt := range n.Body {
-			walkWithConditionals(stmt, state)
+			walkBody(stmt, ctx, obs)
 		}
 
 	case *ast.DeferStmt:
-		walkWithConditionals(n.Call, state)
+		walkBody(n.Call, ctx, obs)
 
 	case *ast.GoStmt:
-		walkWithConditionals(n.Call, state)
+		walkBody(n.Call, ctx, obs)
 
 	case *ast.LabeledStmt:
-		walkWithConditionals(n.Stmt, state)
+		walkBody(n.Stmt, ctx, obs)
 
 	case *ast.SendStmt:
-		// Channel send — no SDK calls here
+		// Channel send — the value expression is not walked
 
 	case *ast.IncDecStmt:
-		// Increment/decrement — no SDK calls here
+		// Increment/decrement — nothing to report
 
 	case *ast.BranchStmt:
 		// break, continue, goto
 
 	default:
-		// Ident, Literal, etc. — not relevant
+		// Ident, Literal, FuncLit, etc. — nothing to report. Anonymous
+		// function bodies are deliberately not walked.
 	}
 }
 
@@ -697,15 +728,16 @@ func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) ([]ExtractedAction, string, s
 		return nil, "", ""
 	}
 
-	state := &extractionState{}
+	state := &walkContext{}
+	obs := &sdkCallObserver{}
 
 	// First, check for conn in function parameters (helper functions)
 	findConnParam(fd, &state.connVar, &state.service)
 
 	// Then walk the body for client assignments and SDK calls
-	walkWithConditionals(fd.Body, state)
+	walkBody(fd.Body, state, obs)
 
-	return dedupActions(state.actions), state.connVar, state.service
+	return dedupActions(obs.actions), state.connVar, state.service
 }
 
 // findConnParam checks function parameters for a conn variable with a typed
@@ -788,117 +820,36 @@ func findHelperCalls(fd *ast.FuncDecl, connVar string, f *ast.File) []helperCall
 		return nil
 	}
 
-	state := &findHelperState{
+	obs := &helperCallObserver{
 		connVar: connVar,
 		f:       f,
 	}
-	walkForHelpers(fd.Body, state)
-	return state.helpers
+	walkBody(fd.Body, &walkContext{}, obs)
+	return obs.helpers
 }
 
-// findHelperState tracks state while walking for helper calls.
-type findHelperState struct {
-	connVar    string
-	f          *ast.File
-	helpers    []helperCall
-	condDepth  int
-	condReason string
+// helperCallObserver collects the calls to functions defined in the same file
+// that receive the connection variable, each tagged with the conditional reason
+// in force at the call site (e.g. removeSecretReplicas(ctx, conn, id) reached
+// from inside if _, ok := d.GetOk("replica"); ok).
+type helperCallObserver struct {
+	connVar string
+	f       *ast.File
+	helpers []helperCall
 }
 
-// walkForHelpers is a recursive AST walker that finds helper function calls
-// and records the conditional context at each call site. It mirrors the
-// structure of walkWithConditionals but records helper calls instead of
-// SDK calls.
-func walkForHelpers(node ast.Node, state *findHelperState) {
-	if node == nil {
-		return
+func (o *helperCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
+	hc := findHelperCall(call, o.connVar, o.f, ctx.condReason)
+	if hc == nil {
+		return false
 	}
-
-	switch n := node.(type) {
-	case *ast.BlockStmt:
-		for _, stmt := range n.List {
-			walkForHelpers(stmt, state)
-		}
-
-	case *ast.ExprStmt:
-		walkForHelpers(n.X, state)
-
-	case *ast.IfStmt:
-		// Save state for restoration after the if-block
-		savedCondDepth := state.condDepth
-		savedCondReason := state.condReason
-
-		// Check if this if-statement is conditional on d.GetOk() or d.Get()
-		condAttr := extractConditionAttribute(n)
-		if condAttr != "" {
-			state.condDepth++
-			if state.condReason == "" {
-				state.condReason = condAttr
-			}
-
-			walkForHelpers(n.Body, state)
-			walkForHelpers(n.Else, state)
-
-			state.condDepth--
-			if state.condDepth == 0 {
-				state.condReason = ""
-			}
-		} else {
-			walkForHelpers(n.Body, state)
-			walkForHelpers(n.Else, state)
-		}
-
-		// Restore state (inner if-blocks might have changed it)
-		state.condDepth = savedCondDepth
-		state.condReason = savedCondReason
-
-	case *ast.CallExpr:
-		if hc := findHelperCall(n, state.connVar, state.f, state.condReason); hc != nil {
-			state.helpers = append(state.helpers, *hc)
-			return
-		}
-		// Walk arguments (recursive calls might contain more helper calls)
-		for _, arg := range n.Args {
-			walkForHelpers(arg, state)
-		}
-
-	case *ast.ReturnStmt:
-		for _, expr := range n.Results {
-			walkForHelpers(expr, state)
-		}
-
-	case *ast.AssignStmt:
-		for _, expr := range n.Lhs {
-			walkForHelpers(expr, state)
-		}
-		for _, expr := range n.Rhs {
-			walkForHelpers(expr, state)
-		}
-
-	case *ast.ForStmt:
-		walkForHelpers(n.Body, state)
-
-	case *ast.RangeStmt:
-		walkForHelpers(n.Body, state)
-
-	case *ast.SwitchStmt:
-		walkForHelpers(n.Body, state)
-
-	case *ast.CaseClause:
-		for _, stmt := range n.Body {
-			walkForHelpers(stmt, state)
-		}
-
-	case *ast.DeferStmt:
-		walkForHelpers(n.Call, state)
-
-	case *ast.GoStmt:
-		walkForHelpers(n.Call, state)
-
-	case *ast.LabeledStmt:
-		walkForHelpers(n.Stmt, state)
-	}
+	o.helpers = append(o.helpers, *hc)
+	return true
 }
+
+// onAssign is a no-op: helper discovery only cares about call sites, but the
+// traversal reports assignments to every observer.
+func (o *helperCallObserver) onAssign(*ast.AssignStmt, *walkContext) {}
 
 // findHelperCall checks if a CallExpr is a call to a helper function (defined
 // in the same file) that passes connVar. If so, returns a helperCall populated
