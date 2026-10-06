@@ -277,7 +277,8 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		// If this if-statement gates on d.GetOk(), d.Get(), or
 		// d.HasChange(), enter conditional context. The outermost guard wins
 		// as the reason and the kind.
-		if guard := extractConditionGuard(n); guard.Attribute != "" {
+		guard := extractConditionGuard(n)
+		if guard.Attribute != "" {
 			ctx.condDepth++
 			if ctx.condReason == "" {
 				ctx.condReason = guard.Attribute
@@ -285,9 +286,16 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 			}
 		}
 
-		// The body and the else branch (including an else-if chain) are
-		// walked in the same conditional context.
+		// The body is walked in the guard's conditional context.
 		walkBody(n.Body, ctx, obs)
+
+		// The else branch (including an else-if chain) is walked in the same
+		// context, except after a d.HasChange guard: that branch runs when the
+		// attribute did NOT change, so inheriting the change gate would drop the
+		// call exactly when it runs. It takes the context from before the guard.
+		if guard.Kind == ConditionChange {
+			*ctx = saved
+		}
 		walkBody(n.Else, ctx, obs)
 
 		// Restore conditional depth/reason and connection scope.
@@ -438,18 +446,19 @@ func extractGuardAttribute(expr ast.Expr) condGuard {
 	return condGuard{Attribute: strings.Trim(bl.Value, "\""), Kind: kind}
 }
 
-// unwrapExpr strips parentheses and negations from an expression, so a guard
-// written as `!(d.HasChange("attr"))` or `!d.HasChange("attr")` is recognized.
+// unwrapExpr strips parentheses from an expression, so a guard written as
+// `(d.HasChange("attr"))` is recognized. It does not strip a negation: the body
+// of `if !d.HasChange("attr")` runs when the attribute did NOT change, so
+// reading it as a change gate would drop the call exactly when it runs. A
+// negated guard gates nothing the validator can evaluate, and its body stays
+// unconditional, which keeps the permission in the report.
 func unwrapExpr(expr ast.Expr) ast.Expr {
 	for {
-		switch n := expr.(type) {
-		case *ast.ParenExpr:
-			expr = n.X
-		case *ast.UnaryExpr:
-			expr = n.X
-		default:
+		paren, ok := expr.(*ast.ParenExpr)
+		if !ok {
 			return expr
 		}
+		expr = paren.X
 	}
 }
 

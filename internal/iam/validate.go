@@ -227,8 +227,9 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		for _, action := range required {
 			condAttr := conditional[action]
 			changeAttr := changeGated[action]
-			// Both gates must hold, so the report names both gating
-			// attributes — either one on its own can suppress the action.
+			// An action is reported only when every gate it carries holds, so a
+			// failing presence gate or a failing change gate each drops it. The
+			// tag names both gating attributes, since either can be the reason.
 			gateAttr := gateAttribute(condAttr, changeAttr)
 			service := strings.Split(action, ":")[0]
 

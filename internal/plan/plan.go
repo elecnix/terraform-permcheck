@@ -26,7 +26,9 @@ type ResourceChange struct {
 	// ChangedAttributes records which top-level attributes differ between the
 	// prior "before" state and the planned "after" state, following terraform's
 	// d.HasChange semantics. An attribute computed at apply time counts as
-	// changed, since terraform still applies a diff for it. It is nil when the
+	// changed, since terraform still applies a diff for it. A create or a
+	// replace measures against empty prior state, because the provider's Create
+	// starts from nothing. It is nil when the
 	// plan carries no planned state (a pure delete), meaning change is unknown.
 	// Used to gate permissions on whether an attribute changed.
 	ChangedAttributes map[string]bool
@@ -154,7 +156,7 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Name:              rc.Name,
 			Change:            action,
 			Attributes:        attributePresence(attrSource, afterUnknown),
-			ChangedAttributes: changedAttributes(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown),
+			ChangedAttributes: changedAttributes(changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
 			AttributeValues:   attributeStringValues(attrSource),
 			References:        resourceReferences(plan.Configuration, rc.Type, rc.Name),
 		})
@@ -239,6 +241,23 @@ func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
 	}
 
 	return present
+}
+
+// changeBaseline returns the prior state a change is measured against. A
+// replace destroys the old object and creates the new one from empty state, so
+// the provider's Create reads d.HasChange as true for every attribute it sets,
+// even one equal to the old value. The baseline for a replace is therefore
+// empty, the same as for a create; any other change measures against before.
+func changeBaseline(actions []string, before json.RawMessage) json.RawMessage {
+	var creates, deletes bool
+	for _, a := range actions {
+		creates = creates || a == "create"
+		deletes = deletes || a == "delete"
+	}
+	if creates && deletes {
+		return nil
+	}
+	return before
 }
 
 // changedAttributes reports which top-level attributes differ between the
