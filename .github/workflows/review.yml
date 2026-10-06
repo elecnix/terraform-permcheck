@@ -13,13 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Review this pull request with Cite
-        id: cite
-        # Cite exits non-zero for every verdict other than PASS, so a tool
-        # failure (check run "neutral") and a real finding (check run
-        # "failure") are indistinguishable by exit status. Its check run is the
-        # accurate surface, so this step is allowed to fail and the verdict is
-        # read back in the step below.
-        continue-on-error: true
         uses: elecnix/cite@1c0537ba7f8df4dc5db0651f609f6b8834167150  # v0.11.2
         with:
           # Conclude "neutral" rather than "failure" when Cite cannot evaluate a
@@ -69,50 +62,3 @@ jobs:
           model_api_key: ${{ vars.CITE_PROVIDER == 'openrouter' && secrets.MODEL_API_KEY || secrets.OLLAMA_API_KEY }}
           model_base_url: ${{ vars.CITE_PROVIDER == 'openrouter' && 'https://openrouter.ai/api/v1' || 'https://ollama.com/v1' }}
           model_id: ${{ vars.CITE_PROVIDER == 'openrouter' && 'deepseek/deepseek-v4-flash-0731' || 'deepseek-v4.1-flash' }}
-
-      # Mirror the "cite" check run into this job's exit code, so the job stops
-      # reporting a verdict Cite never reached as a failing review.
-      #
-      # Deliberately narrow. Only ONE shape of COULD_NOT_EVALUATE passes:
-      # "zero in-scope files", the path-filter-bypass shape, which is what Cite
-      # reports when the in-scope set came back empty — nothing was reviewed, so
-      # there is no unreviewed diff to protect. Every other COULD_NOT_EVALUATE
-      # (a parse failure, a provider error, a timeout) still fails the job, and
-      # so does a real finding, and so does a missing check run. Cite's own
-      # default is to fail closed on all of them; this narrows the escape hatch
-      # to the one case where failing closed protects nothing — a pull request
-      # that resolves to nothing to review.
-      #
-      # The reason is read from the check run's own summary rather than inferred
-      # from the conclusion, because the conclusion alone is "neutral" for every
-      # COULD_NOT_EVALUATE and cannot tell the shapes apart.
-      - name: Fail unless Cite cleared the diff or had nothing to review
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          runs=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100")
-          # last = newest, in case of a re-run
-          concl=$(jq -r '[.check_runs[] | select(.name == "cite")] | last | .conclusion // "absent"' <<<"$runs")
-          summary=$(jq -r '[.check_runs[] | select(.name == "cite")] | last | ((.output.title // "") + " " + (.output.summary // ""))' <<<"$runs")
-
-          case "$concl" in
-            success)
-              echo "cite: reviewed the diff and passed"
-              ;;
-            neutral)
-              if grep -qi 'zero in-scope files' <<<"$summary"; then
-                echo "cite: nothing in scope to review — not blocking"
-              else
-                echo "::error::cite could not evaluate this diff: ${summary:0:300}" >&2
-                exit 1
-              fi
-              ;;
-            *)
-              echo "::error::cite concluded '${concl}'; refusing to pass an unreviewed diff" >&2
-              exit 1
-              ;;
-          esac
