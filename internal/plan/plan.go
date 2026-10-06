@@ -372,6 +372,18 @@ func changedAttributes(before, after, afterUnknown json.RawMessage) map[string]b
 		}
 		changed[attr] = !sameJSONValue(beforeFields[attr], afterValue)
 	}
+
+	// An attribute the prior state carried that the planned state does not is a
+	// removal, and the provider's d.HasChange reports true for it — that is how
+	// a guard like d.HasChange("permissions_boundary") fires the delete-path
+	// call. A plan that omits the key rather than setting it to null would
+	// otherwise read as unchanged here, and the permission would be dropped.
+	// Erring toward "changed" keeps the permission, which is the safe side.
+	for attr := range beforeFields {
+		if _, present := afterFields[attr]; !present {
+			changed[attr] = true
+		}
+	}
 	return changed
 }
 
