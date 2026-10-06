@@ -222,10 +222,15 @@ func configuredAttributes(cfg *tfConfiguration, moduleAddr, resType, resName str
 // moduleForAddress follows a resource change's module_address (for example
 // `module.a[0].module.b["k"]`) down the configuration's module calls. Instance
 // keys are dropped: the configuration describes a module call, not its
-// instances. Returns nil when a module in the path is not in the configuration.
+// instances. Returns nil when a module in the path is not in the configuration
+// or the address is not a module address.
 func moduleForAddress(root *tfModule, addr string) *tfModule {
 	m := root
-	for _, name := range moduleCallNames(addr) {
+	names, ok := moduleCallNames(addr)
+	if !ok {
+		return nil
+	}
+	for _, name := range names {
 		mc, ok := m.ModuleCalls[name]
 		if !ok {
 			return nil
@@ -238,8 +243,12 @@ func moduleForAddress(root *tfModule, addr string) *tfModule {
 
 // moduleCallNames returns the module call names in a module address, in order,
 // without instance keys. It splits on dots outside brackets, since a key may
-// itself contain dots.
-func moduleCallNames(addr string) []string {
+// itself contain dots. It reports false for an address that is not a sequence
+// of `module.<name>` pairs, so a malformed address never resolves to a module.
+func moduleCallNames(addr string) ([]string, bool) {
+	if addr == "" {
+		return nil, true
+	}
 	var parts []string
 	depth, start := 0, 0
 	for i := 0; i <= len(addr); i++ {
@@ -259,9 +268,12 @@ func moduleCallNames(addr string) []string {
 	}
 
 	var names []string
-	for i := 0; i+1 < len(parts); i += 2 {
+	if len(parts)%2 != 0 {
+		return nil, false
+	}
+	for i := 0; i < len(parts); i += 2 {
 		if parts[i] != "module" {
-			return nil
+			return nil, false
 		}
 		name := parts[i+1]
 		if j := strings.IndexByte(name, '['); j >= 0 {
@@ -269,7 +281,7 @@ func moduleCallNames(addr string) []string {
 		}
 		names = append(names, name)
 	}
-	return names
+	return names, true
 }
 
 // referencesInModule searches a config module (recursively) for the resource

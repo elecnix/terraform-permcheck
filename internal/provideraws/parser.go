@@ -623,6 +623,9 @@ func isLengthCall(expr ast.Node) ast.Expr {
 
 	// len(v) — the builtin.
 	if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "len" {
+		if len(call.Args) != 1 {
+			return nil
+		}
 		return call.Args[0]
 	}
 
@@ -987,7 +990,15 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 		} else {
 			// If a duplicate exists and this one is unconditional, upgrade
 			for i := range out {
-				if out[i].Action == ea.Action && !ea.Conditional {
+				if out[i].Action != ea.Action {
+					continue
+				}
+				// A path that is not value-guarded needs the attribute's
+				// configuration, so the default no longer covers the action.
+				if !ea.ValueGuarded {
+					out[i].ValueGuarded = false
+				}
+				if !ea.Conditional {
 					out[i].Conditional = false
 					out[i].Condition = ""
 					out[i].ConditionKind = ""

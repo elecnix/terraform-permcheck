@@ -1250,8 +1250,8 @@ func TestExtractValueGuardAttribute(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "less-than zero is never true",
-			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() < 0 { foo() } }`,
+			name: "less than one is the empty case, not a non-emptiness test",
+			src:  `func f() { if v, ok := d.GetOk("rules"); ok && v.(*schema.Set).Len() < 1 { foo() } }`,
 			want: "",
 		},
 		{
@@ -1278,6 +1278,11 @@ func TestExtractValueGuardAttribute(t *testing.T) {
 			name: "mirrored one at most length",
 			src:  `func f() { if v, ok := d.GetOk("rules"); ok && 1 <= v.(*schema.Set).Len() { foo() } }`,
 			want: "rules",
+		},
+		{
+			name: "len with no argument is not an emptiness test",
+			src:  `func f() { if len() > 0 { foo() } }`,
+			want: "",
 		},
 		{
 			name: "length against length is not an emptiness test",
@@ -1367,5 +1372,69 @@ func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, me
 	both := got["secretsmanager:DeleteSecret"]
 	if both.Condition != "b" || !both.ValueGuarded {
 		t.Errorf("combined guard call = %+v, want Condition b, value-guarded", both)
+	}
+}
+
+func TestParseResourceFileStructured_ValueGuardUnderOuterGuard(t *testing.T) {
+	src := `
+package secretsmanager
+
+func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SecretsManagerClient(ctx)
+
+	if _, ok := d.GetOk("a"); ok {
+		if v, ok := d.GetOk("b"); ok && v.(*schema.Set).Len() > 0 {
+			conn.PutSecretValue(ctx, nil)
+		}
+	}
+	if d.HasChange("c") {
+		if v, ok := d.GetOk("b"); ok && v.(*schema.Set).Len() > 0 {
+			conn.UpdateSecretVersionStage(ctx, nil)
+		}
+	}
+	return nil
+}
+`
+	actions, err := ParseResourceFileStructured(src, "aws_secretsmanager_secret_version", "SecretVersion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ExtractedAction{}
+	for _, ea := range actions["delete"] {
+		got[ea.Action] = ea
+	}
+
+	// An outer presence or change guard keeps its reason and kind, and the
+	// inner value guard does not mark the call as satisfied by a default.
+	p := got["secretsmanager:PutSecretValue"]
+	if p.Condition != "a" || p.ConditionKind != ConditionPresence || p.ValueGuarded {
+		t.Errorf("under presence guard = %+v, want presence on a, not value-guarded", p)
+	}
+	c := got["secretsmanager:UpdateSecretVersionStage"]
+	if c.Condition != "c" || c.ConditionKind != ConditionChange || c.ValueGuarded {
+		t.Errorf("under change guard = %+v, want change on c, not value-guarded", c)
+	}
+}
+
+func TestDedupActions_ValueGuardedNeedsEveryOccurrence(t *testing.T) {
+	guarded := ExtractedAction{Action: "x:A", Conditional: true, Condition: "b", ConditionKind: ConditionPresence, ValueGuarded: true}
+
+	// An unconditional duplicate makes the action unconditional and unguarded.
+	got := dedupActions([]ExtractedAction{guarded, {Action: "x:A"}})
+	if len(got) != 1 || got[0].Conditional || got[0].ValueGuarded {
+		t.Errorf("unconditional duplicate = %+v, want unconditional and not value-guarded", got)
+	}
+
+	// A duplicate under a plain presence guard also needs the configuration.
+	plain := ExtractedAction{Action: "x:A", Conditional: true, Condition: "c", ConditionKind: ConditionPresence}
+	got = dedupActions([]ExtractedAction{guarded, plain})
+	if len(got) != 1 || got[0].ValueGuarded {
+		t.Errorf("presence-guarded duplicate = %+v, want not value-guarded", got)
+	}
+
+	// Two value-guarded occurrences stay value-guarded.
+	got = dedupActions([]ExtractedAction{guarded, guarded})
+	if len(got) != 1 || !got[0].ValueGuarded {
+		t.Errorf("both value-guarded = %+v, want value-guarded", got)
 	}
 }

@@ -951,3 +951,20 @@ func TestParseConfiguredAttributesSameNameInTwoModules(t *testing.T) {
 		t.Errorf("root resource read a module's configuration: %v", changes[2].Configured)
 	}
 }
+
+func TestModuleForAddress_RejectsMalformedAddresses(t *testing.T) {
+	root := &tfModule{ModuleCalls: map[string]tfModuleCall{
+		"a": {Module: tfModule{ModuleCalls: map[string]tfModuleCall{"b": {}}}},
+	}}
+	for _, addr := range []string{"data.foo.bar", "module.a.aws_instance.b", "module.a.module", "module.a.module.b.x", "module"} {
+		if m := moduleForAddress(root, addr); m != nil {
+			t.Errorf("moduleForAddress(%q) resolved a module, want nil", addr)
+		}
+	}
+	if moduleForAddress(root, "") != root {
+		t.Error("the empty address must resolve to the root module")
+	}
+	if moduleForAddress(root, `module.a[0].module.b["k"]`) == nil {
+		t.Error("a well-formed nested address must resolve")
+	}
+}
