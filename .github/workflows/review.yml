@@ -15,45 +15,6 @@ jobs:
       - name: Review this pull request with Cite
         uses: elecnix/cite@1c0537ba7f8df4dc5db0651f609f6b8834167150  # v0.11.2
         with:
-          # Conclude "neutral" rather than "failure" when Cite cannot evaluate a
-          # diff at all. A tool failure is not a finding.
-          #
-          # What this changes: the gate reports COULD_NOT_EVALUATE when it
-          # resolved zero files to review, and with the default
-          # tool_failure_blocks: true that red-lights the check. Zero in-scope
-          # files is treated as a possible path-filter bypass by design, so
-          # failing closed is the right default for a repository reviewing
-          # other people's pull requests. It is the wrong default here, where
-          # the only author is the repository owner.
-          #
-          # What it does NOT give up: a real finding (FOUND) still concludes
-          # failure and still blocks, unchanged. The verdict is still published
-          # truthfully as COULD_NOT_EVALUATE with its reason in the sticky
-          # state and the run log; only the check-run conclusion changes, so
-          # "no verdict" stops being read as a verdict. Every
-          # COULD_NOT_EVALUATE is still diagnosed rather than passed quietly,
-          # which is the point of keeping the verdict legible.
-          #
-          # Why it was needed: on 2026-10-05 four pull requests (#74, #84, #85,
-          # #86) went red on this check with
-          # "COULD_NOT_EVALUATE — zero in-scope files (path-filter bypass
-          # shape)". The diffs were not the problem and neither was the scope
-          # filter: the run log shows Cite resolved all 4 files of #86
-          # ("coverage: 0/4 api files complete=false") and every one ended in
-          # error with "rate_limited: HTTP 429: you (elecnix) have reached your
-          # monthly usage limit". A dead judge was vetoing verified-sound
-          # changes. This repository has no .github/cite.yml, so Cite runs on
-          # its built-in defaults and the scope filter scoped the whole diff
-          # correctly, which is exactly why the failure showed up as
-          # no-verdict rather than no-scope.
-          #
-          # Wiring note: the gate option is an ACTION INPUT, not a
-          # .github/cite.yml setting — it is wired input -> CLI flag -> gate
-          # option, so it belongs in this `with:` block. The input ships in
-          # v0.8.0 and later, so the pin above (v0.11.2) carries it. Same
-          # choice, and the same reasoning, as elecnix/cite's own review
-          # workflow.
-          tool_failure_blocks: false
           # Ollama Cloud is the default provider. Set the CITE_PROVIDER
           # repository variable to "openrouter" to switch this repository
           # back; both keys exist in every repository.
