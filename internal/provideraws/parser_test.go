@@ -1433,6 +1433,12 @@ func TestDedupActions_ValueGuardedNeedsEveryOccurrence(t *testing.T) {
 		t.Errorf("presence-guarded duplicate = %+v, want not value-guarded", got)
 	}
 
+	// The result does not depend on which occurrence comes first.
+	got = dedupActions([]ExtractedAction{plain, guarded})
+	if len(got) != 1 || got[0].ValueGuarded {
+		t.Errorf("guarded occurrence last = %+v, want not value-guarded", got)
+	}
+
 	// Two value-guarded occurrences stay value-guarded.
 	got = dedupActions([]ExtractedAction{guarded, guarded})
 	if len(got) != 1 || !got[0].ValueGuarded {

@@ -285,6 +285,9 @@ func moduleCallNames(addr string) ([]string, bool) {
 		if j := strings.IndexByte(name, '['); j >= 0 {
 			name = name[:j]
 		}
+		if name == "" {
+			return nil, false
+		}
 		names = append(names, name)
 	}
 	return names, true

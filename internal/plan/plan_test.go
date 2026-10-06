@@ -993,7 +993,7 @@ func TestModuleForAddress_RejectsMalformedAddresses(t *testing.T) {
 	root := &tfModule{ModuleCalls: map[string]tfModuleCall{
 		"a": {Module: tfModule{ModuleCalls: map[string]tfModuleCall{"b": {}}}},
 	}}
-	for _, addr := range []string{"data.foo.bar", "module.a.aws_instance.b", "module.a.module", "module.a.module.b.x", "module", "module.a]", "module.a[0", `module.a["k"`} {
+	for _, addr := range []string{"data.foo.bar", "module.a.aws_instance.b", "module.a.module", "module.a.module.b.x", "module", "module.a]", "module.a.", "module..module.b", "module.a[0", `module.a["k"`} {
 		if m := moduleForAddress(root, addr); m != nil {
 			t.Errorf("moduleForAddress(%q) resolved a module, want nil", addr)
 		}
