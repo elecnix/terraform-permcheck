@@ -749,3 +749,40 @@ func TestParseChangedAttributes(t *testing.T) {
 		})
 	}
 }
+
+// TestParseChangedAttributes_RemovalIsAChange pins the removal case. An
+// attribute the prior state carried that the planned state does not is a change,
+// and the provider's d.HasChange fires the delete-path call for it — that is how
+// removing permissions_boundary requires iam:DeleteRolePermissionsBoundary. A
+// plan that omits the key would otherwise read as unchanged and drop it.
+func TestParseChangedAttributes_RemovalIsAChange(t *testing.T) {
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_iam_role",
+				"name": "example",
+				"change": {
+					"actions": ["update"],
+					"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "example"},
+					"after": {"name": "example"}
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !changes[0].ChangedAttributes["permissions_boundary"] {
+		t.Errorf("removing permissions_boundary must count as changed, got %v",
+			changes[0].ChangedAttributes)
+	}
+	if changes[0].ChangedAttributes["name"] {
+		t.Errorf("an attribute present and unchanged in both states must not count as changed, got %v",
+			changes[0].ChangedAttributes)
+	}
+}
