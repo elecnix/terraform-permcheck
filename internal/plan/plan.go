@@ -258,6 +258,9 @@ func moduleCallNames(addr string) ([]string, bool) {
 				depth++
 			case ']':
 				depth--
+				if depth < 0 {
+					return nil, false
+				}
 			}
 			if addr[i] != '.' || depth > 0 {
 				continue
@@ -265,6 +268,9 @@ func moduleCallNames(addr string) ([]string, bool) {
 		}
 		parts = append(parts, addr[start:i])
 		start = i + 1
+	}
+	if depth != 0 {
+		return nil, false
 	}
 
 	var names []string
