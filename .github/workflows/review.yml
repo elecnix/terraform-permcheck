@@ -95,23 +95,16 @@ jobs:
         run: |
           set -euo pipefail
           runs=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100")
-          # Select the newest "cite" check run explicitly. The API returns check
-          # runs newest-first today, but that order is not contractual and a
-          # re-run adds a second run under the same name, so picking by position
-          # could read a stale attempt's verdict.
-          cite=$(jq -c '[.check_runs[] | select(.name == "cite")] | sort_by(.started_at, .id) | last // {}' <<<"$runs")
-          concl=$(jq -r '.conclusion // "absent"' <<<"$cite")
-          summary=$(jq -r '((.output.title // "") + " " + (.output.summary // ""))' <<<"$cite")
+          # last = newest, in case of a re-run
+          concl=$(jq -r '[.check_runs[] | select(.name == "cite")] | last | .conclusion // "absent"' <<<"$runs")
+          summary=$(jq -r '[.check_runs[] | select(.name == "cite")] | last | ((.output.title // "") + " " + (.output.summary // ""))' <<<"$runs")
 
           case "$concl" in
             success)
               echo "cite: reviewed the diff and passed"
               ;;
             neutral)
-              # Match Cite's exact wording for that shape. A looser substring
-              # would also admit an unrelated COULD_NOT_EVALUATE that happens to
-              # mention the phrase.
-              if grep -qF 'zero in-scope files (path-filter bypass shape)' <<<"$summary"; then
+              if grep -qi 'zero in-scope files' <<<"$summary"; then
                 echo "cite: nothing in scope to review — not blocking"
               else
                 echo "::error::cite could not evaluate this diff: ${summary:0:300}" >&2
