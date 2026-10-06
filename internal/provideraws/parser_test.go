@@ -1425,7 +1425,8 @@ func TestDedupActions_ValueGuardedNeedsEveryOccurrence(t *testing.T) {
 		t.Errorf("unconditional duplicate = %+v, want unconditional and not value-guarded", got)
 	}
 
-	// A duplicate under a plain presence guard also needs the configuration.
+	// A duplicate under a plain presence guard runs on a set default, so the
+	// value guard no longer covers the action.
 	plain := ExtractedAction{Action: "x:A", Conditional: true, Condition: "c", ConditionKind: ConditionPresence}
 	got = dedupActions([]ExtractedAction{guarded, plain})
 	if len(got) != 1 || got[0].ValueGuarded {
