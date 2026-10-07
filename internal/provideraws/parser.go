@@ -380,9 +380,19 @@ func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
 	if ifStmt.Init != nil {
 		if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
 			for _, rhs := range assign.Rhs {
-				if guard := extractGuardAttribute(rhs); guard.Attribute != "" {
-					return guard
+				guard := extractGuardAttribute(rhs)
+				if guard.Attribute == "" {
+					continue
 				}
+				// A change guard bound in the init statement gates the body
+				// only when the condition is the bare variable it binds, as in
+				// `if changed := d.HasChange("x"); changed`. A negated or
+				// compound condition runs the body when the attribute did NOT
+				// change, so it is no change gate.
+				if guard.Kind == ConditionChange && !condIsBoundVar(ifStmt.Cond, assign) {
+					return condGuard{}
+				}
+				return guard
 			}
 		}
 	}
@@ -394,6 +404,21 @@ func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
 		cond = ta.X
 	}
 	return extractGuardAttribute(cond)
+}
+
+// condIsBoundVar reports whether cond is a bare identifier that the assignment
+// binds, as `changed` in `changed := d.HasChange("x")`.
+func condIsBoundVar(cond ast.Expr, assign *ast.AssignStmt) bool {
+	id, ok := unwrapExpr(cond).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	for _, lhs := range assign.Lhs {
+		if l, ok := lhs.(*ast.Ident); ok && l.Name == id.Name && l.Name != "_" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractGuardAttribute checks if an expression is d.GetOk("attr"),
