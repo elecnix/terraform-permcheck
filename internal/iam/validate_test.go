@@ -792,8 +792,8 @@ func TestValidate_BothGatesOnOneAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasAction(missing, "iam:UpdateRolePolicy") {
-		t.Fatal("expected the action to be reported when both gates hold")
+	if len(missing) != 1 || missing[0].Action != "iam:UpdateRolePolicy" {
+		t.Fatalf("expected exactly iam:UpdateRolePolicy when both gates hold, got %v", missing)
 	}
 	if got := missing[0].ConditionAttribute; got != "tags+policy" {
 		t.Errorf("ConditionAttribute = %q, want %q naming both gating attributes", got, "tags+policy")

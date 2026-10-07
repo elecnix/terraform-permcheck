@@ -312,9 +312,16 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 			}
 		}
 
-		// The body and the else branch (including an else-if chain) are
-		// walked in the same conditional context.
+		// The body is walked in the guard's conditional context.
 		walkBody(n.Body, ctx, obs)
+
+		// The else branch (including an else-if chain) is walked in the same
+		// context, except after a d.HasChange guard: that branch runs when the
+		// attribute did NOT change, so inheriting the change gate would drop the
+		// call exactly when it runs. It takes the context from before the guard.
+		if guard.Kind == ConditionChange {
+			*ctx = saved
+		}
 		walkBody(n.Else, ctx, obs)
 
 		// Restore conditional depth/reason and connection scope.
@@ -399,9 +406,19 @@ func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
 	if ifStmt.Init != nil {
 		if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
 			for _, rhs := range assign.Rhs {
-				if guard := extractGuardAttribute(rhs); guard.Attribute != "" {
-					return guard
+				guard := extractGuardAttribute(rhs)
+				if guard.Attribute == "" {
+					continue
 				}
+				// A change guard bound in the init statement gates the body
+				// only when the condition is the bare variable it binds, as in
+				// `if changed := d.HasChange("x"); changed`. A negated or
+				// compound condition runs the body when the attribute did NOT
+				// change, so it is no change gate.
+				if guard.Kind == ConditionChange && !condIsBoundVar(ifStmt.Cond, assign) {
+					return condGuard{}
+				}
+				return guard
 			}
 		}
 	}
@@ -413,6 +430,21 @@ func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
 		cond = ta.X
 	}
 	return extractGuardAttribute(cond)
+}
+
+// condIsBoundVar reports whether cond is a bare identifier that the assignment
+// binds, as `changed` in `changed := d.HasChange("x")`.
+func condIsBoundVar(cond ast.Expr, assign *ast.AssignStmt) bool {
+	id, ok := unwrapExpr(cond).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	for _, lhs := range assign.Lhs {
+		if l, ok := lhs.(*ast.Ident); ok && l.Name == id.Name && l.Name != "_" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractGuardAttribute checks if an expression is d.GetOk("attr"),
@@ -504,18 +536,19 @@ func extractGetOkAttribute(expr ast.Node) string {
 	return strings.Trim(bl.Value, "\"")
 }
 
-// unwrapExpr strips parentheses and negations from an expression, so a guard
-// written as `!(d.HasChange("attr"))` or `!d.HasChange("attr")` is recognized.
+// unwrapExpr strips parentheses from an expression, so a guard written as
+// `(d.HasChange("attr"))` is recognized. It does not strip a negation: the body
+// of `if !d.HasChange("attr")` runs when the attribute did NOT change, so
+// reading it as a change gate would drop the call exactly when it runs. A
+// negated guard gates nothing the validator can evaluate, and its body stays
+// unconditional, which keeps the permission in the report.
 func unwrapExpr(expr ast.Expr) ast.Expr {
 	for {
-		switch n := expr.(type) {
-		case *ast.ParenExpr:
-			expr = n.X
-		case *ast.UnaryExpr:
-			expr = n.X
-		default:
+		paren, ok := expr.(*ast.ParenExpr)
+		if !ok {
 			return expr
 		}
+		expr = paren.X
 	}
 }
 

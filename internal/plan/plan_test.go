@@ -700,6 +700,45 @@ func TestParseChangedAttributes(t *testing.T) {
 			want: map[string]bool{"permissions_boundary": true, "description": false},
 		},
 		{
+			// A replace destroys the old object and creates a new one from empty
+			// state, so the provider's Create sees d.HasChange true for every
+			// attribute it sets, even one equal to the old value.
+			name: "replace counts every attribute planned with a value as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["delete", "create"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "old"},
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "new", "description": null}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true, "name": true, "description": false},
+		},
+		{
+			// Terraform lists a replace as [delete, create] or [create, delete]
+			// depending on create_before_destroy; both measure from empty state.
+			name: "replace listed create-first counts an unchanged attribute as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["create", "delete"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"},
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true},
+		},
+		{
 			name: "delete has no planned state, so the change is unknown",
 			raw: `{
 				"resource_changes": [

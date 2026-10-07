@@ -36,9 +36,20 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 		}
 	}
 
-	// The negated form gates the same way.
+	// A negated guard runs its body when the attribute did NOT change, so it
+	// is not a change gate: the call stays unconditional.
 	if !d.HasChange("description") {
 		_, err := conn.DeleteRolePolicy(ctx, &iam.DeleteRolePolicyInput{})
+		if err != nil { return nil }
+	}
+
+	// The else branch runs when the attribute did NOT change, so it does not
+	// inherit the gate of the if it negates.
+	if d.HasChange("path") {
+		_, err := conn.UpdateRoleDescription(ctx, &iam.UpdateRoleDescriptionInput{})
+		if err != nil { return nil }
+	} else {
+		_, err := conn.TagRole(ctx, &iam.TagRoleInput{})
 		if err != nil { return nil }
 	}
 
@@ -79,7 +90,7 @@ func refreshRoleInlinePolicies(ctx context.Context, conn *iam.Client, d *schema.
 	for _, action := range []string{
 		"iam:PutRolePermissionsBoundary",
 		"iam:DeleteRolePermissionsBoundary",
-		"iam:DeleteRolePolicy",
+		"iam:UpdateRoleDescription",
 	} {
 		ea, ok := byAction[action]
 		if !ok {
@@ -97,8 +108,21 @@ func refreshRoleInlinePolicies(ctx context.Context, conn *iam.Client, d *schema.
 	if ea := byAction["iam:PutRolePermissionsBoundary"]; ea.Condition != "permissions_boundary" {
 		t.Errorf("PutRolePermissionsBoundary condition = %q, want permissions_boundary", ea.Condition)
 	}
-	if ea := byAction["iam:DeleteRolePolicy"]; ea.Condition != "description" {
-		t.Errorf("DeleteRolePolicy condition = %q, want description", ea.Condition)
+	if ea := byAction["iam:UpdateRoleDescription"]; ea.Condition != "path" {
+		t.Errorf("UpdateRoleDescription condition = %q, want path", ea.Condition)
+	}
+
+	// A negated guard and an else branch are not change gates.
+	for _, action := range []string{"iam:DeleteRolePolicy", "iam:TagRole"} {
+		ea, ok := byAction[action]
+		if !ok {
+			t.Errorf("expected %s in update actions, got %v", action, updateActions)
+			continue
+		}
+		if ea.Conditional || ea.Condition != "" || ea.ConditionKind != "" {
+			t.Errorf("%s should be unconditional, got (%v, %q, %q)",
+				action, ea.Conditional, ea.Condition, ea.ConditionKind)
+		}
 	}
 
 	// A presence guard nested inside a change guard keeps the outer gate, which
@@ -131,7 +155,18 @@ func TestExtractConditionGuard(t *testing.T) {
 		{`if v, ok := d.GetOk("kms_key_arn"); ok { foo() }`, "kms_key_arn", ConditionPresence},
 		{`if d.Get("force_destroy").(bool) { foo() }`, "force_destroy", ConditionPresence},
 		{`if d.HasChange("permissions_boundary") { foo() }`, "permissions_boundary", ConditionChange},
-		{`if !d.HasChange("permissions_boundary") { foo() }`, "permissions_boundary", ConditionChange},
+		// A negated guard runs its body when the guard is false, so it gates
+		// nothing the validator can evaluate.
+		{`if !d.HasChange("permissions_boundary") { foo() }`, "", ""},
+		{`if !d.Get("force_destroy").(bool) { foo() }`, "", ""},
+		{`if (d.HasChange("permissions_boundary")) { foo() }`, "permissions_boundary", ConditionChange},
+		// A change guard bound in the init statement gates only when the
+		// condition is the bare variable it binds. A negated or compound
+		// condition runs the body when the attribute did NOT change.
+		{`if changed := d.HasChange("x"); changed { foo() }`, "x", ConditionChange},
+		{`if changed := d.HasChange("x"); !changed { foo() }`, "", ""},
+		{`if changed := d.HasChange("x"); changed && other { foo() }`, "", ""},
+		{`if changed := d.HasChange("x"); other { foo() }`, "", ""},
 		// Only the single-attribute form is a gate: d.HasChanges spans several
 		// attributes, and recording just one of them would mis-gate the call.
 		{`if d.HasChanges("a", "b") { foo() }`, "", ""},
@@ -164,5 +199,135 @@ func TestExtractConditionGuard(t *testing.T) {
 					gotAttr, gotKind, tt.wantAttr, tt.wantKind)
 			}
 		})
+	}
+}
+
+// TestParseResourceFileStructured_ElseIfChangeChain checks that an else-if
+// chain does not carry the first guard into a later guard's gate: each branch
+// takes only the gate of the guard that controls it.
+func TestParseResourceFileStructured_ElseIfChangeChain(t *testing.T) {
+	src := `
+package iam
+
+func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+
+	if d.HasChange("path") {
+		conn.UpdateRoleDescription(ctx, &iam.UpdateRoleDescriptionInput{})
+	} else if d.HasChange("description") {
+		conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
+	} else {
+		conn.TagRole(ctx, &iam.TagRoleInput{})
+	}
+	return nil
+}
+`
+	actions, err := ParseResourceFileStructured(src, "aws_iam_role", "Role")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ExtractedAction{}
+	for _, ea := range actions["update"] {
+		got[ea.Action] = ea
+	}
+	want := map[string]string{
+		"iam:UpdateRoleDescription": "path",
+		"iam:PutRolePolicy":         "description",
+		"iam:TagRole":               "",
+	}
+	for action, attr := range want {
+		ea, ok := got[action]
+		if !ok {
+			t.Errorf("expected %s, got %v", action, actions["update"])
+			continue
+		}
+		if ea.Condition != attr {
+			t.Errorf("%s condition = %q, want %q", action, ea.Condition, attr)
+		}
+		if attr == "" && (ea.Conditional || ea.ConditionKind != "") {
+			t.Errorf("%s should be unconditional, got (%v, %q)", action, ea.Conditional, ea.ConditionKind)
+		}
+	}
+}
+
+// TestParseResourceFileStructured_UnconditionalFirstKeepsNoKind covers an action
+// called both unconditionally and under a change guard: the surviving entry is
+// unconditional and carries no gate kind, whichever call comes first.
+func TestParseResourceFileStructured_UnconditionalFirstKeepsNoKind(t *testing.T) {
+	for name, body := range map[string]string{
+		"unconditional first": `conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
+	if d.HasChange("description") {
+		conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
+	}`,
+		"gated first": `if d.HasChange("description") {
+		conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
+	}
+	conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := "package iam\nfunc resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {\n\tconn := meta.(*conns.AWSClient).IAMClient(ctx)\n\t" + body + "\n\treturn nil\n}\n"
+			actions, err := ParseResourceFileStructured(src, "aws_iam_role", "Role")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(actions["update"]) != 1 {
+				t.Fatalf("expected one deduplicated action, got %v", actions["update"])
+			}
+			ea := actions["update"][0]
+			if ea.Conditional || ea.Condition != "" || ea.ConditionKind != "" {
+				t.Errorf("got (%v, %q, %q), want an unconditional entry with no kind",
+					ea.Conditional, ea.Condition, ea.ConditionKind)
+			}
+		})
+	}
+}
+
+// TestParseResourceFileStructured_InitFormChangeGuard covers a change guard
+// bound in the init statement: the body is gated, the else branch is not, and a
+// negated condition gates nothing.
+func TestParseResourceFileStructured_InitFormChangeGuard(t *testing.T) {
+	src := `
+package iam
+
+func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+
+	if changed := d.HasChange("path"); changed {
+		conn.UpdateRoleDescription(ctx, &iam.UpdateRoleDescriptionInput{})
+	} else {
+		conn.TagRole(ctx, &iam.TagRoleInput{})
+	}
+
+	if changed := d.HasChange("description"); !changed {
+		conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
+	}
+	return nil
+}
+`
+	actions, err := ParseResourceFileStructured(src, "aws_iam_role", "Role")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]ExtractedAction{}
+	for _, ea := range actions["update"] {
+		got[ea.Action] = ea
+	}
+	want := map[string]string{
+		"iam:UpdateRoleDescription": "path",
+		"iam:TagRole":               "",
+		"iam:PutRolePolicy":         "",
+	}
+	for action, attr := range want {
+		ea, ok := got[action]
+		if !ok {
+			t.Errorf("expected %s, got %v", action, actions["update"])
+			continue
+		}
+		if ea.Condition != attr {
+			t.Errorf("%s condition = %q, want %q", action, ea.Condition, attr)
+		}
+		if attr == "" && (ea.Conditional || ea.ConditionKind != "") {
+			t.Errorf("%s should be unconditional, got (%v, %q)", action, ea.Conditional, ea.ConditionKind)
+		}
 	}
 }
