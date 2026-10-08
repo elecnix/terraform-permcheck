@@ -33,9 +33,18 @@ func logsPlan(t *testing.T) []*plan.ResourceChange {
 	return changes
 }
 
+// onlyTarget returns the forms of the one target a change acts on.
+func onlyTarget(t *testing.T, targets [][]string) []string {
+	t.Helper()
+	if len(targets) != 1 {
+		t.Fatalf("targets = %v, want one", targets)
+	}
+	return targets[0]
+}
+
 func TestLogGroupTargetARNs(t *testing.T) {
 	changes := logsPlan(t)
-	group := resourceTargetARNs(changes[0], changes)
+	group := onlyTarget(t, resourceTargets(changes[0], changes))
 	want := []string{
 		"arn:*:logs:*:*:log-group:/aws/kinesisfirehose/example-stream",
 		"arn:*:logs:*:*:log-group:/aws/kinesisfirehose/example-stream:*",
@@ -43,7 +52,7 @@ func TestLogGroupTargetARNs(t *testing.T) {
 	if !equalStrings(group, want) {
 		t.Errorf("log group targets = %v, want %v", group, want)
 	}
-	stream := resourceTargetARNs(changes[1], changes)
+	stream := onlyTarget(t, resourceTargets(changes[1], changes))
 	want = []string{
 		"arn:*:logs:*:*:log-group:/aws/kinesisfirehose/example-stream",
 		"arn:*:logs:*:*:log-group:/aws/kinesisfirehose/example-stream:*",
@@ -59,7 +68,7 @@ func TestLogStreamTargetFromReference(t *testing.T) {
 	// target comes from the referenced aws_cloudwatch_log_group.
 	changes := logsPlan(t)
 	delete(changes[1].AttributeValues, "log_group_name")
-	got := resourceTargetARNs(changes[1], changes)
+	got := onlyTarget(t, resourceTargets(changes[1], changes))
 	if len(got) == 0 || got[0] != "arn:*:logs:*:*:log-group:/aws/kinesisfirehose/example-stream" {
 		t.Errorf("log stream targets = %v, want the referenced group's ARN first", got)
 	}

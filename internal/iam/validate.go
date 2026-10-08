@@ -127,7 +127,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 			// Action coverage, resource-scoped when the target ARN is derivable
 			// from the plan.
-			verdict := policy.Coverage(action, resourceTargetARNs(rc, changes), filter.StrictResources)
+			verdict := policy.worstVerdict(action, resourceTargets(rc, changes), filter.StrictResources)
 			if verdict == Covered {
 				continue
 			}

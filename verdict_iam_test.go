@@ -8,7 +8,7 @@ import (
 
 // verdictCase validates a plan in testdata/verdict-iam against a policy and
 // checks which findings the JSON report holds. Each finding is written as
-// "<resource type> <action>".
+// "<resource type>.<resource name> <action>".
 type verdictCase struct {
 	name    string
 	plan    string
@@ -34,6 +34,7 @@ func runVerdictCase(t *testing.T, c verdictCase) {
 	var result struct {
 		Missing []struct {
 			ResourceType string `json:"resource_type"`
+			ResourceName string `json:"resource_name"`
 			Action       string `json:"missing_action"`
 		} `json:"missing"`
 	}
@@ -42,7 +43,7 @@ func runVerdictCase(t *testing.T, c verdictCase) {
 	}
 	found := map[string]bool{}
 	for _, m := range result.Missing {
-		found[m.ResourceType+" "+m.Action] = true
+		found[m.ResourceType+"."+m.ResourceName+" "+m.Action] = true
 	}
 	for _, want := range c.present {
 		if !found[want] {
@@ -65,29 +66,41 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			// needs that call: the default filter must not drop it.
 			name: "dedicated resources", plan: "dedicated_plan.json", policy: "dedicated_policy.json",
 			present: []string{
-				"aws_s3_object s3:PutObject",
-				"aws_iam_user_policy iam:PutUserPolicy",
-				"aws_backup_vault_policy backup:PutBackupVaultAccessPolicy",
-				"aws_dynamodb_table_item dynamodb:PutItem",
-				"aws_dynamodb_resource_policy dynamodb:PutResourcePolicy",
+				"aws_s3_object.o s3:PutObject",
+				"aws_iam_user_policy.p iam:PutUserPolicy",
+				"aws_backup_vault_policy.p backup:PutBackupVaultAccessPolicy",
+				"aws_dynamodb_table_item.i dynamodb:PutItem",
+				"aws_dynamodb_resource_policy.r dynamodb:PutResourcePolicy",
 			},
 		},
 		{
 			// A gate on a nested path reads the nested plan value.
 			name: "nested gate paths hold", plan: "nested_gate_plan.json", policy: "nested_gate_policy.json",
 			present: []string{
-				"aws_dynamodb_table dynamodb:UpdateTimeToLive",
-				"aws_dynamodb_table dynamodb:UpdateContinuousBackups",
-				"aws_kinesis_stream kinesis:UpdateStreamMode",
+				"aws_dynamodb_table.t dynamodb:UpdateTimeToLive",
+				"aws_dynamodb_table.t dynamodb:UpdateContinuousBackups",
+				"aws_kinesis_stream.s kinesis:UpdateStreamMode",
 			},
 		},
 		{
 			name: "nested gate paths do not hold", plan: "nested_gate_off_plan.json", policy: "nested_gate_policy.json",
-			present: []string{"aws_dynamodb_table dynamodb:UpdateContinuousBackups"},
+			present: []string{"aws_dynamodb_table.t dynamodb:UpdateContinuousBackups"},
 			absent: []string{
-				"aws_dynamodb_table dynamodb:UpdateTimeToLive",
-				"aws_kinesis_stream kinesis:UpdateStreamMode",
+				"aws_dynamodb_table.t dynamodb:UpdateTimeToLive",
+				"aws_kinesis_stream.s kinesis:UpdateStreamMode",
 			},
+		},
+		{
+			// The root lambda passes the root role. A same-named role in a
+			// module the policy allows does not stand in for it.
+			name: "reference resolves in its module", plan: "reference_module_plan.json", policy: "reference_policy.json",
+			present: []string{"aws_lambda_function.f iam:PassRole"},
+		},
+		{
+			// Each lambda passes the role instance its reference names.
+			name: "reference keeps the instance key", plan: "reference_index_plan.json", policy: "reference_policy.json",
+			present: []string{"aws_lambda_function.admin iam:PassRole"},
+			absent:  []string{"aws_lambda_function.basic iam:PassRole"},
 		},
 	}
 	for _, c := range cases {

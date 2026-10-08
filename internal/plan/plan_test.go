@@ -490,6 +490,8 @@ func TestParseReferencesNestedModule(t *testing.T) {
 	raw := []byte(`{
 		"resource_changes": [
 			{
+				"address": "module.secrets.aws_secretsmanager_secret_version.b",
+				"module_address": "module.secrets",
 				"type": "aws_secretsmanager_secret_version",
 				"name": "b",
 				"change": {"actions": ["create"]}

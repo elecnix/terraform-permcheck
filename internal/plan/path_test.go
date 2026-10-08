@@ -80,3 +80,24 @@ func TestParse_KeepsAddresses(t *testing.T) {
 		t.Errorf("root change addresses = %q, %q", got.Address, got.ModuleAddress)
 	}
 }
+
+// TestParse_ReferencesPerModule checks that a resource reads the references
+// of its own module's configuration, not those of a same-named resource in
+// another module.
+func TestParse_ReferencesPerModule(t *testing.T) {
+	changes, err := Parse([]byte(`{"resource_changes":[
+{"address":"aws_lambda_function.f","type":"aws_lambda_function","name":"f","change":{"actions":["create"],"after":{}}},
+{"address":"module.m.aws_lambda_function.f","module_address":"module.m","type":"aws_lambda_function","name":"f","change":{"actions":["create"],"after":{}}}
+],"configuration":{"root_module":{
+ "resources":[{"type":"aws_lambda_function","name":"f","mode":"managed","expressions":{"role":{"references":["aws_iam_role.root.arn","aws_iam_role.root"]}}}],
+ "module_calls":{"m":{"module":{"resources":[{"type":"aws_lambda_function","name":"f","mode":"managed","expressions":{"role":{"references":["aws_iam_role.inner.arn","aws_iam_role.inner"]}}}]}}}}}}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changes[0].References["role"]; len(got) == 0 || got[0] != "aws_iam_role.root.arn" {
+		t.Errorf("root references = %v", got)
+	}
+	if got := changes[1].References["role"]; len(got) == 0 || got[0] != "aws_iam_role.inner.arn" {
+		t.Errorf("module references = %v", got)
+	}
+}
