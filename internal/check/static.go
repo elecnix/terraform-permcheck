@@ -1,6 +1,8 @@
 package check
 
 import (
+	"errors"
+
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -16,21 +18,32 @@ var staticMutationOps = []string{"create", "update", "delete"}
 // distinct resource types checked, which is not len(changes): a single type
 // can carry several entries.
 //
-// A type the resolver cannot map is skipped, since validation has nothing to
-// check it against.
-func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.ResourceChange, int) {
+// A type the resolver does not know gets one create entry per block, so
+// validation reports every address of it as unresolved. It does not count as
+// checked. A failed lookup (iam.ErrLookupFailed) is returned as an error.
+func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.ResourceChange, int, error) {
 	var changes []*plan.ResourceChange
 	checked := 0
 
 	seen := make(map[string]bool)
+	unresolved := make(map[string]bool)
 	for _, b := range blocks {
+		if unresolved[b.Type] {
+			changes = append(changes, &plan.ResourceChange{Type: b.Type, Name: b.Name, Change: "create"})
+			continue
+		}
 		if seen[b.Type] {
 			continue
 		}
 		seen[b.Type] = true
 
 		schema, err := resolver.Resolve(b.Type)
+		if errors.Is(err, iam.ErrLookupFailed) {
+			return nil, 0, err
+		}
 		if err != nil {
+			unresolved[b.Type] = true
+			changes = append(changes, &plan.ResourceChange{Type: b.Type, Name: b.Name, Change: "create"})
 			continue
 		}
 		ops := staticOpsFor(schema)
@@ -57,7 +70,7 @@ func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.R
 		}
 	}
 
-	return changes, checked
+	return changes, checked, nil
 }
 
 // staticOpsFor picks the mutation operations a schema makes worth checking.

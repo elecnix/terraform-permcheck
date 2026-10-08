@@ -60,6 +60,20 @@ permissions for that operation to what the parse found. A function that never
 touches a client, such as a delete that only logs that the resource can't be
 destroyed, counts as complete.
 
+### Unresolved resource types
+
+PermCheck can't check a resource type that neither the embedded table nor the CloudFormation registry knows. This happens for a resource type newer than the pinned provider tag, and for a Plugin Framework resource that the registry lacks. PermCheck reports each such type as unresolved, with the resources of that type, and counts it as a gap. The run fails with exit code 1 and never prints `All required permissions covered`.
+
+Each output format reports unresolved types:
+
+- `text` lists them under `Unresolved resource types (N), no permission data:`, one entry per type, followed by its resources.
+- `github-annotations` writes one `::warning` per type, titled `Unresolved resource type`, with the file and line of its first resource when `--terraform-root` gives locations.
+- `json` lists them in a top-level `unresolved_types` array. Each entry has `resource_type`, `allowed`, and `resources`, with `resource_name`, `change`, and the file and line when known. The `missing` array keeps its old content.
+
+To accept the gap for every unresolved type, pass `--allow-unresolved-types` or set `"allow_unresolved_types": true` in the config file. A flag, `true` or `false`, overrides the config. To accept it for one type, add an exclusion with `"permission": "*"` and a `resource` pattern that matches the type, such as `{"permission": "*", "resource": "aws_example_widget", "reason": "checked by hand"}`. A narrower permission pattern, such as `s3:*`, doesn't match an unresolved type. In both cases PermCheck still reports the type, and the summary line ends with `N resource types unresolved (allowed)` in place of the all-clear line. In `json`, `unresolved_allowed` gives that count.
+
+A lookup that fails for another reason, such as a network error, a timeout, or an HTTP 5xx or 429 from the registry, stops the run with exit code 2. PermCheck can't tell whether such a type exists, so it neither checks it nor reports it as unresolved. Run the check again once the registry answers. The registry answers 403 or 404 for a type it doesn't hold, and PermCheck reads both as unresolved.
+
 ### Conditional & side-effect permissions
 
 Some permissions are only needed when a particular attribute is set. The AWS
@@ -283,7 +297,9 @@ directory, or pointed at with `--config`):
 
 The config file also accepts `"strict_resources": true` at the top level. It
 turns on `--strict-resources`, described in
-[Strict resource scope](#strict-resource-scope).
+[Strict resource scope](#strict-resource-scope). Likewise,
+`"allow_unresolved_types": true` turns on `--allow-unresolved-types`, described
+in [Unresolved resource types](#unresolved-resource-types).
 
 `operations` lets you suppress a permission for one operation only, so a role
 that must never delete a resource still gets checked on create and update. An
@@ -408,14 +424,15 @@ terraform-permcheck validate \
 
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
+| `--allow-unresolved-types` | `false` | Report resource types that no schema source knows, but don't fail the run on them (see [Unresolved resource types](#unresolved-resource-types)). The config key `allow_unresolved_types` sets the default |
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | All permissions covered (or `--exit-zero` was set) |
-| 1 | Permission gaps found, unverified findings under `--strict-resources` included (details printed to stderr) |
-| 2 | Invalid input or configuration error |
+| 1 | Permission gaps found, unverified findings under `--strict-resources` and unresolved resource types included (details printed to stderr) |
+| 2 | Invalid input or configuration error, or a schema lookup that failed (network error, timeout, HTTP 5xx) |
 
 ### Embedded permissions table
 

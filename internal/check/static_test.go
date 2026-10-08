@@ -54,7 +54,7 @@ func TestStaticChanges_OnlyEmitsOperationsWithDistinctPermissions(t *testing.T) 
 		},
 	}
 
-	changes, checked := staticChanges(blocks, resolver)
+	changes, checked, _ := staticChanges(blocks, resolver)
 
 	want := []string{"aws_kms_key.create", "aws_kms_key.update", "aws_kms_key.delete"}
 	got := staticOpChanges(changes)
@@ -82,7 +82,7 @@ func TestStaticChanges_SkipsOperationsCoveredByCreate(t *testing.T) {
 		},
 	}
 
-	changes, checked := staticChanges(blocks, resolver)
+	changes, checked, _ := staticChanges(blocks, resolver)
 
 	if got, want := staticOpChanges(changes), "aws_s3_bucket.create"; strings.Join(got, ",") != want {
 		t.Errorf("changes = %v, want [%s]", got, want)
@@ -92,26 +92,45 @@ func TestStaticChanges_SkipsOperationsCoveredByCreate(t *testing.T) {
 	}
 }
 
-// TestStaticChanges_SkipsUnresolvableTypes verifies that a type the resolver
-// cannot map produces no entry, and that a type repeated across several blocks
-// still counts once.
-func TestStaticChanges_SkipsUnresolvableTypes(t *testing.T) {
+// TestStaticChanges_KeepsUnresolvableTypes verifies that a type the resolver
+// cannot map yields one create entry per block, so validation reports each
+// address as unresolved, and that it does not count as checked. A type
+// repeated across several blocks still counts once.
+func TestStaticChanges_KeepsUnresolvableTypes(t *testing.T) {
 	blocks := []hcl.ResourceBlock{
 		{Type: "aws_s3_bucket", Name: "a"},
 		{Type: "aws_s3_bucket", Name: "b"},
 		{Type: "aws_unknown_service_thing", Name: "c"},
+		{Type: "aws_unknown_service_thing", Name: "d"},
 	}
 	resolver := fakePermResolver{
 		"aws_s3_bucket": {"create": {"s3:CreateBucket"}},
 	}
 
-	changes, checked := staticChanges(blocks, resolver)
+	changes, checked, err := staticChanges(blocks, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if got, want := staticOpChanges(changes), "aws_s3_bucket.create"; strings.Join(got, ",") != want {
+	want := "aws_s3_bucket.create,aws_unknown_service_thing.create,aws_unknown_service_thing.create"
+	if got := staticOpChanges(changes); strings.Join(got, ",") != want {
 		t.Errorf("changes = %v, want [%s]", got, want)
+	}
+	if changes[1].Name != "c" || changes[2].Name != "d" {
+		t.Errorf("unresolved names = %s, %s; want c, d", changes[1].Name, changes[2].Name)
 	}
 	if checked != 1 {
 		t.Errorf("checked = %d, want 1 (only the resolvable type was checked)", checked)
+	}
+}
+
+// TestStaticChanges_LookupFailure verifies that a failed lookup stops static
+// mode with the error instead of dropping the type.
+func TestStaticChanges_LookupFailure(t *testing.T) {
+	blocks := []hcl.ResourceBlock{{Type: "aws_s3_bucket", Name: "a"}}
+	_, _, err := staticChanges(blocks, failingResolver{})
+	if !errors.Is(err, iam.ErrLookupFailed) {
+		t.Fatalf("err = %v, want ErrLookupFailed", err)
 	}
 }
 
@@ -129,7 +148,7 @@ func TestStaticChanges_CarriesParsedAttributes(t *testing.T) {
 		},
 	}
 
-	changes, _ := staticChanges(blocks, resolver)
+	changes, _, _ := staticChanges(blocks, resolver)
 
 	if len(changes) != 2 {
 		t.Fatalf("changes = %v, want 2 entries", staticOpChanges(changes))

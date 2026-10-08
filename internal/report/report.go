@@ -95,6 +95,15 @@ type Report struct {
 	excluded       []iam.ExcludedAction
 	excludedGroups []group[excludedKey, iam.ExcludedAction]
 
+	// unresolved holds one group per resource type no schema source knows,
+	// in first-seen order, each with the changes of that type.
+	// unresolvedAllowed reports that they do not fail the run.
+	unresolved        []group[string, finding]
+	unresolvedAllowed bool
+	// excludedUnresolved counts the unresolved types a config exclusion
+	// covers, whether or not the report shows excluded findings.
+	excludedUnresolved int
+
 	checked int
 	label   string // what checked counts
 	needs   int    // declared needs checked
@@ -104,14 +113,29 @@ type Report struct {
 // resource block; it may be nil. Excluded findings appear in the report only
 // when showExcluded is set.
 func New(res check.Result, locations iam.Locations, showExcluded bool) *Report {
-	r := &Report{checked: res.Checked, label: res.Label, needs: res.Needs}
-	for _, m := range res.Missing {
+	r := &Report{checked: res.Checked, label: res.Label, needs: res.Needs, unresolvedAllowed: res.UnresolvedAllowed}
+	locate := func(m iam.MissingAction) finding {
 		f := finding{MissingAction: m}
 		if loc, ok := locations.Of(m); ok {
 			f.loc = &loc
 		}
-		r.findings = append(r.findings, f)
+		return f
 	}
+	for _, m := range res.Missing {
+		r.findings = append(r.findings, locate(m))
+	}
+	var unresolved []finding
+	for _, m := range res.Unresolved {
+		unresolved = append(unresolved, locate(m))
+	}
+	r.unresolved = groupBy(unresolved, func(f finding) string { return f.ResourceType })
+	excludedTypes := make(map[string]bool)
+	for _, e := range res.Excluded {
+		if e.Unresolved {
+			excludedTypes[e.ResourceType] = true
+		}
+	}
+	r.excludedUnresolved = len(excludedTypes)
 	r.groups = groupBy(r.findings, func(f finding) findingKey {
 		return findingKey{action: f.Action, class: f.Class, condition: f.ConditionAttribute, unverified: f.ResourceScopeUnverified}
 	})
@@ -125,7 +149,7 @@ func New(res check.Result, locations iam.Locations, showExcluded bool) *Report {
 	if showExcluded {
 		r.excluded = res.Excluded
 		r.excludedGroups = groupBy(r.excluded, func(e iam.ExcludedAction) excludedKey {
-			return excludedKey{action: e.Action, reason: e.Reason}
+			return excludedKey{action: excludedLabel(e.MissingAction), reason: e.Reason}
 		})
 	}
 	return r
@@ -134,28 +158,57 @@ func New(res check.Result, locations iam.Locations, showExcluded bool) *Report {
 // Write renders the report in format f. The json and github-annotations
 // reports go to stdout, where a CI step or the workflow runner reads them.
 // The text report writes its findings to stderr, for a person, and its
-// all-clear line to stdout.
+// all-clear line to stdout. A report with an unresolved resource type never
+// prints the all-clear line, even when the type is allowed or excluded: the
+// tool did not check that type.
 func (r *Report) Write(f Format, stdout, stderr io.Writer) {
 	switch f {
 	case JSON:
 		fmt.Fprint(stdout, r.json())
 	case GitHubAnnotations:
-		if len(r.findings) > 0 {
-			fmt.Fprint(stdout, r.annotations())
-			fmt.Fprintf(stdout, "\n%s\n", r.summary())
-		} else {
+		if r.allCovered() {
 			fmt.Fprintln(stdout, r.allClear())
+		} else {
+			if a := r.annotations(); a != "" {
+				fmt.Fprintf(stdout, "%s\n", a)
+			}
+			fmt.Fprintln(stdout, r.summary())
 		}
 		fmt.Fprint(stdout, r.excludedAnnotations())
 	default:
-		if len(r.findings) > 0 {
-			fmt.Fprintf(stderr, "%s\n", r.text())
-			fmt.Fprintf(stderr, "\n%s\n", r.summary())
-		} else {
+		if r.allCovered() {
 			fmt.Fprintln(stdout, r.allClear())
+		} else {
+			if t := r.text(); t != "" {
+				fmt.Fprintf(stderr, "%s\n\n", t)
+			}
+			fmt.Fprintln(stderr, r.summary())
 		}
 		fmt.Fprint(stderr, r.excludedText())
 	}
+}
+
+// allCovered reports whether the report may say every required permission
+// is covered: nothing is missing or unverified, and every resource type was
+// resolved.
+func (r *Report) allCovered() bool {
+	return len(r.findings) == 0 && len(r.unresolved) == 0 && r.excludedUnresolved == 0
+}
+
+// gaps reports whether the report fails the run: a finding remains, or a
+// resource type is unresolved and not allowed. It sets the json status.
+func (r *Report) gaps() bool {
+	return len(r.findings) > 0 || (len(r.unresolved) > 0 && !r.unresolvedAllowed)
+}
+
+// allowedUnresolved counts the unresolved types that do not fail the run:
+// those the run allows and those a config exclusion covers.
+func (r *Report) allowedUnresolved() int {
+	n := r.excludedUnresolved
+	if r.unresolvedAllowed {
+		n += len(r.unresolved)
+	}
+	return n
 }
 
 // checkedLabel names what the checked count covers, declared needs included.
@@ -170,14 +223,42 @@ func (r *Report) checkedLabel() string {
 	return r.label
 }
 
-// summary is the closing line of a report with findings. It mentions
-// unverified findings only when there are some.
+// summary is the closing line of a report that is not all clear. It
+// mentions unverified findings and unresolved types only when there are
+// some.
 func (r *Report) summary() string {
 	line := fmt.Sprintf("%d %s checked, %d distinct missing permissions found", r.checked, r.checkedLabel(), len(r.missing))
 	if len(r.unverified) > 0 {
 		line += fmt.Sprintf(", %d unverified (resource scope)", len(r.unverified))
 	}
+	if n := len(r.unresolved); n > 0 && !r.unresolvedAllowed {
+		line += ", " + resourceTypes(n) + " unresolved"
+	}
+	if n := r.allowedUnresolved(); n > 0 {
+		line += ", " + resourceTypes(n) + " unresolved (allowed)"
+	}
 	return line + "."
+}
+
+// resourceTypes counts resource types in words: "1 resource type", "2
+// resource types".
+func resourceTypes(n int) string {
+	if n == 1 {
+		return "1 resource type"
+	}
+	return fmt.Sprintf("%d resource types", n)
+}
+
+// unresolvedTag marks a resource type no schema source knows.
+const unresolvedTag = "[unresolved: no permission data]"
+
+// excludedLabel names an excluded finding: its action, or for an unresolved
+// type, the type and the unresolved tag.
+func excludedLabel(m iam.MissingAction) string {
+	if m.Unresolved {
+		return m.ResourceType + " " + unresolvedTag
+	}
+	return m.Action
 }
 
 // allClear is the line of a report with no findings.

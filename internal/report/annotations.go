@@ -8,7 +8,8 @@ import (
 )
 
 // annotations renders the findings as GitHub Actions ::warning:: workflow
-// commands, one per group, in first-seen order. Missing and unverified groups
+// commands, one per group, in first-seen order, then one per unresolved
+// resource type. Missing and unverified groups
 // stay interleaved; an unverified group gets its own title and tag. The first
 // resource in a group with a known location gives the command its file= and
 // line= parameters, so GitHub shows the annotation inline in the pull
@@ -32,13 +33,31 @@ func (r *Report) annotations() string {
 		}
 		msg += " needed by: " + strings.Join(sources, ", ")
 
-		if loc := firstLocated(g.items); loc != nil {
-			fmt.Fprintf(&b, "::warning file=%s,line=%d,title=%s::%s\n", loc.Path, loc.Line, title, msg)
-		} else {
-			fmt.Fprintf(&b, "::warning title=%s::%s\n", title, msg)
+		writeWarning(&b, firstLocated(g.items), title, msg)
+	}
+	for _, g := range r.unresolved {
+		var sources []string
+		for _, f := range g.items {
+			sources = append(sources, source(f.MissingAction))
 		}
+		title := "Unresolved resource type"
+		if r.unresolvedAllowed {
+			title += " (allowed)"
+		}
+		msg := g.key + " has no permission data, so its permissions were not checked. Resources: " + strings.Join(sources, ", ")
+		writeWarning(&b, firstLocated(g.items), title, msg)
 	}
 	return b.String()
+}
+
+// writeWarning writes one ::warning:: command, with file= and line= when the
+// location is known.
+func writeWarning(b *strings.Builder, loc *iam.FileLocation, title, msg string) {
+	if loc != nil {
+		fmt.Fprintf(b, "::warning file=%s,line=%d,title=%s::%s\n", loc.Path, loc.Line, title, msg)
+	} else {
+		fmt.Fprintf(b, "::warning title=%s::%s\n", title, msg)
+	}
 }
 
 // firstLocated returns the location of the first finding that has one.

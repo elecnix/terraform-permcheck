@@ -9,6 +9,31 @@ type JSONResult struct {
 	Label    string         `json:"label"`              // human-readable label for checked resources
 	Missing  []JSONMissing  `json:"missing"`            // empty when status=ok
 	Excluded []JSONExcluded `json:"excluded,omitempty"` // config-suppressed findings (only when --show-excluded)
+	// UnresolvedTypes lists the resource types no schema source knows, one
+	// entry per type. The tool did not check them. They set status to
+	// gaps_found unless allowed.
+	UnresolvedTypes []JSONUnresolved `json:"unresolved_types,omitempty"`
+	// UnresolvedAllowed counts the unresolved types that do not fail the
+	// run: allowed ones and those a config exclusion covers.
+	UnresolvedAllowed int `json:"unresolved_allowed,omitempty"`
+}
+
+// JSONUnresolved is one resource type no schema source knows, with the
+// resources of that type.
+type JSONUnresolved struct {
+	ResourceType string `json:"resource_type"`
+	// Allowed is true when the run allows unresolved types
+	// (--allow-unresolved-types or allow_unresolved_types).
+	Allowed   bool                     `json:"allowed"`
+	Resources []JSONUnresolvedResource `json:"resources"`
+}
+
+// JSONUnresolvedResource is one resource change of an unresolved type.
+type JSONUnresolvedResource struct {
+	ResourceName string `json:"resource_name"`
+	Change       string `json:"change"`
+	File         string `json:"file,omitempty"`
+	Line         int    `json:"line,omitempty"`
 }
 
 // JSONExcluded is a single config-excluded permission in JSON output.
@@ -20,6 +45,9 @@ type JSONExcluded struct {
 	NeedResource   string `json:"need_resource,omitempty"`
 	ExcludedAction string `json:"excluded_action"`
 	Reason         string `json:"reason,omitempty"`
+	// Unresolved is true for an excluded resource type no schema source
+	// knows. Its excluded_action is empty.
+	Unresolved bool `json:"unresolved,omitempty"`
 }
 
 // JSONMissing is a single missing permission in JSON output.
@@ -61,12 +89,29 @@ func (r *Report) json() string {
 			NeedResource:   e.NeedResource,
 			ExcludedAction: e.Action,
 			Reason:         e.Reason,
+			Unresolved:     e.Unresolved,
 		})
 	}
 
-	if len(r.findings) > 0 {
+	for _, g := range r.unresolved {
+		u := JSONUnresolved{ResourceType: g.key, Allowed: r.unresolvedAllowed}
+		for _, f := range g.items {
+			res := JSONUnresolvedResource{ResourceName: f.ResourceName, Change: f.Change}
+			if f.loc != nil {
+				res.File = f.loc.Path
+				res.Line = f.loc.Line
+			}
+			u.Resources = append(u.Resources, res)
+		}
+		result.UnresolvedTypes = append(result.UnresolvedTypes, u)
+	}
+	result.UnresolvedAllowed = r.allowedUnresolved()
+
+	if r.gaps() {
 		result.Status = "gaps_found"
 		result.Missing = make([]JSONMissing, 0, len(r.findings))
+	}
+	if len(r.findings) > 0 {
 		for _, f := range r.findings {
 			item := JSONMissing{
 				ResourceType:       f.ResourceType,

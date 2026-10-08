@@ -2,6 +2,7 @@ package check
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -23,6 +24,33 @@ func (r fakeResolver) Resolve(tfType string) (iam.Schema, error) {
 		return nil, errors.New("unknown type " + tfType)
 	}
 	return s, nil
+}
+
+// failingResolver fails every lookup as a registry outage would.
+type failingResolver struct{}
+
+func (failingResolver) Resolve(tfType string) (iam.Schema, error) {
+	return nil, fmt.Errorf("fetch %s: HTTP 503: %w", tfType, iam.ErrLookupFailed)
+}
+
+// countingResolver counts the lookups of each type it passes on.
+type countingResolver struct {
+	iam.Resolver
+	calls map[string]int
+}
+
+func (r countingResolver) Resolve(tfType string) (iam.Schema, error) {
+	r.calls[tfType]++
+	return r.Resolver.Resolve(tfType)
+}
+
+// addresses collapses findings to "type.name" for assertions.
+func addresses(findings []iam.MissingAction) []string {
+	out := make([]string, 0, len(findings))
+	for _, m := range findings {
+		out = append(out, m.ResourceType+"."+m.ResourceName)
+	}
+	return out
 }
 
 // policy returns a policy loader for a policy that allows exactly actions.
@@ -86,6 +114,12 @@ func TestRun_PlanReportsMissingActions(t *testing.T) {
 	if res.Missing[0].ConditionAttribute != "tags" {
 		t.Errorf("ConditionAttribute = %q, want tags", res.Missing[0].ConditionAttribute)
 	}
+	if got, want := addresses(res.Unresolved), []string{"aws_unknown_thing.b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
+	}
+	if !res.HasGaps() {
+		t.Error("HasGaps = false with an unresolved type")
+	}
 	// Plan mode counts every resource change, resolvable or not.
 	if res.Checked != 2 || res.Label != "resource changes" {
 		t.Errorf("Checked, Label = %d, %q; want 2, \"resource changes\"", res.Checked, res.Label)
@@ -115,6 +149,9 @@ func TestRun_StaticChecksEachTypeOnce(t *testing.T) {
 	}
 	if res.Checked != 1 || res.Label != "resource types (static HCL mode)" {
 		t.Errorf("Checked, Label = %d, %q; want 1, static label", res.Checked, res.Label)
+	}
+	if got, want := addresses(res.Unresolved), []string{"aws_unknown_thing.c"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
 	}
 }
 
@@ -294,5 +331,77 @@ func sameSet(a, b []string) bool {
 func TestDefaultResolver_SharedPerProcess(t *testing.T) {
 	if DefaultResolver() != DefaultResolver() {
 		t.Error("DefaultResolver() built a new resolver on the second call")
+	}
+}
+
+func TestRun_UnresolvedTypes(t *testing.T) {
+	changes := []*plan.ResourceChange{
+		{Type: "aws_kms_key", Name: "a", Change: "create"},
+		{Type: "aws_new_thing", Name: "x", Change: "create"},
+		{Type: "aws_new_thing", Name: "y", Change: "update"},
+	}
+	resolver := fakeResolver{"aws_kms_key": kmsKey}
+	all := policy("kms:*")
+
+	t.Run("fail by default", func(t *testing.T) {
+		res, err := Run(FromPlan(changes), all, Options{Resolver: resolver})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Missing) != 0 {
+			t.Errorf("missing = %v, want none", actions(res.Missing))
+		}
+		if got, want := addresses(res.Unresolved), []string{"aws_new_thing.x", "aws_new_thing.y"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("unresolved = %v, want %v", got, want)
+		}
+		if res.UnresolvedAllowed || !res.HasGaps() {
+			t.Errorf("UnresolvedAllowed, HasGaps = %v, %v; want false, true", res.UnresolvedAllowed, res.HasGaps())
+		}
+	})
+
+	t.Run("allowed", func(t *testing.T) {
+		res, err := Run(FromPlan(changes), all, Options{Resolver: resolver, AllowUnresolvedTypes: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Unresolved) != 2 || !res.UnresolvedAllowed || res.HasGaps() {
+			t.Errorf("unresolved = %v, allowed = %v, HasGaps = %v; want 2, true, false", addresses(res.Unresolved), res.UnresolvedAllowed, res.HasGaps())
+		}
+	})
+
+	t.Run("excluded by type", func(t *testing.T) {
+		ex := []iam.Exclusion{{Permission: "*", Resource: "aws_new_thing", Reason: "checked by hand"}}
+		res, err := Run(FromPlan(changes), all, Options{Resolver: resolver, Exclusions: ex})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Unresolved) != 0 || res.HasGaps() {
+			t.Errorf("unresolved = %v, HasGaps = %v; want none, false", addresses(res.Unresolved), res.HasGaps())
+		}
+		if len(res.Excluded) != 2 || !res.Excluded[0].Unresolved || res.Excluded[0].Reason != "checked by hand" {
+			t.Errorf("excluded = %+v, want both unresolved changes with the reason", res.Excluded)
+		}
+	})
+
+	t.Run("resolved once per type", func(t *testing.T) {
+		counting := countingResolver{Resolver: resolver, calls: map[string]int{}}
+		if _, err := Run(FromPlan(changes), all, Options{Resolver: counting}); err != nil {
+			t.Fatal(err)
+		}
+		if counting.calls["aws_new_thing"] != 1 {
+			t.Errorf("aws_new_thing resolved %d times, want 1", counting.calls["aws_new_thing"])
+		}
+	})
+}
+
+func TestRun_LookupFailure(t *testing.T) {
+	for _, in := range []Input{
+		FromPlan([]*plan.ResourceChange{{Type: "aws_kms_key", Name: "a", Change: "create"}}),
+		FromHCL([]hcl.ResourceBlock{{Type: "aws_kms_key", Name: "a"}}),
+	} {
+		_, err := Run(in, policy("kms:*"), Options{Resolver: failingResolver{}})
+		if !errors.Is(err, iam.ErrLookupFailed) {
+			t.Errorf("Run(%s) err = %v, want ErrLookupFailed", in.label(), err)
+		}
 	}
 }

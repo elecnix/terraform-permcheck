@@ -1,0 +1,56 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 5,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    },
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "r[\"k\"]",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "file": "sqs.tf",
+      "line": 7,
+      "unverified": "resource_scope"
+    }
+  ],
+  "unresolved_types": [
+    {
+      "resource_type": "aws_new_thing",
+      "allowed": false,
+      "resources": [
+        {
+          "resource_name": "a",
+          "change": "create"
+        },
+        {
+          "resource_name": "b[\"k\"]",
+          "change": "update",
+          "file": "new.tf",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "resource_type": "aws_other_new",
+      "allowed": false,
+      "resources": [
+        {
+          "resource_name": "x",
+          "change": "delete"
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

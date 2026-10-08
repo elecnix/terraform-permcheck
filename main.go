@@ -108,6 +108,7 @@ func validateCmd(args []string) error {
 	showExcluded := fs.Bool("show-excluded", false, "list config-excluded permissions in the report (default: suppressed silently)")
 	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
+	allowUnresolved := fs.Bool("allow-unresolved-types", false, "report resource types no schema source knows but do not fail the run on them (default: from config allow_unresolved_types)")
 	providerSource := fs.String("provider-source", os.Getenv(check.ProviderSourceEnv), "where provider-source permissions come from: embedded (the table built into the binary) or live (clone and parse terraform-provider-aws) (default: $"+check.ProviderSourceEnv+", else embedded)")
 
 	if err := fs.Parse(args); err != nil {
@@ -130,11 +131,16 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	// An explicit --strict-resources, true or false, overrides the config.
+	// An explicit --strict-resources or --allow-unresolved-types, true or
+	// false, overrides the config.
 	strict := cfg.StrictResources
+	allowUnresolvedTypes := cfg.AllowUnresolvedTypes
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "strict-resources" {
+		switch f.Name {
+		case "strict-resources":
 			strict = *strictResources
+		case "allow-unresolved-types":
+			allowUnresolvedTypes = *allowUnresolved
 		}
 	})
 	opts := check.Options{
@@ -146,6 +152,8 @@ func validateCmd(args []string) error {
 		Exclusions: cfg.Exclude,
 		Needs:      cfg.Needs,
 		Principal:  *principal,
+
+		AllowUnresolvedTypes: allowUnresolvedTypes,
 
 		Resolver: check.ResolverFor(source),
 	}
@@ -308,11 +316,13 @@ func loadConfig(configPath string) (*iam.Config, error) {
 }
 
 // reportResult prints the check result and returns errGapsFound when
-// actionable (non-excluded) gaps remain and --exit-zero was not set. Excluded
-// findings never fail the run.
+// actionable (non-excluded) gaps remain and --exit-zero was not set. A gap is
+// a missing or unverified permission, or a resource type no schema source
+// knows unless unresolved types are allowed. Excluded findings never fail
+// the run.
 func reportResult(res check.Result, format report.Format, exitZero, showExcluded bool, locations iam.Locations) error {
 	printReport(res, format, locations, showExcluded)
-	if len(res.Missing) > 0 && !exitZero {
+	if res.HasGaps() && !exitZero {
 		return errGapsFound
 	}
 	return nil

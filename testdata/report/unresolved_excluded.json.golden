@@ -1,0 +1,27 @@
+--- stdout ---
+{
+  "status": "ok",
+  "checked": 2,
+  "label": "resource changes",
+  "missing": null,
+  "excluded": [
+    {
+      "resource_type": "aws_new_thing",
+      "resource_name": "a",
+      "change": "create",
+      "excluded_action": "",
+      "reason": "checked by hand",
+      "unresolved": true
+    },
+    {
+      "resource_type": "aws_new_thing",
+      "resource_name": "b[\"k\"]",
+      "change": "update",
+      "excluded_action": "",
+      "reason": "checked by hand",
+      "unresolved": true
+    }
+  ],
+  "unresolved_allowed": 1
+}
+--- stderr ---

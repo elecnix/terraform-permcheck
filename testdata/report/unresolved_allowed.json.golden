@@ -1,0 +1,37 @@
+--- stdout ---
+{
+  "status": "ok",
+  "checked": 3,
+  "label": "resource changes",
+  "missing": null,
+  "unresolved_types": [
+    {
+      "resource_type": "aws_new_thing",
+      "allowed": true,
+      "resources": [
+        {
+          "resource_name": "a",
+          "change": "create"
+        },
+        {
+          "resource_name": "b[\"k\"]",
+          "change": "update",
+          "file": "new.tf",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "resource_type": "aws_other_new",
+      "allowed": true,
+      "resources": [
+        {
+          "resource_name": "x",
+          "change": "delete"
+        }
+      ]
+    }
+  ],
+  "unresolved_allowed": 2
+}
+--- stderr ---
