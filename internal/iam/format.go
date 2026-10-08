@@ -25,18 +25,25 @@ type FormatJSONResult struct {
 
 // FormatJSONExcluded is a single config-excluded permission in JSON output.
 type FormatJSONExcluded struct {
-	ResourceType   string `json:"resource_type"`
-	ResourceName   string `json:"resource_name"`
-	Change         string `json:"change"`
+	ResourceType   string `json:"resource_type,omitempty"`
+	ResourceName   string `json:"resource_name,omitempty"`
+	Change         string `json:"change,omitempty"`
+	Need           string `json:"need,omitempty"`
+	NeedResource   string `json:"need_resource,omitempty"`
 	ExcludedAction string `json:"excluded_action"`
 	Reason         string `json:"reason,omitempty"`
 }
 
 // FormatJSONMissing is a single missing permission in JSON output.
+//
+// A finding from a declared need has no terraform resource, so it carries
+// need and need_resource instead of resource_type, resource_name and change.
 type FormatJSONMissing struct {
-	ResourceType       string `json:"resource_type"`
-	ResourceName       string `json:"resource_name"`
-	Change             string `json:"change"`
+	ResourceType       string `json:"resource_type,omitempty"`
+	ResourceName       string `json:"resource_name,omitempty"`
+	Change             string `json:"change,omitempty"`
+	Need               string `json:"need,omitempty"`
+	NeedResource       string `json:"need_resource,omitempty"`
 	MissingAction      string `json:"missing_action"`
 	Class              string `json:"class"`
 	ConditionAttribute string `json:"condition_attribute,omitempty"`
@@ -63,6 +70,8 @@ func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int,
 			ResourceType:   e.ResourceType,
 			ResourceName:   e.ResourceName,
 			Change:         e.Change,
+			Need:           e.Need,
+			NeedResource:   e.NeedResource,
 			ExcludedAction: e.Action,
 			Reason:         e.Reason,
 		})
@@ -76,6 +85,8 @@ func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int,
 				ResourceType:       m.ResourceType,
 				ResourceName:       m.ResourceName,
 				Change:             m.Change,
+				Need:               m.Need,
+				NeedResource:       m.NeedResource,
 				MissingAction:      m.Action,
 				Class:              m.Class,
 				ConditionAttribute: m.ConditionAttribute,
@@ -83,7 +94,7 @@ func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int,
 			if m.ResourceScopeUnverified {
 				item.Unverified = "resource_scope"
 			}
-			if locations != nil {
+			if locations != nil && m.Need == "" {
 				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
 				if loc, ok := locations[key]; ok {
 					item.File = loc.Path
@@ -146,7 +157,7 @@ func FormatGitHubAnnotations(missing []MissingAction, locations map[string]FileL
 		// Build the annotation message
 		var msgParts []string
 		for _, m := range items {
-			msgParts = append(msgParts, fmt.Sprintf("%s.%s (%s)", m.ResourceType, m.ResourceName, m.Change))
+			msgParts = append(msgParts, m.Source())
 		}
 
 		msg := k.action

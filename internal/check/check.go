@@ -1,6 +1,7 @@
 // Package check runs the validate pipeline once for both input modes: parse
 // the policy, resolve each resource type's schema, validate the resource
-// changes against the policy, and apply config exclusions. The caller reads
+// changes against the policy, check the declared needs, and apply config
+// exclusions. The caller reads
 // the input and renders the Result; check does neither.
 package check
 
@@ -103,6 +104,11 @@ type Options struct {
 	Exclusions []iam.Exclusion
 	// Resolver supplies schemas. Nil means DefaultResolver.
 	Resolver iam.Resolver
+	// Needs are the declared needs from the config. Run checks the ones that
+	// Principal selects (see iam.SelectNeeds).
+	Needs []iam.Need
+	// Principal selects the needs declared for one principal (--principal).
+	Principal string
 }
 
 // Result is the outcome of a check, ready for the report layer.
@@ -116,14 +122,21 @@ type Result struct {
 	Checked int
 	// Label names what Checked counts.
 	Label string
+	// Needs counts the declared needs checked.
+	Needs int
 }
 
-// Run checks the input against the policy that loadPolicy returns. When the
-// input has nothing to check, Run returns an empty Result without loading the
-// policy. Run returns loadPolicy's error unchanged and wraps a parse error.
+// Run checks the input and the selected needs against the policy that
+// loadPolicy returns. When there is nothing to check, Run returns an empty
+// Result without loading the policy. Run returns loadPolicy's error unchanged
+// and wraps a parse error.
 func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, error) {
-	res := Result{Label: in.label()}
-	if in.empty() {
+	needs, err := iam.SelectNeeds(opts.Needs, opts.Principal)
+	if err != nil {
+		return Result{}, err
+	}
+	res := Result{Label: in.label(), Needs: len(needs)}
+	if in.empty() && len(needs) == 0 {
 		return res, nil
 	}
 
@@ -151,6 +164,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
+	missing = append(missing, iam.CheckNeeds(needs, policy, opts.Filter.StrictResources)...)
 	res.Missing, res.Excluded = iam.ApplyExclusions(missing, opts.Exclusions)
 	return res, nil
 }

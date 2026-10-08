@@ -43,6 +43,9 @@ type Config struct {
 	// StrictResources turns on --strict-resources. The flag, when given,
 	// overrides it.
 	StrictResources bool `json:"strict_resources,omitempty"`
+	// Needs declares permissions a principal needs beyond what the terraform
+	// resources imply. They are checked against the same policy.
+	Needs []Need `json:"needs,omitempty"`
 }
 
 // ExcludedAction is a MissingAction that a config exclusion suppressed, tagged
@@ -87,6 +90,9 @@ func parseConfig(raw []byte) (*Config, error) {
 			}
 			e.Operations[j] = op
 		}
+	}
+	if err := validateNeeds(c.Needs); err != nil {
+		return nil, err
 	}
 	return &c, nil
 }
@@ -136,7 +142,12 @@ func operationMatches(operations []string, change string) bool {
 
 // resourceMatches reports whether the resource glob matches m's resource type
 // or its full "type.name" address (with any count/for_each index stripped).
+// For a declared need, the glob matches "needs.<sid>".
 func resourceMatches(pattern string, m MissingAction) bool {
+	if m.Need != "" {
+		ok, _ := path.Match(pattern, "needs."+m.Need)
+		return ok
+	}
 	if ok, _ := path.Match(pattern, m.ResourceType); ok {
 		return true
 	}
@@ -184,7 +195,7 @@ func FormatExcluded(excluded []ExcludedAction) string {
 			b.WriteString(fmt.Sprintf("    reason: %s\n", k.reason))
 		}
 		for _, e := range groups[k] {
-			b.WriteString(fmt.Sprintf("    → %s.%s (%s)\n", e.ResourceType, e.ResourceName, e.Change))
+			b.WriteString(fmt.Sprintf("    → %s\n", e.Source()))
 		}
 	}
 	return b.String()
@@ -203,7 +214,7 @@ func FormatExcludedAnnotations(excluded []ExcludedAction) string {
 	for _, k := range order {
 		var parts []string
 		for _, e := range groups[k] {
-			parts = append(parts, fmt.Sprintf("%s.%s (%s)", e.ResourceType, e.ResourceName, e.Change))
+			parts = append(parts, e.Source())
 		}
 		msg := k.action + " excluded (per config)"
 		if k.reason != "" {

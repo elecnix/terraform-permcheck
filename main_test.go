@@ -927,3 +927,86 @@ func TestValidate_CloudWatchLogsScopedGrants(t *testing.T) {
 		}
 	}
 }
+
+// needsConfig declares one need the full policy grants, one for the deploy
+// principal it does not grant, and one for another principal.
+const needsConfig = `{"needs":[
+	{"sid":"Tables","actions":["dynamodb:DescribeTable"]},
+	{"sid":"EcrImageVerification","principal":"deploy","actions":["ecr:DescribeImages"],
+	 "resources":["arn:aws:ecr:us-east-1:111111111111:repository/app"],"reason":"CI verifies images"},
+	{"sid":"FetchSecrets","principal":"task","actions":["secretsmanager:GetSecretValue"]}
+]}`
+
+// needsArgs validates a plan with no resource changes, so every finding
+// comes from a declared need, and the policy still loads for the needs.
+func needsArgs(t *testing.T, extra ...string) []string {
+	dir := t.TempDir()
+	planPath := dir + "/plan.json"
+	if err := os.WriteFile(planPath, []byte(`{"resource_changes":[]}`), 0644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+	return append([]string{"validate",
+		"--plan-file", planPath,
+		"--policy-file", "testdata/policy_full.json",
+		"--cloud", "aws",
+		"--config", writeConfig(t, dir, needsConfig),
+	}, extra...)
+}
+
+// TestValidate_NeedsReportMissing verifies a need the policy does not grant
+// fails the run and is named as the source in every format.
+func TestValidate_NeedsReportMissing(t *testing.T) {
+	var runErr error
+	out := captureStdout(t, func() { runErr = run(needsArgs(t, "--principal", "deploy", "--format", "json")) })
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound, got %v", runErr)
+	}
+	var result iam.FormatJSONResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	want := iam.FormatJSONMissing{
+		Need:          "EcrImageVerification",
+		NeedResource:  "arn:aws:ecr:us-east-1:111111111111:repository/app",
+		MissingAction: "ecr:DescribeImages",
+		Class:         "[required]",
+	}
+	if len(result.Missing) != 1 || result.Missing[0] != want {
+		t.Errorf("missing = %+v, want [%+v]", result.Missing, want)
+	}
+
+	out = captureStdout(t, func() { runErr = run(needsArgs(t, "--principal", "deploy", "--format", "github-annotations")) })
+	if !strings.Contains(out, `::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:`) {
+		t.Errorf("annotation does not name the need:\n%s", out)
+	}
+	if !strings.Contains(out, "2 declared needs") {
+		t.Errorf("summary does not count the needs:\n%s", out)
+	}
+
+	stderr := captureStderr(t, func() { runErr = run(needsArgs(t, "--principal", "deploy")) })
+	if !strings.Contains(stderr, `→ needs "EcrImageVerification" on arn:aws:ecr:`) {
+		t.Errorf("text report does not name the need:\n%s", stderr)
+	}
+}
+
+// TestValidate_NeedsWithoutPrincipal verifies only the needs without a
+// principal apply when --principal is not given.
+func TestValidate_NeedsWithoutPrincipal(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := run(needsArgs(t)); err != nil {
+			t.Fatalf("expected nil, got %v", err)
+		}
+	})
+	if !strings.Contains(out, "All required permissions covered") || !strings.Contains(out, "0 resource changes, 1 declared need checked") {
+		t.Errorf("unexpected output: %s", out)
+	}
+}
+
+// TestValidate_NeedsUnknownPrincipal verifies a --principal no need names is
+// a usage error, not a pass.
+func TestValidate_NeedsUnknownPrincipal(t *testing.T) {
+	err := run(needsArgs(t, "--principal", "deploi"))
+	if err == nil || errors.Is(err, errGapsFound) || !strings.Contains(err.Error(), `"deploi"`) {
+		t.Errorf("want an unknown principal error, got %v", err)
+	}
+}

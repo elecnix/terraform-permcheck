@@ -95,6 +95,7 @@ func validateCmd(args []string) error {
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 	configFile := fs.String("config", "", "path to permcheck config JSON (default: ./permcheck.json if present)")
 	showExcluded := fs.Bool("show-excluded", false, "list config-excluded permissions in the report (default: suppressed silently)")
+	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
 
 	if err := fs.Parse(args); err != nil {
@@ -126,6 +127,8 @@ func validateCmd(args []string) error {
 			StrictResources: strict,
 		},
 		Exclusions: cfg.Exclude,
+		Needs:      cfg.Needs,
+		Principal:  *principal,
 	}
 
 	// Build resource-to-file location map when --terraform-root is set.
@@ -289,7 +292,7 @@ func loadConfig(configPath string) (*iam.Config, error) {
 // (non-excluded) gaps remain and --exit-zero was not set. Excluded findings
 // never fail the run.
 func report(res check.Result, format string, exitZero, showExcluded bool, locations map[string]iam.FileLocation) error {
-	printReport(res.Missing, res.Excluded, res.Checked, res.Label, format, locations, showExcluded)
+	printReport(res, format, locations, showExcluded)
 	if len(res.Missing) > 0 && !exitZero {
 		return errGapsFound
 	}
@@ -303,14 +306,24 @@ func report(res check.Result, format string, exitZero, showExcluded bool, locati
 // and the all-clear line to stdout; in json mode a single object goes to
 // stdout. The locations map (keyed by "type.name") adds file= and line= to
 // annotations and file paths to text output when available.
-func printReport(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, resourceLabel, format string, locations map[string]iam.FileLocation, showExcluded bool) {
+func printReport(res check.Result, format string, locations map[string]iam.FileLocation, showExcluded bool) {
+	missing, excluded, checked := res.Missing, res.Excluded, res.Checked
+	// The JSON label names what checked counts, so only the text lines
+	// mention the declared needs.
+	resourceLabel := res.Label
+	switch {
+	case res.Needs == 1:
+		resourceLabel += ", 1 declared need"
+	case res.Needs > 1:
+		resourceLabel += fmt.Sprintf(", %d declared needs", res.Needs)
+	}
 	switch format {
 	case "json":
 		var exc []iam.ExcludedAction
 		if showExcluded {
 			exc = excluded
 		}
-		fmt.Print(iam.FormatJSON(missing, exc, checked, resourceLabel, locations))
+		fmt.Print(iam.FormatJSON(missing, exc, checked, res.Label, locations))
 	case "github-annotations":
 		if len(missing) > 0 {
 			fmt.Print(iam.FormatGitHubAnnotations(missing, locations))
