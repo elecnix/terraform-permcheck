@@ -285,6 +285,78 @@ list what was suppressed (and why) so reviewers can audit it. In `--format json`
 the suppressed entries appear under an `excluded` array; in `github-annotations`
 mode they surface as `::notice::` lines.
 
+### Permissions a principal needs beyond terraform
+
+Terraform resources do not show every permission a role needs. A CI workflow
+may call `aws ecr describe-images` before it deploys. An application may read a
+secret when it starts. Declare these permissions in the `needs` list of the
+config file, and PermCheck checks them against the same policy as the plan:
+
+```json
+{
+  "needs": [
+    {
+      "sid": "EcrAuth",
+      "actions": ["ecr:GetAuthorizationToken"],
+      "resources": ["*"],
+      "reason": "docker login in the deploy workflow"
+    },
+    {
+      "sid": "EcrImageVerification",
+      "principal": "deploy",
+      "actions": ["ecr:DescribeImages"],
+      "resources": ["arn:aws:ecr:us-east-1:123456789012:repository/my-app"],
+      "reason": "CI verifies images before deploy"
+    },
+    {
+      "sid": "FetchSecrets",
+      "principal": "task",
+      "actions": ["secretsmanager:GetSecretValue"],
+      "resources": ["arn:aws:secretsmanager:us-east-1:123456789012:secret:my-app-*"]
+    }
+  ]
+}
+```
+
+- **`sid`** (required) names the need in the report.
+- **`actions`** (required) lists the IAM actions, each a single
+  `service:Action` name without wildcards.
+- **`resources`** (optional) lists the ARNs or ARN patterns the actions act
+  on. The policy must cover each one. PermCheck uses the same resource-scoped
+  check as for plan resources, so a Deny on the resource counts. `"*"` means
+  the policy must grant the action on every resource. Without `resources`, any
+  grant of the action counts, as for a resource whose ARN the plan does not
+  show. `--strict-resources` then reports a grant limited to some resources as
+  unverified.
+- **`principal`** (optional) names the role the need belongs to. PermCheck
+  checks one policy per run, so a need with a principal applies only when
+  `--principal` names it. A need without a principal applies on every run.
+  An unknown `--principal` value is an error.
+- **`reason`** (optional) is a note for reviewers.
+
+With the config above, check the deploy role and the task role in two runs:
+
+```bash
+terraform-permcheck validate --plan-file plan.json --cloud aws \
+  --policy-from-plan-output deploy_policy_json --principal deploy
+terraform-permcheck validate --plan-file plan.json --cloud aws \
+  --policy-from-plan-output task_policy_json --principal task
+```
+
+A missing need is reported like any other gap, with the need as its source:
+
+```
+::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:us-east-1:123456789012:repository/my-app
+```
+
+In `--format json`, the finding carries `need` and `need_resource` in place of
+`resource_type`, `resource_name` and `change`. A missing need fails the run
+unless `--exit-zero` is set. An exclusion can suppress it: its `permission`
+matches the action, and its `resource` matches `needs.<sid>`.
+
+PermCheck checks the needs against the one policy it is given. It does not
+collect the other policies in the plan or evaluate resource-based policies.
+
 ## Supported clouds
 
 | Cloud | Schema source | Status |
@@ -318,6 +390,7 @@ terraform-permcheck validate \
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
+| `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
 | `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 
 ### Exit codes

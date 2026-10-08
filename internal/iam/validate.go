@@ -35,6 +35,13 @@ type MissingAction struct {
 	// "kms_key_arn": set in the planned resource (d.GetOk) or changed between
 	// prior and planned state (d.HasChange). Empty for an unconditional action.
 	ConditionAttribute string
+	// Need is the sid of the declared need this action comes from. It is
+	// empty for an action a terraform resource change needs, and then the
+	// resource fields name the source instead.
+	Need string
+	// NeedResource is the resource of the need that the policy does not
+	// cover. Empty when the need lists no resources.
+	NeedResource string
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -282,8 +289,8 @@ func writeMissingGroups(b *strings.Builder, keys []missingGroupKey, groups map[m
 		b.WriteString(fmt.Sprintf("  %s\n", line))
 		// Affected resources
 		for _, m := range groups[k] {
-			resourceLine := fmt.Sprintf("    → %s.%s (%s)", m.ResourceType, m.ResourceName, m.Change)
-			if locations != nil {
+			resourceLine := "    → " + m.Source()
+			if locations != nil && m.Need == "" {
 				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
 				if loc, ok := locations[key]; ok {
 					resourceLine += fmt.Sprintf(" [%s:%d]", loc.Path, loc.Line)
