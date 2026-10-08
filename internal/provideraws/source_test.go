@@ -118,7 +118,7 @@ func resourceTableRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	}
 }
 
-func TestSourceProvider_Has(t *testing.T) {
+func TestSourceProvider_ResolveKnownAndUnknown(t *testing.T) {
 	dir := t.TempDir()
 	dynamoDir := filepath.Join(dir, "internal", "service", "dynamodb")
 	if err := os.MkdirAll(dynamoDir, 0755); err != nil {
@@ -143,11 +143,11 @@ func resourceTableCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 
 	p := NewSourceProviderWithPath(dir)
-	if p.Has("aws_dynamodb_table") != true {
-		t.Error("expected Has to return true for aws_dynamodb_table")
+	if _, err := p.Resolve("aws_dynamodb_table"); err != nil {
+		t.Errorf("Resolve(aws_dynamodb_table): %v", err)
 	}
-	if p.Has("aws_nonexistent_resource") != false {
-		t.Error("expected Has to return false for nonexistent resource")
+	if _, err := p.Resolve("aws_nonexistent_resource"); err == nil {
+		t.Error("Resolve(aws_nonexistent_resource) succeeded, want an error")
 	}
 }
 

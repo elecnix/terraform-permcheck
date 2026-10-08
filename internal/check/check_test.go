@@ -208,8 +208,8 @@ func TestFilter_Config(t *testing.T) {
 		{"strict-resources", Filter{StrictResources: true}, strict},
 		{"no-filter strict-resources", Filter{NoFilter: true, StrictResources: true}, iam.FilterConfig{StrictResources: true}},
 	} {
-		if got := tc.filter.Config(); got != tc.want {
-			t.Errorf("%s: Config() = %+v, want %+v", tc.name, got, tc.want)
+		if got := tc.filter.config(); got != tc.want {
+			t.Errorf("%s: config() = %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 }
@@ -325,12 +325,12 @@ func sameSet(a, b []string) bool {
 	return true
 }
 
-// TestDefaultResolver_SharedPerProcess verifies that every caller gets the
-// same default resolver, so the provider source is parsed once per process
-// rather than once per check.
-func TestDefaultResolver_SharedPerProcess(t *testing.T) {
-	if DefaultResolver() != DefaultResolver() {
-		t.Error("DefaultResolver() built a new resolver on the second call")
+// TestResolverFor_SharedPerProcess verifies that every caller gets the
+// same embedded resolver, so the table is decoded once per process rather
+// than once per check.
+func TestResolverFor_SharedPerProcess(t *testing.T) {
+	if ResolverFor(SourceEmbedded) != ResolverFor(SourceEmbedded) {
+		t.Error("ResolverFor(SourceEmbedded) built a new resolver on the second call")
 	}
 }
 

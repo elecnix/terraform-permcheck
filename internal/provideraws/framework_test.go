@@ -377,7 +377,7 @@ func (r *domainResource) Create(ctx context.Context, request resource.CreateRequ
 		t.Fatal(err)
 	}
 	p := NewSourceProviderWithPath(dir)
-	if p.Has("aws_simpledb_domain") {
+	if _, err := p.Resolve("aws_simpledb_domain"); err == nil {
 		t.Error("aws_simpledb_domain resolved from source with no permissions")
 	}
 }

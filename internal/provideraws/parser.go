@@ -155,8 +155,10 @@ type helperCall struct {
 	Discard    discardKind   // how the call site drops the callee's error
 }
 
-// ParseResourceFile parses a Go source file from the terraform-provider-aws
-// and extracts the IAM permissions (actions) required by each CRUD function.
+// ParseResourceFileStructured parses a Go source file from the
+// terraform-provider-aws and extracts the IAM actions each CRUD function
+// requires, with conditional metadata. ParsePackage does the same across all
+// the files of a service package.
 //
 // It handles:
 // - Direct conn.Method() calls in CRUD function bodies, closures included
@@ -168,28 +170,6 @@ type helperCall struct {
 // - Calls whose failure the provider ignores, marked BestEffort: a discarded
 // or swallowed error, or a cleanup in the branch that returns an earlier
 // failure
-//
-// Returns all actions (both unconditional and conditional) as plain strings.
-func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
-	structured, err := ParseResourceFileStructured(src, tfType, resourceName)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string][]string)
-	for k, v := range structured {
-		for _, ea := range v {
-			result[k] = append(result[k], ea.Action)
-		}
-		result[k] = dedup(result[k])
-	}
-	return result, nil
-}
-
-// ParseResourceFileStructured parses a Go source file and returns extracted
-// actions with conditional metadata (whether the call is inside an if-statement
-// guarded by d.GetOk() or d.Get()). Follows helper function call chains
-// transitively within the same file. ParsePackage does the same across all the
-// files of a service package.
 func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
 	name := tfType + ".go"
 	pkg, err := ParsePackage(map[string]string{name: src})

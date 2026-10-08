@@ -106,15 +106,6 @@ func (p *SourceProvider) Resolve(tfType string) (*cloud.Schema, error) {
 	return schema, nil
 }
 
-// Has checks if the provider has a schema for the given terraform type.
-func (p *SourceProvider) Has(tfType string) bool {
-	_ = p.Ensure()
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	_, ok := p.schemas[tfType]
-	return ok
-}
-
 // Schemas parses the provider source and returns the schema of every resource
 // type it found. The map is a copy; the schemas are the ones Resolve returns.
 // It fails when the source holds no resources, so a generator never writes an
@@ -453,18 +444,8 @@ func resourceTypeFromFile(serviceName, fileName string) string {
 	return "aws_" + serviceName + "_" + resourceName
 }
 
-// resourceNameFromSource extracts the resource name from the Go source by
-// finding resource function names like resourceVaultCreate, resourceTableRead, etc.
-func resourceNameFromSource(src []byte) string {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "source.go", src, parser.ParseComments)
-	if err != nil {
-		return ""
-	}
-	return resourceNameFromFile(f)
-}
-
-// resourceNameFromFile is resourceNameFromSource on an already parsed file.
+// resourceNameFromFile extracts the resource name from a parsed file by
+// finding resource function names like resourceVaultCreate.
 func resourceNameFromFile(f *ast.File) string {
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)

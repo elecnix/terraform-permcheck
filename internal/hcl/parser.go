@@ -120,7 +120,7 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		fileBlocks, err := ParseFile(path, string(src))
+		fileBlocks, err := parseFile(path, string(src))
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
@@ -136,11 +136,11 @@ func ParseDir(dir string) ([]ResourceBlock, error) {
 	return blocks, nil
 }
 
-// ParseFile extracts resource and data block types from a single .tf file's
+// parseFile extracts resource and data block types from a single .tf file's
 // content. It strips comments and then matches resource/data declarations
 // line-by-line to capture accurate line numbers. The filename parameter is
 // stored on every ResourceBlock so clients can correlate resources to sources.
-func ParseFile(filename, src string) ([]ResourceBlock, error) {
+func parseFile(filename, src string) ([]ResourceBlock, error) {
 	lines := strings.Split(src, "\n")
 	inBlockComment := false
 
@@ -286,40 +286,4 @@ func stripLineComments(line string) string {
 		}
 	}
 	return line
-}
-
-// stripComments removes terraform comments from source to prevent
-// commented-out resource blocks from being matched. This is the original
-// all-at-once approach (used when line numbers aren't needed).
-func stripComments(src string) string {
-	// Remove line comments: // ... and # ...
-	lines := strings.Split(src, "\n")
-	var out []string
-	for _, line := range lines {
-		// Remove # comments
-		if idx := strings.Index(line, "#"); idx >= 0 {
-			line = line[:idx]
-		}
-		// Remove // comments
-		if idx := strings.Index(line, "//"); idx >= 0 {
-			line = line[:idx]
-		}
-		out = append(out, line)
-	}
-	result := strings.Join(out, "\n")
-
-	// Remove block comments: /* ... */
-	for {
-		start := strings.Index(result, "/*")
-		if start < 0 {
-			break
-		}
-		end := strings.Index(result[start+2:], "*/")
-		if end < 0 {
-			break
-		}
-		result = result[:start] + result[start+2+end+2:]
-	}
-
-	return result
 }

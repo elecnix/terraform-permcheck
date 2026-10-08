@@ -3,8 +3,8 @@
 // binary. A default run reads them from here, so it needs no clone of the
 // provider and no parse of its Go source.
 //
-// The generate-permissions command writes the table. Encode and Decode define
-// its format; Provider serves it as a cloud.Provider.
+// The generate-permissions command writes the table with Generate. Decode
+// reads it back, and Provider serves it as a cloud.Provider.
 package permdata
 
 import (
@@ -18,9 +18,9 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
-// FormatVersion is the version of the table format. Bump it when the format
+// formatVersion is the version of the table format. Bump it when the format
 // changes in a way an older reader would misread, and regenerate the table.
-const FormatVersion = 1
+const formatVersion = 1
 
 // providerName names the source the table is generated from.
 const providerName = "hashicorp/terraform-provider-aws"
@@ -65,16 +65,16 @@ func Generate(src *provideraws.SourceProvider) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Encode(provideraws.DefaultProviderRef, schemas)
+	return encode(provideraws.DefaultProviderRef, schemas)
 }
 
-// Encode writes the schemas as a table for the provider ref. The output is
+// encode writes the schemas as a table for the provider ref. The output is
 // deterministic: types, operations and incomplete operations are sorted, and
 // requirements keep the order the parser emitted them in. Each requirement
 // sits on its own line, so a regenerated table diffs line by line.
-func Encode(ref string, schemas map[string]*cloud.Schema) ([]byte, error) {
+func encode(ref string, schemas map[string]*cloud.Schema) ([]byte, error) {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "{\n  \"format\": %d,\n  \"provider\": %s,\n  \"ref\": %s,\n  \"resources\": {", FormatVersion, quote(providerName), quote(ref))
+	fmt.Fprintf(&b, "{\n  \"format\": %d,\n  \"provider\": %s,\n  \"ref\": %s,\n  \"resources\": {", formatVersion, quote(providerName), quote(ref))
 	for i, tfType := range sortedKeys(schemas) {
 		s := schemas[tfType]
 		if i > 0 {
@@ -123,15 +123,15 @@ func Encode(ref string, schemas map[string]*cloud.Schema) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// Decode reads a table that Encode wrote. It refuses a table of another
+// Decode reads a table that encode wrote. It refuses a table of another
 // format version.
 func Decode(data []byte) (*Table, error) {
 	var f file
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("decode permissions table: %w", err)
 	}
-	if f.Format != FormatVersion {
-		return nil, fmt.Errorf("permissions table has format %d, this build reads format %d", f.Format, FormatVersion)
+	if f.Format != formatVersion {
+		return nil, fmt.Errorf("permissions table has format %d, this build reads format %d", f.Format, formatVersion)
 	}
 	tbl := &Table{Ref: f.Ref, Schemas: make(map[string]*cloud.Schema, len(f.Resources))}
 	for tfType, r := range f.Resources {

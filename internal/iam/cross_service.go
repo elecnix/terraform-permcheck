@@ -54,7 +54,7 @@ func crossServiceMissing(rc *plan.ResourceChange, policy *PolicyDocument, strict
 			Change:             rc.Change,
 			Action:             cb.action,
 			Service:            actionService(cb.action),
-			Class:              classTag(ClassManagement),
+			Class:              classTag(classManagement),
 			ConditionAttribute: condAttr,
 
 			ResourceScopeUnverified: verdict == Unverified,

@@ -54,13 +54,13 @@ func TestProviders_Order(t *testing.T) {
 	}
 }
 
-// TestDefaultResolver_NoClone resolves a common type through the default
+// TestResolverFor_EmbeddedNoClone resolves a common type through the embedded
 // resolver and checks that nothing was cloned into the provider cache.
-func TestDefaultResolver_NoClone(t *testing.T) {
+func TestResolverFor_EmbeddedNoClone(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv(provideraws.CacheDirEnv, cache)
 
-	schema, err := DefaultResolver().Resolve("aws_s3_bucket")
+	schema, err := ResolverFor(SourceEmbedded).Resolve("aws_s3_bucket")
 	if err != nil {
 		t.Fatal(err)
 	}
