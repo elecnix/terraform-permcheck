@@ -152,25 +152,54 @@ func touchesClient(fd *ast.FuncDecl) bool {
 // an SDK client. A function that never does, such as a delete that only logs
 // that the resource cannot be destroyed, makes no AWS call by design.
 func (idx *pkgIndex) reachesClient(name string) bool {
-	if r, ok := idx.reach[name]; ok {
-		return r
+	found, _ := idx.searchClient(name, make(map[*pkgIndex]map[string]bool))
+	if !found {
+		// The outermost search explored everything the function reaches.
+		idx.reach[name] = false
 	}
-	idx.reach[name] = false // a cycle adds nothing
-	found := idx.clients[name]
+	return found
+}
+
+// searchClient is the depth-first search behind reachesClient. complete is
+// false when the search met a function still on the search stack: the answer
+// for that function is not known yet, so a false result from below it is not
+// stored. A true result always is.
+func (idx *pkgIndex) searchClient(name string, onStack map[*pkgIndex]map[string]bool) (found, complete bool) {
+	if r, ok := idx.reach[name]; ok {
+		return r, true
+	}
+	if onStack[idx][name] {
+		return false, false
+	}
+	if onStack[idx] == nil {
+		onStack[idx] = make(map[string]bool)
+	}
+	onStack[idx][name] = true
+	defer delete(onStack[idx], name)
+
+	if idx.clients[name] {
+		idx.reach[name] = true
+		return true, true
+	}
+	complete = true
 	for _, hc := range idx.calls[name] {
-		if found {
-			break
-		}
 		target := idx
 		if hc.Pkg != "" {
 			if target = idx.others[hc.Pkg]; target == nil {
 				continue
 			}
 		}
-		found = target.reachesClient(hc.Name)
+		f, c := target.searchClient(hc.Name, onStack)
+		if f {
+			idx.reach[name] = true
+			return true, true
+		}
+		complete = complete && c
 	}
-	idx.reach[name] = found
-	return found
+	if complete {
+		idx.reach[name] = false
+	}
+	return false, complete
 }
 
 // funcAliases returns the package-level variables a file sets to a plain
