@@ -24,15 +24,17 @@
 //	  --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --exit-zero
 //
-//	# With file/line annotations (inline in the PR "Files changed" tab):
+//	# With file/line annotations (inline in the PR "Files changed" tab).
+//	# --terraform-root without --plan-file is static HCL mode, so pass
+//	# --plan-file - to read the plan from stdin:
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
-//	  --policy-file deploy_policy.json --cloud aws \
+//	  --plan-file - --policy-file deploy_policy.json --cloud aws \
 //	  --format github-annotations --terraform-root . --exit-zero
 //
 // JSON output (machine-readable, for CI integration):
 //
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
-//	  --policy-from-plan-output deploy_policy_json --cloud aws \
+//	  --plan-file - --policy-from-plan-output deploy_policy_json --cloud aws \
 //	  --format json --terraform-root . --exit-zero
 package main
 
@@ -58,12 +60,26 @@ import (
 var errGapsFound = errors.New("permission gaps found")
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		if errors.Is(err, errGapsFound) {
-			os.Exit(1)
-		}
+	err := run(os.Args[1:])
+	if code := exitCode(err); code == 2 {
 		fmt.Fprintf(os.Stderr, "terraform-permcheck: %v\n", err)
-		os.Exit(2)
+		os.Exit(code)
+	} else if code != 0 {
+		os.Exit(code)
+	}
+}
+
+// exitCode maps the result of run to the process exit code: 0 when the run
+// passed, 1 when it found permission gaps, and 2 for any other error, such as
+// bad input or a failed schema lookup.
+func exitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errGapsFound):
+		return 1
+	default:
+		return 2
 	}
 }
 
@@ -72,35 +88,96 @@ func main() {
 // this constant.
 const version = "v0.8.1"
 
+// usage is the top-level help text.
+const usage = `Usage: terraform-permcheck <command> [flags]
+
+Commands:
+  validate               check that an IAM policy grants what a Terraform plan or root needs
+  generate-permissions   regenerate the embedded provider permissions table
+  version                print the version
+  help [command]         print this help, or the flags of a command
+
+Run 'terraform-permcheck <command> -h' to list the flags of a command.
+`
+
 func run(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("subcommand required: validate, generate-permissions or version")
+		fmt.Fprint(os.Stderr, usage)
+		return fmt.Errorf("a command is required")
 	}
 
+	var err error
 	switch args[0] {
 	case "validate":
-		return validateCmd(args[1:])
+		err = validateCmd(args[1:])
 	case "generate-permissions":
-		return generatePermissionsCmd(args[1:])
-	case "version":
+		err = generatePermissionsCmd(args[1:])
+	case "version", "--version", "-version":
+		if len(args) > 1 {
+			return fmt.Errorf("unexpected argument %q", args[1])
+		}
 		fmt.Println("terraform-permcheck " + version)
-		return nil
+	case "help", "-h", "--help", "-help":
+		if len(args) > 1 && args[0] == "help" {
+			return run([]string{args[1], "-h"})
+		}
+		fmt.Print(usage)
 	default:
-		return fmt.Errorf("unknown subcommand: %s", args[0])
+		fmt.Fprint(os.Stderr, usage)
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
+}
+
+// newFlagSet returns a flag set for a subcommand whose usage line shows
+// synopsis after the command name.
+func newFlagSet(name, synopsis string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: terraform-permcheck %s %s\n\nFlags:\n", name, synopsis)
+		fs.PrintDefaults()
+	}
+	return fs
+}
+
+// parseFlags parses args into fs. Asked for help, it prints the usage to
+// stdout and returns flag.ErrHelp, which run treats as success. On a bad flag
+// or a positional argument it prints the usage to stderr and returns the
+// error. A positional argument is an error because the flag package stops at
+// it, so any flag after it would be dropped.
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	// The flag package prints its own error message too; run's caller prints
+	// the returned error instead.
+	fs.SetOutput(io.Discard)
+	err := fs.Parse(args)
+	if err == nil && fs.NArg() > 0 {
+		err = fmt.Errorf("unexpected argument %q (flags go before arguments, and %s takes none)", fs.Arg(0), fs.Name())
+	}
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		fs.SetOutput(os.Stdout)
+		fs.Usage()
+	case err != nil:
+		fs.SetOutput(os.Stderr)
+		fs.Usage()
+	}
+	return err
 }
 
 func validateCmd(args []string) error {
-	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
-	planFile := fs.String("plan-file", "", "path to terraform plan JSON (default: stdin)")
+	fs := newFlagSet("validate", "[flags]")
+	planFile := fs.String("plan-file", "", "path to terraform plan JSON, or - for stdin (default: stdin when --terraform-root is not set)")
 	policyFile := fs.String("policy-file", "", "path to IAM policy JSON")
 	policyFromPlanOutput := fs.String("policy-from-plan-output", "", "read IAM policy from named output in plan JSON")
 	policyFromStateOutput := fs.String("policy-from-state-output", "", "read IAM policy from named output in state JSON")
-	stateFile := fs.String("state-file", "", "path to terraform state JSON (default: stdin, for use with --policy-from-state-output)")
+	stateFile := fs.String("state-file", "", "path to terraform state JSON, or - for stdin, for use with --policy-from-state-output (default: stdin)")
 	cloudName := fs.String("cloud", "", "cloud provider: aws (required)")
 	noFilter := fs.Bool("no-filter", false, "disable permission filtering (report all CFN schema permissions)")
 	onlyRequired := fs.Bool("only-required", false, "suppress conditional permissions (show only unconditional [required] actions)")
-	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration for file/line annotations in github-annotations/json output; when no plan is provided, also enables static HCL mode")
+	terraformRoot := fs.String("terraform-root", "", "root directory of terraform configuration for file/line annotations in github-annotations/json output; without --plan-file, also turns on static HCL mode")
 	format := fs.String("format", "text", "output format: text, github-annotations, json")
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 	configFile := fs.String("config", "", "path to permcheck config JSON (default: ./permcheck.json if present)")
@@ -110,7 +187,7 @@ func validateCmd(args []string) error {
 	allowUnresolved := fs.Bool("allow-unresolved-types", false, "report resource types no schema source knows but do not fail the run on them (default: from config allow_unresolved_types)")
 	providerSource := fs.String("provider-source", os.Getenv(check.ProviderSourceEnv), "where provider-source permissions come from: embedded (the table built into the binary) or live (clone and parse terraform-provider-aws) (default: $"+check.ProviderSourceEnv+", else embedded)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
@@ -157,8 +234,18 @@ func validateCmd(args []string) error {
 		Resolver: check.ResolverFor(source),
 	}
 
-	// Static HCL mode reads resources from .tf files when no plan is given.
-	static := *planFile == "" && !stdinHasData()
+	sources := check.Sources{
+		PlanFile:      *planFile,
+		TerraformRoot: *terraformRoot,
+		Policy: check.PolicySource{
+			File:        *policyFile,
+			PlanOutput:  *policyFromPlanOutput,
+			StateOutput: *policyFromStateOutput,
+			StateFile:   *stateFile,
+		},
+	}
+	stdin := processStdin()
+	static := sources.Static()
 
 	// Build resource-to-file location map when --terraform-root is set, for
 	// the file= and line= parameters of annotations. A plan names resources
@@ -179,16 +266,7 @@ func validateCmd(args []string) error {
 		}
 	}
 
-	if static && *terraformRoot == "" {
-		return fmt.Errorf("no plan input: provide --plan-file, pipe plan JSON to stdin, or use --terraform-root for static HCL mode")
-	}
-	policySource := check.PolicySource{
-		File:        *policyFile,
-		PlanOutput:  *policyFromPlanOutput,
-		StateOutput: *policyFromStateOutput,
-		StateFile:   *stateFile,
-	}
-	if err := policySource.Validate(static); err != nil {
+	if err := sources.Validate(stdin); err != nil {
 		return err
 	}
 	prefix, err := check.CloudPrefix(*cloudName)
@@ -196,19 +274,17 @@ func validateCmd(args []string) error {
 		return err
 	}
 	if static {
-		return validateStaticHCL(*terraformRoot, policySource, opts, outFormat, *exitZero, locations, *showExcluded)
+		if sources.StdinIgnored(stdin) {
+			fmt.Fprintln(os.Stderr, "terraform-permcheck: --terraform-root without --plan-file runs static HCL mode; stdin is ignored. Pass --plan-file - to check a piped plan.")
+		}
+		return validateStaticHCL(*terraformRoot, sources.Policy, opts, outFormat, *exitZero, locations, *showExcluded)
 	}
 
-	var planRaw []byte
-	if *planFile != "" {
-		planRaw, err = os.ReadFile(*planFile)
-	} else {
-		planRaw, err = readStdin()
-	}
+	planRaw, err := sources.ReadPlan(stdin)
 	if err != nil {
-		return fmt.Errorf("read plan: %w", err)
+		return err
 	}
-	policyRaw, err := policySource.Load(planRaw, readStdin)
+	policyRaw, err := sources.Policy.Load(planRaw, stdin.Read)
 	if err != nil {
 		return err
 	}
@@ -225,25 +301,23 @@ func validateCmd(args []string) error {
 	return reportResult(res, outFormat, *exitZero, *showExcluded, locations)
 }
 
-// stdinHasData returns true if stdin is a pipe (not a terminal) and has data
-// ready to read.
-func stdinHasData() bool {
+// processStdin describes os.Stdin to the input rules without reading it.
+func processStdin() check.Stdin {
+	in := check.Stdin{Read: func() ([]byte, error) { return io.ReadAll(os.Stdin) }}
 	stat, err := os.Stdin.Stat()
 	if err != nil {
-		return false
+		return in
 	}
-	return (stat.Mode() & os.ModeCharDevice) == 0
-}
-
-func readStdin() ([]byte, error) {
-	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return nil, err
+	switch mode := stat.Mode(); {
+	case mode&os.ModeCharDevice != 0:
+		// A terminal, or /dev/null. Either way there is no plan to read.
+		in.Terminal = true
+	case mode.IsRegular():
+		in.MayHoldPlan = stat.Size() > 0
+	default:
+		in.MayHoldPlan = true
 	}
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return nil, fmt.Errorf("no data on stdin and no file flag set")
-	}
-	return io.ReadAll(os.Stdin)
+	return in
 }
 
 // defaultConfigFile is the config file auto-discovered in the working
@@ -312,10 +386,10 @@ func validateStaticHCL(terraformRoot string, policySource check.PolicySource, op
 // the permissions table that the binary embeds. Without --provider-dir it
 // clones provideraws.DefaultProviderRef into the provider cache.
 func generatePermissionsCmd(args []string) error {
-	fs := flag.NewFlagSet("generate-permissions", flag.ContinueOnError)
+	fs := newFlagSet("generate-permissions", "[flags]")
 	providerDir := fs.String("provider-dir", "", "use this terraform-provider-aws checkout, which must be at "+provideraws.DefaultProviderRef+" (default: clone it into the provider cache)")
 	out := fs.String("out", "-", "write the table to this file (default: stdout); the embedded table is "+permdata.EmbeddedFile)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
