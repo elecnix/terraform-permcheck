@@ -62,7 +62,7 @@ destroyed, counts as complete.
 
 ### Unresolved resource types
 
-PermCheck can't check a resource type that neither the embedded table nor the CloudFormation registry knows. This happens for a resource type newer than the pinned provider tag, and for a Plugin Framework resource that the registry lacks. PermCheck reports each such type as unresolved, with the resources of that type, and counts it as a gap. The run fails with exit code 1 and never prints `All required permissions covered`.
+PermCheck can't check a resource type that neither the embedded table nor the CloudFormation registry knows. This happens for a resource type newer than the pinned provider tag, and for a Plugin Framework resource that the registry lacks. PermCheck reports each such type as unresolved, with the resources of that type, and counts it as a gap. The checked count in the summary line leaves out the resources of an unresolved type, in plan mode and in static mode. The run fails with exit code 1 and never prints `All required permissions covered`.
 
 Each output format reports unresolved types:
 

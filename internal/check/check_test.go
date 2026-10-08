@@ -120,9 +120,9 @@ func TestRun_PlanReportsMissingActions(t *testing.T) {
 	if !res.HasGaps() {
 		t.Error("HasGaps = false with an unresolved type")
 	}
-	// Plan mode counts every resource change, resolvable or not.
-	if res.Checked != 2 || res.Label != "resource changes" {
-		t.Errorf("Checked, Label = %d, %q; want 2, \"resource changes\"", res.Checked, res.Label)
+	// An unresolved change is not checked, as in static mode.
+	if res.Checked != 1 || res.Label != "resource changes" {
+		t.Errorf("Checked, Label = %d, %q; want 1, \"resource changes\"", res.Checked, res.Label)
 	}
 }
 

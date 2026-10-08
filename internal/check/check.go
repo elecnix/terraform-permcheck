@@ -178,7 +178,7 @@ type Result struct {
 	// Excluded are the gaps a config exclusion matched.
 	Excluded []iam.ExcludedAction
 	// Checked counts resource changes in plan mode and distinct resource
-	// types in static mode.
+	// types in static mode. Neither count includes an unresolved type.
 	Checked int
 	// Label names what Checked counts.
 	Label string
@@ -240,6 +240,16 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	missing, err := iam.Validate(changes, policy, resolver, opts.Filter.Config())
 	if err != nil {
 		return Result{}, err
+	}
+	if !in.static {
+		// Validate reports each change whose type no source knows as one
+		// unresolved finding. Such a change is not checked, as in static
+		// mode, whether or not an exclusion hides it.
+		for _, m := range missing {
+			if m.Unresolved {
+				res.Checked--
+			}
+		}
 	}
 	missing = append(missing, iam.CheckNeeds(needs, policy, opts.Filter.StrictResources)...)
 	kept, excluded := iam.ApplyExclusions(missing, opts.Exclusions)
