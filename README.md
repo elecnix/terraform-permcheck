@@ -111,6 +111,18 @@ In static HCL mode PermCheck checks each resource block with the attributes
 that block writes. When one of two `aws_api_gateway_rest_api` blocks sets
 `body`, PermCheck reports the permission that depends on `body` for that block.
 
+Some actions configure a feature that most resources don't use, such as the
+bucket policy, website or CORS rules of an `aws_s3_bucket`. PermCheck classes
+them `[optional]`, and the default filter drops them. When the plan sets the
+attribute that gates such a call, the apply makes the call, so PermCheck
+reports it as required, tagged `[conditional: <attr>]`. An `aws_s3_bucket` with
+a `policy` needs `s3:PutBucketPolicy` unless the plan also has an
+`aws_s3_bucket_policy`, which then takes the action over. An update that
+removes the `policy` needs `s3:DeleteBucketPolicy` instead. In static HCL mode an
+attribute written in the block counts as set. A block that writes no attribute
+leaves the feature optional. The provider tags a bucket only when it has tags,
+so `s3:PutBucketTagging` is required when `tags` or `tags_all` is set.
+
 ### Permissions gated on a change
 
 Other permissions are only needed when an attribute **changes**. The provider
