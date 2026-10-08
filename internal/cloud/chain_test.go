@@ -9,12 +9,10 @@ import (
 )
 
 type mockProvider struct {
-	name    string
-	schemas map[string]*Schema
+	schemas map[string]*iam.Schema
 }
 
-func (m *mockProvider) Name() string { return m.name }
-func (m *mockProvider) Resolve(tfType string) (*Schema, error) {
+func (m *mockProvider) Resolve(tfType string) (*iam.Schema, error) {
 	s, ok := m.schemas[tfType]
 	if !ok {
 		return nil, fmt.Errorf("not found")
@@ -24,16 +22,14 @@ func (m *mockProvider) Resolve(tfType string) (*Schema, error) {
 
 func TestChainProvider_FallsBack(t *testing.T) {
 	mockPrimary := &mockProvider{
-		name: "primary",
-		schemas: map[string]*Schema{
+		schemas: map[string]*iam.Schema{
 			"aws_backup_vault": {TypeName: "aws_backup_vault", Ops: ungated(map[string][]string{
 				"create": {"backup:CreateBackupVault"},
 			})},
 		},
 	}
 	mockFallback := &mockProvider{
-		name: "fallback",
-		schemas: map[string]*Schema{
+		schemas: map[string]*iam.Schema{
 			"aws_dynamodb_table": {TypeName: "aws_dynamodb_table", Ops: ungated(map[string][]string{
 				"create": {"dynamodb:CreateTable"},
 			})},
@@ -47,7 +43,7 @@ func TestChainProvider_FallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := schema.(*Schema).TypeName; got != "aws_backup_vault" {
+	if got := schema.TypeName; got != "aws_backup_vault" {
 		t.Errorf("got type %q, want aws_backup_vault", got)
 	}
 
@@ -56,14 +52,14 @@ func TestChainProvider_FallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := schema.(*Schema).TypeName; got != "aws_dynamodb_table" {
+	if got := schema.TypeName; got != "aws_dynamodb_table" {
 		t.Errorf("got type %q, want aws_dynamodb_table", got)
 	}
 }
 
 func TestChainProvider_AllFail(t *testing.T) {
-	mockA := &mockProvider{name: "a", schemas: map[string]*Schema{}}
-	mockB := &mockProvider{name: "b", schemas: map[string]*Schema{}}
+	mockA := &mockProvider{schemas: map[string]*iam.Schema{}}
+	mockB := &mockProvider{schemas: map[string]*iam.Schema{}}
 
 	chain := NewChainProvider(mockA, mockB)
 
@@ -73,20 +69,11 @@ func TestChainProvider_AllFail(t *testing.T) {
 	}
 }
 
-func TestChainProvider_Name(t *testing.T) {
-	mockA := &mockProvider{name: "aws"}
-	chain := NewChainProvider(mockA)
-
-	if chain.Name() != "aws" {
-		t.Errorf("expected 'aws', got %q", chain.Name())
-	}
-}
-
 // TestChainProvider_MergesIncompleteOperations checks that an operation the
 // first provider marks incomplete takes the next provider's actions, while
 // the operations it resolved stay its own.
 func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
-	primarySchema := &Schema{
+	primarySchema := &iam.Schema{
 		TypeName: "aws_s3_bucket",
 		Ops: map[string][]iam.Requirement{
 			"create": {
@@ -97,8 +84,8 @@ func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 		},
 		Incomplete: map[string]bool{"create": true, "delete": true},
 	}
-	primary := &mockProvider{name: "source", schemas: map[string]*Schema{"aws_s3_bucket": primarySchema}}
-	fallback := &mockProvider{name: "cfn", schemas: map[string]*Schema{
+	primary := &mockProvider{schemas: map[string]*iam.Schema{"aws_s3_bucket": primarySchema}}
+	fallback := &mockProvider{schemas: map[string]*iam.Schema{
 		"aws_s3_bucket": {TypeName: "AWS::S3::Bucket", Ops: ungated(map[string][]string{
 			"create": {"s3:CreateBucket", "s3:PutBucketTagging"},
 			"read":   {"s3:GetBucketPolicy"},
@@ -116,7 +103,7 @@ func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 		"read":   {"s3:HeadBucket"},
 		"delete": {"s3:DeleteBucket"},
 	}
-	merged := schema.(*Schema)
+	merged := schema
 	if got := actionsByOp(merged); !reflect.DeepEqual(got, want) {
 		t.Errorf("permissions = %v, want %v", got, want)
 	}
@@ -136,13 +123,13 @@ func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 // TestChainProvider_IncompleteWithoutFallback returns the first provider's
 // schema unchanged when no later provider knows the type.
 func TestChainProvider_IncompleteWithoutFallback(t *testing.T) {
-	s := &Schema{
+	s := &iam.Schema{
 		TypeName:   "aws_thing",
 		Ops:        ungated(map[string][]string{"read": {"thing:GetThing"}}),
 		Incomplete: map[string]bool{"create": true},
 	}
-	primary := &mockProvider{name: "source", schemas: map[string]*Schema{"aws_thing": s}}
-	fallback := &mockProvider{name: "cfn", schemas: map[string]*Schema{}}
+	primary := &mockProvider{schemas: map[string]*iam.Schema{"aws_thing": s}}
+	fallback := &mockProvider{schemas: map[string]*iam.Schema{}}
 
 	got, err := NewChainProvider(primary, fallback).Resolve("aws_thing")
 	if err != nil {
@@ -158,18 +145,18 @@ func TestChainProvider_IncompleteWithoutFallback(t *testing.T) {
 // FIRST later provider that has any for it, and no further provider's actions
 // are merged into it once it is complete.
 func TestChainProvider_FirstLaterProviderFillsEachOperation(t *testing.T) {
-	primarySchema := &Schema{
+	primarySchema := &iam.Schema{
 		TypeName:   "aws_widget",
 		Ops:        ungated(map[string][]string{"create": {"widget:CreateWidget"}}),
 		Incomplete: map[string]bool{"create": true, "delete": true},
 	}
 	// The second provider knows create only, so delete stays incomplete for
 	// the third provider to fill.
-	second := &Schema{
+	second := &iam.Schema{
 		TypeName: "AWS::Widget::Widget",
 		Ops:      ungated(map[string][]string{"create": {"widget:CreateWidgetAlias"}}),
 	}
-	third := &Schema{
+	third := &iam.Schema{
 		TypeName: "aws_widget_alternative",
 		Ops: ungated(map[string][]string{
 			"create": {"widget:CreateWidgetFromTemplate"},
@@ -178,16 +165,15 @@ func TestChainProvider_FirstLaterProviderFillsEachOperation(t *testing.T) {
 	}
 
 	chain := NewChainProvider(
-		&mockProvider{name: "source", schemas: map[string]*Schema{"aws_widget": primarySchema}},
-		&mockProvider{name: "cfn", schemas: map[string]*Schema{"aws_widget": second}},
-		&mockProvider{name: "alternative", schemas: map[string]*Schema{"aws_widget": third}},
+		&mockProvider{schemas: map[string]*iam.Schema{"aws_widget": primarySchema}},
+		&mockProvider{schemas: map[string]*iam.Schema{"aws_widget": second}},
+		&mockProvider{schemas: map[string]*iam.Schema{"aws_widget": third}},
 	)
 
-	schema, err := chain.Resolve("aws_widget")
+	got, err := chain.Resolve("aws_widget")
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := schema.(*Schema)
 
 	want := map[string][]string{
 		"create": {"widget:CreateWidget", "widget:CreateWidgetAlias"},
@@ -218,7 +204,7 @@ func ungated(perms map[string][]string) map[string][]iam.Requirement {
 }
 
 // actionsByOp lists the distinct actions of every operation of s.
-func actionsByOp(s *Schema) map[string][]string {
+func actionsByOp(s *iam.Schema) map[string][]string {
 	out := make(map[string][]string, len(s.Ops))
 	for op := range s.Ops {
 		out[op] = s.Actions(op)

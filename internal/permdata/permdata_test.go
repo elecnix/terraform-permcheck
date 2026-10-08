@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
@@ -14,8 +13,8 @@ import (
 // sample is a table that uses every field the format stores: each gate
 // field, a known operation with no requirements, an action reached on two
 // paths, and an incomplete operation.
-func sample() map[string]*cloud.Schema {
-	return map[string]*cloud.Schema{
+func sample() map[string]*iam.Schema {
+	return map[string]*iam.Schema{
 		"aws_widget": {
 			TypeName: "aws_widget",
 			Ops: map[string][]iam.Requirement{
@@ -136,7 +135,7 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Resolve(%s): %v", tfType, err)
 		}
-		assertSameSchemas(t, map[string]*cloud.Schema{tfType: got}, map[string]*cloud.Schema{tfType: w})
+		assertSameSchemas(t, map[string]*iam.Schema{tfType: got}, map[string]*iam.Schema{tfType: w})
 	}
 }
 
@@ -187,7 +186,7 @@ func TestEmbedded_KeyTypes(t *testing.T) {
 	}
 }
 
-func assertSameSchemas(t *testing.T, got, want map[string]*cloud.Schema) {
+func assertSameSchemas(t *testing.T, got, want map[string]*iam.Schema) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("got %d types, want %d", len(got), len(want))

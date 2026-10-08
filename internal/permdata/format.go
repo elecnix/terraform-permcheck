@@ -4,7 +4,7 @@
 // provider and no parse of its Go source.
 //
 // The generate-permissions command writes the table with Generate. Decode
-// reads it back, and Provider serves it as a cloud.Provider.
+// reads it back, and Provider serves it as an iam.Resolver.
 package permdata
 
 import (
@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
@@ -30,7 +29,7 @@ type Table struct {
 	// Ref is the provider ref the table was generated from, e.g. "v5.90.0".
 	Ref string
 	// Schemas maps each terraform resource type to its schema.
-	Schemas map[string]*cloud.Schema
+	Schemas map[string]*iam.Schema
 }
 
 // file is the JSON shape of a table.
@@ -72,7 +71,7 @@ func Generate(src *provideraws.SourceProvider) ([]byte, error) {
 // deterministic: types, operations and incomplete operations are sorted, and
 // requirements keep the order the parser emitted them in. Each requirement
 // sits on its own line, so a regenerated table diffs line by line.
-func encode(ref string, schemas map[string]*cloud.Schema) ([]byte, error) {
+func encode(ref string, schemas map[string]*iam.Schema) ([]byte, error) {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "{\n  \"format\": %d,\n  \"provider\": %s,\n  \"ref\": %s,\n  \"resources\": {", formatVersion, quote(providerName), quote(ref))
 	for i, tfType := range sortedKeys(schemas) {
@@ -133,9 +132,9 @@ func Decode(data []byte) (*Table, error) {
 	if f.Format != formatVersion {
 		return nil, fmt.Errorf("permissions table has format %d, this build reads format %d", f.Format, formatVersion)
 	}
-	tbl := &Table{Ref: f.Ref, Schemas: make(map[string]*cloud.Schema, len(f.Resources))}
+	tbl := &Table{Ref: f.Ref, Schemas: make(map[string]*iam.Schema, len(f.Resources))}
 	for tfType, r := range f.Resources {
-		s := &cloud.Schema{TypeName: tfType, Ops: make(map[string][]iam.Requirement, len(r.Ops))}
+		s := &iam.Schema{TypeName: tfType, Ops: make(map[string][]iam.Requirement, len(r.Ops))}
 		for op, reqs := range r.Ops {
 			out := make([]iam.Requirement, len(reqs))
 			for i, q := range reqs {

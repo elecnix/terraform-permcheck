@@ -51,15 +51,12 @@ func NewAWSProvider() *AWSProvider {
 	}
 }
 
-// Name returns "aws".
-func (p *AWSProvider) Name() string { return "aws" }
-
 // Resolve maps a terraform resource type to its CloudFormation schema and
 // returns the required IAM permissions. The error is marked
 // iam.ErrUnknownType when the registry holds none of the candidate keys, and
 // iam.ErrLookupFailed when any request failed for another reason, since that
 // key may exist.
-func (p *AWSProvider) Resolve(tfType string) (*Schema, error) {
+func (p *AWSProvider) Resolve(tfType string) (*iam.Schema, error) {
 	keys := cfnKeys(tfType)
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("%q: cannot derive CFN registry key: %w", tfType, iam.ErrUnknownType)
@@ -244,11 +241,11 @@ func (p *AWSProvider) fetch(key string) (*cfnSchema, error) {
 	return &s, nil
 }
 
-// toSchema converts a CloudFormation schema to our agnostic Schema type. The
+// toSchema converts a CloudFormation schema to an iam.Schema. The
 // registry lists handler permissions without gates, so every requirement is
 // ungated. Every handler is a known operation, even one with no permissions.
-func toSchema(cfn *cfnSchema) *Schema {
-	return &Schema{
+func toSchema(cfn *cfnSchema) *iam.Schema {
+	return &iam.Schema{
 		TypeName: cfn.TypeName,
 		Ops: map[string][]iam.Requirement{
 			"create": iam.Unconditional(cfn.Handlers.Create.Permissions...),

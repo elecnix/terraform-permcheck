@@ -13,10 +13,9 @@ import (
 )
 
 // stubProvider stands in for the CloudFormation registry.
-type stubProvider map[string]*cloud.Schema
+type stubProvider map[string]*iam.Schema
 
-func (s stubProvider) Name() string { return "stub" }
-func (s stubProvider) Resolve(tfType string) (*cloud.Schema, error) {
+func (s stubProvider) Resolve(tfType string) (*iam.Schema, error) {
 	if schema, ok := s[tfType]; ok {
 		return schema, nil
 	}
@@ -200,7 +199,7 @@ func resourceWidgetDelete(ctx context.Context, d *schema.ResourceData, meta inte
 	if err != nil {
 		t.Fatal(err)
 	}
-	merged := resolved.(*cloud.Schema)
+	merged := resolved
 	if !contains(merged.Actions("create"), "thing:CreateWidget") || !contains(merged.Actions("create"), "thing:GetWidget") {
 		t.Errorf("create = %v, want the parsed read plus thing:CreateWidget", merged.Actions("create"))
 	}

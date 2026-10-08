@@ -68,12 +68,12 @@ func ResolverFor(src ProviderSource) iam.Resolver {
 // the same operations, so a live parse after the table would fill the
 // table's incomplete operations with the same calls, mark them complete, and
 // keep CloudFormation from filling them.
-func providers(src ProviderSource) []cloud.Provider {
-	var first cloud.Provider = permdata.Embedded()
+func providers(src ProviderSource) []iam.Resolver {
+	var first iam.Resolver = permdata.Embedded()
 	if src == SourceLive {
 		first = provideraws.NewSourceProvider()
 	}
-	return []cloud.Provider{first, cloud.NewAWSProvider()}
+	return []iam.Resolver{first, cloud.NewAWSProvider()}
 }
 
 type sharedResolver struct {
@@ -302,7 +302,7 @@ type memoResolver struct {
 }
 
 type memoEntry struct {
-	schema iam.Schema
+	schema *iam.Schema
 	err    error
 }
 
@@ -310,7 +310,7 @@ func newMemoResolver(next iam.Resolver) *memoResolver {
 	return &memoResolver{next: next, cache: make(map[string]memoEntry)}
 }
 
-func (m *memoResolver) Resolve(tfType string) (iam.Schema, error) {
+func (m *memoResolver) Resolve(tfType string) (*iam.Schema, error) {
 	if e, ok := m.cache[tfType]; ok {
 		return e.schema, e.err
 	}

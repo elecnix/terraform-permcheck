@@ -8,14 +8,14 @@ import (
 )
 
 // typeKeyedResolver serves a distinct schema per terraform resource type.
-type typeKeyedResolver map[string]Schema
+type typeKeyedResolver map[string]fakeSchema
 
-func (r typeKeyedResolver) Resolve(t string) (Schema, error) {
+func (r typeKeyedResolver) Resolve(t string) (*Schema, error) {
 	s, ok := r[t]
 	if !ok {
 		return nil, errors.New("no schema")
 	}
-	return s, nil
+	return s.schema(), nil
 }
 
 func TestGlobIntersect(t *testing.T) {

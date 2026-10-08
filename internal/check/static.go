@@ -85,7 +85,7 @@ func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.R
 // the validator falls back to create when an operation is absent, and an
 // operation whose actions the create check already reports would repeat that
 // result. Read and list are not mutation operations and are never checked.
-func staticOpsFor(schema iam.Schema) []string {
+func staticOpsFor(schema *iam.Schema) []string {
 	createReqs, _ := schema.Requirements("create")
 	create := make(map[string]bool, len(createReqs))
 	for _, r := range createReqs {

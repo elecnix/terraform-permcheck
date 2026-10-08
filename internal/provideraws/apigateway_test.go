@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
@@ -293,7 +292,7 @@ func TestSourceProvider_APIGatewayV2DomainName(t *testing.T) {
 // action is needed when either attribute is set. An action one call makes
 // with no gate stays ungated.
 func TestAddTagActions_SharedVerb(t *testing.T) {
-	schema := &cloud.Schema{Ops: map[string][]iam.Requirement{"create": {
+	schema := &iam.Schema{Ops: map[string][]iam.Requirement{"create": {
 		{Action: "apigateway:POST"},
 		{Action: "apigateway:PUT", Gate: iam.Gate{Attribute: "body"}},
 		{Action: "apigateway:PATCH", Gate: iam.Gate{Changed: "body"}},

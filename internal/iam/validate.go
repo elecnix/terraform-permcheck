@@ -131,7 +131,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 // operationRequirements returns the schema's requirements for op, or for
 // create when the schema does not know op.
-func operationRequirements(schema Schema, op string) []Requirement {
+func operationRequirements(schema *Schema, op string) []Requirement {
 	if reqs, ok := schema.Requirements(op); ok {
 		return reqs
 	}

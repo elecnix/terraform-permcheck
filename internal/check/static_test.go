@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -15,12 +14,12 @@ import (
 // operation → ungated actions.
 type fakePermResolver map[string]map[string][]string
 
-func (r fakePermResolver) Resolve(t string) (iam.Schema, error) {
+func (r fakePermResolver) Resolve(t string) (*iam.Schema, error) {
 	perms, ok := r[t]
 	if !ok {
 		return nil, errors.New("unknown type " + t)
 	}
-	s := &cloud.Schema{TypeName: t, Ops: make(map[string][]iam.Requirement, len(perms))}
+	s := &iam.Schema{TypeName: t, Ops: make(map[string][]iam.Requirement, len(perms))}
 	for op, actions := range perms {
 		s.Ops[op] = iam.Unconditional(actions...)
 	}

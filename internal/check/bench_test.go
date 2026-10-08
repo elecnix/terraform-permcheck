@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
@@ -24,9 +23,9 @@ func BenchmarkRun_SecretVersions(b *testing.B) {
 				References: map[string][]string{"secret_id": {"aws_secretsmanager_secret." + secret + ".id", "aws_secretsmanager_secret." + secret}}})
 	}
 	resolver := fakeResolver{
-		"aws_secretsmanager_secret": &cloud.Schema{TypeName: "aws_secretsmanager_secret",
+		"aws_secretsmanager_secret": &iam.Schema{TypeName: "aws_secretsmanager_secret",
 			Ops: map[string][]iam.Requirement{"create": iam.Unconditional("secretsmanager:CreateSecret")}},
-		"aws_secretsmanager_secret_version": &cloud.Schema{TypeName: "aws_secretsmanager_secret_version",
+		"aws_secretsmanager_secret_version": &iam.Schema{TypeName: "aws_secretsmanager_secret_version",
 			Ops: map[string][]iam.Requirement{"create": iam.Unconditional("secretsmanager:PutSecretValue")}},
 	}
 	load := func() ([]byte, error) {

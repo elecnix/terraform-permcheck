@@ -104,13 +104,13 @@ func TestDecide_EncryptionSpellingsAbsorbed(t *testing.T) {
 	}
 }
 
-// fakeSchema is the test Schema: operation → requirements, one per path
-// that reaches an action, each carrying its own gate.
+// fakeSchema lists a test schema's operations: operation → requirements,
+// one per path that reaches an action, each carrying its own gate.
 type fakeSchema map[string][]Requirement
 
-func (f fakeSchema) Requirements(op string) ([]Requirement, bool) {
-	reqs, ok := f[op]
-	return reqs, ok
+// schema returns the Schema of these operations.
+func (f fakeSchema) schema() *Schema {
+	return &Schema{Ops: f}
 }
 
 // actionsSchema builds a fakeSchema of ungated requirements from
@@ -124,9 +124,9 @@ func actionsSchema(perms map[string][]string) fakeSchema {
 }
 
 // fakeResolver serves one schema for every terraform resource type.
-type fakeResolver struct{ s Schema }
+type fakeResolver struct{ s fakeSchema }
 
-func (r fakeResolver) Resolve(string) (Schema, error) { return r.s, nil }
+func (r fakeResolver) Resolve(string) (*Schema, error) { return r.s.schema(), nil }
 
 // grantNothing returns a policy with no statements, which grants no action.
 func grantNothing() *PolicyDocument { return &PolicyDocument{} }
