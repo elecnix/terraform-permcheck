@@ -16,8 +16,14 @@ type PolicySource struct {
 	PlanOutput  string // --policy-from-plan-output
 	StateOutput string // --policy-from-state-output
 	// StateFile is the state JSON StateOutput reads (--state-file). Empty
-	// means stdin.
+	// or "-" means stdin.
 	StateFile string
+}
+
+// stateFromStdin reports whether the policy comes from a state read from
+// stdin.
+func (s PolicySource) stateFromStdin() bool {
+	return s.StateOutput != "" && (s.StateFile == "" || s.StateFile == "-")
 }
 
 // Validate checks the selection rules. Plan mode needs exactly one source.
@@ -47,8 +53,8 @@ func (s PolicySource) Validate(static bool) error {
 }
 
 // Load reads the policy JSON. planRaw is the plan the PlanOutput is read
-// from. readStdin reads the state when StateFile is empty. An output may hold
-// the policy as a JSON string or as an object.
+// from. readStdin reads the state when StateFile is empty or "-". An output
+// may hold the policy as a JSON string or as an object.
 func (s PolicySource) Load(planRaw []byte, readStdin func() ([]byte, error)) ([]byte, error) {
 	switch {
 	case s.PlanOutput != "":
@@ -60,10 +66,10 @@ func (s PolicySource) Load(planRaw []byte, readStdin func() ([]byte, error)) ([]
 	case s.StateOutput != "":
 		var stateRaw []byte
 		var err error
-		if s.StateFile != "" {
-			stateRaw, err = os.ReadFile(s.StateFile)
-		} else {
+		if s.stateFromStdin() {
 			stateRaw, err = readStdin()
+		} else {
+			stateRaw, err = os.ReadFile(s.StateFile)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("read state: %w", err)

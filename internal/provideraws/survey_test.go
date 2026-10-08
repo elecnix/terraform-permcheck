@@ -26,10 +26,7 @@ func TestSourceProvider_FewIncompleteOperations(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "internal", "service")); err != nil {
 		t.Skipf("provider checkout not found at %s", dir)
 	}
-	p := NewSourceProviderWithPath(dir)
-	if err := p.Ensure(); err != nil {
-		t.Fatal(err)
-	}
+	p := parsedCheckout(t, dir)
 
 	var incomplete []string
 	for tfType, s := range p.schemas {

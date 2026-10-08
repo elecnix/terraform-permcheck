@@ -22,8 +22,11 @@ func registry(t *testing.T, status int) *AWSProvider {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return &AWSProvider{client: srv.Client(), baseURL: srv.URL}
+	return &AWSProvider{client: srv.Client(), baseURL: srv.URL, sleep: noSleep}
 }
+
+// noSleep skips the wait between registry attempts.
+func noSleep(time.Duration) {}
 
 // TestAWSProvider_ErrorKinds checks how the registry adapter marks each
 // failure. The registry answers 403 for a key it does not hold (it sits on
@@ -65,7 +68,7 @@ func TestAWSProvider_NetworkFailureIsLookupFailure(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
 	srv.Close() // nothing listens any more
-	p := &AWSProvider{client: &http.Client{Timeout: time.Second}, baseURL: url}
+	p := &AWSProvider{client: &http.Client{Timeout: time.Second}, baseURL: url, sleep: noSleep}
 	if _, err := p.Resolve("aws_thing_widget"); !errors.Is(err, iam.ErrLookupFailed) {
 		t.Errorf("err = %v, want ErrLookupFailed", err)
 	}

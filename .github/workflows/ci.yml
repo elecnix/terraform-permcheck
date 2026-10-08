@@ -7,13 +7,18 @@ on:
   # pull request's branch rather than main.
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -26,17 +31,36 @@ jobs:
       - name: Format check
         run: test -z "$(gofmt -l .)"
 
-      - name: Test (short)
-        run: go test ./... -short -count=1 -v
+      - name: Test (short, race detector)
+        run: go test ./... -short -race -count=1 -v
 
+  # test-live and permissions-drift need a clone of terraform-provider-aws
+  # at DefaultProviderRef, about 300 MB. Both restore it from the Actions
+  # cache, keyed on that ref, so only the first run after a bump clones it.
   test-live:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
+
+      - name: Find the provider ref
+        id: provider
+        run: |
+          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
+
+      - name: Restore the provider clone
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ runner.temp }}/provider-cache
+          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
 
       - name: Test (live CFN registry)
         run: go test ./... -count=1 -v
@@ -44,13 +68,30 @@ jobs:
   permissions-drift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
 
-      # Clones terraform-provider-aws at DefaultProviderRef and parses it.
+      - name: Find the provider ref
+        id: provider
+        run: |
+          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
+
+      - name: Restore the provider clone
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ runner.temp }}/provider-cache
+          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
+
+      # Clones terraform-provider-aws at DefaultProviderRef, unless the cache
+      # restored it, and parses it.
       - name: Regenerate the embedded permissions table
         run: go run . generate-permissions --out internal/permdata/permissions.json
 
@@ -64,7 +105,9 @@ jobs:
   action:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
       - name: Run the action with a policy that covers the plan
         id: covered
@@ -84,12 +127,69 @@ jobs:
 
       # The failed action has no outputs, so read the environment variables
       # its check step set.
-      - name: Check the exit codes
+      - name: Check the failing run
         env:
-          COVERED: ${{ steps.covered.outputs.exit-code }}
           OUTCOME: ${{ steps.partial.outcome }}
         run: |
-          test "$COVERED" = 0 || { echo "covered run exited $COVERED, want 0"; exit 1; }
           test "$OUTCOME" = failure || { echo "partial run outcome $OUTCOME, want failure"; exit 1; }
           test "$PERMCHECK_EXIT_CODE" = 1 || { echo "partial run exited $PERMCHECK_EXIT_CODE, want 1"; exit 1; }
           grep -q '::warning' "$PERMCHECK_REPORT_FILE" || { echo "partial report has no annotations"; exit 1; }
+
+      - name: Run the action with JSON output and fail-on-gaps off
+        id: json
+        uses: ./
+        with:
+          plan-file: testdata/plan.json
+          policy-file: testdata/policy_partial.json
+          format: json
+          fail-on-gaps: "false"
+
+      - name: Run the action in static HCL mode
+        id: static
+        uses: ./
+        with:
+          terraform-root: testdata/cfn  # holds no .tf files
+          policy-file: testdata/policy_full.json
+          format: text
+
+      - name: Check the exit codes and outputs
+        env:
+          COVERED: ${{ steps.covered.outputs.exit-code }}
+          JSON_CODE: ${{ steps.json.outputs.exit-code }}
+          JSON_REPORT: ${{ steps.json.outputs.report-file }}
+          JSON_LOG: ${{ steps.json.outputs.log-file }}
+          STATIC: ${{ steps.static.outputs.exit-code }}
+        run: |
+          test "$COVERED" = 0 || { echo "covered run exited $COVERED, want 0"; exit 1; }
+          test "$JSON_CODE" = 1 || { echo "json run exited $JSON_CODE, want 1"; exit 1; }
+          jq -e '.status == "gaps_found"' "$JSON_REPORT" || { echo "json report does not parse"; exit 1; }
+          test -f "$JSON_LOG" || { echo "json run has no log file"; exit 1; }
+          test "$STATIC" = 0 || { echo "static run exited $STATIC, want 0"; exit 1; }
+
+  # Builds every release archive the way the tag push does, so a change that
+  # breaks the release fails here instead of on the tag.
+  release-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check the GoReleaser config
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+      - name: Build a snapshot release
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish

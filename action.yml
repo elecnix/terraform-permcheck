@@ -46,6 +46,10 @@ inputs:
     description: Set to `true` to pass the step even when permissions are missing.
     required: false
     default: "false"
+  fail-on-gaps:
+    description: Set to `false` to keep the step green when permissions are missing, so the outputs carry exit code 1. Invalid input (exit code 2) still fails the step. Unlike `exit-zero`, the tool's real exit code stays available.
+    required: false
+    default: "true"
   only-required:
     description: Set to `true` to report only unconditional `[required]` permissions.
     required: false
@@ -55,7 +59,7 @@ inputs:
     required: false
     default: "false"
   args:
-    description: Extra flags passed to `terraform-permcheck validate` as written.
+    description: Extra flags passed to `terraform-permcheck validate`. The action splits the value on whitespace and does not apply shell quoting, so a value cannot contain a space.
     required: false
     default: ""
   working-directory:
@@ -67,23 +71,30 @@ outputs:
   exit-code:
     description: Exit code of the check. 0 means covered, 1 means missing permissions, 2 means bad input.
     value: ${{ steps.check.outputs.exit-code }}
+    # GitHub drops every output of a composite action that fails. When this
+    # action fails, read the PERMCHECK_EXIT_CODE, PERMCHECK_REPORT_FILE and
+    # PERMCHECK_LOG_FILE environment variables in a later step instead.
   report-file:
-    description: Path to a file with the full report (stdout and stderr).
+    description: Path to a file with what the tool wrote to stdout. With `format` set to `json` it holds the JSON report alone, ready for `jq`. With `github-annotations` it holds the annotations. With `text` it holds the all-clear line only.
     value: ${{ steps.check.outputs.report-file }}
+  log-file:
+    description: Path to a file with what the tool wrote to stderr. With `format` set to `text` it holds the findings. It also holds any error message.
+    value: ${{ steps.check.outputs.log-file }}
 
 runs:
   using: composite
   steps:
-    - name: Set up Go
-      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
-      with:
-        go-version-file: ${{ github.action_path }}/go.mod
-        cache: false
-
-    - name: Build terraform-permcheck
+    # Downloads the release binary for a v* tag and checks it against the
+    # release's checksums.txt, or builds from source otherwise. It does not
+    # change PATH, so the caller's later steps keep their own Go, if any.
+    - name: Install terraform-permcheck
+      id: install
       shell: bash
-      working-directory: ${{ github.action_path }}
-      run: go build -trimpath -o "$RUNNER_TEMP/terraform-permcheck" .
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/action/install.sh"
 
     - name: Check IAM permissions
       id: check
@@ -103,6 +114,7 @@ runs:
         INPUT_ONLY_REQUIRED: ${{ inputs.only-required }}
         INPUT_SHOW_EXCLUDED: ${{ inputs.show-excluded }}
         INPUT_ARGS: ${{ inputs.args }}
+        PERMCHECK_BIN: ${{ steps.install.outputs.path }}
         PERMCHECK_PROVIDER_CACHE_DIR: ${{ runner.temp }}/terraform-permcheck-provider-cache
       run: |
         set -uo pipefail
@@ -122,26 +134,41 @@ runs:
           flags+=("${extra[@]}")
         fi
 
-        # Each run gets its own file, so a second use of the action in the job
+        # Each run gets its own files, so a second use of the action in the job
         # does not overwrite the first one's report.
         report="$(mktemp "$RUNNER_TEMP/terraform-permcheck-report-XXXXXX")"
+        log="$(mktemp "$RUNNER_TEMP/terraform-permcheck-log-XXXXXX")"
         # stdin is closed so the tool reads the plan from --plan-file only.
+        # stdout and stderr go to separate files, so the JSON report stays
+        # parseable, then both are echoed to the job log.
         # GitHub runs bash with -e, so a non-zero exit would end the step here.
         # The || keeps it running to record the code.
         code=0
-        "$RUNNER_TEMP/terraform-permcheck" "${flags[@]}" < /dev/null 2>&1 | tee "$report" || code=${PIPESTATUS[0]}
-        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
-        echo "report-file=$report" >> "$GITHUB_OUTPUT"
-        # GitHub drops every output of a composite action that fails, so the
-        # same values also go to the environment of the job's later steps.
-        echo "PERMCHECK_EXIT_CODE=$code" >> "$GITHUB_ENV"
-        echo "PERMCHECK_REPORT_FILE=$report" >> "$GITHUB_ENV"
+        "$PERMCHECK_BIN" "${flags[@]}" < /dev/null > "$report" 2> "$log" || code=$?
+        cat "$report"
+        cat "$log" >&2
+        {
+          echo "exit-code=$code"
+          echo "report-file=$report"
+          echo "log-file=$log"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "PERMCHECK_EXIT_CODE=$code"
+          echo "PERMCHECK_REPORT_FILE=$report"
+          echo "PERMCHECK_LOG_FILE=$log"
+        } >> "$GITHUB_ENV"
 
     # The check step above always succeeds, so the environment variables it
-    # sets reach the rest of the job. This step fails with the tool's exit code.
+    # sets reach the rest of the job. This step then fails with the tool's
+    # exit code, unless fail-on-gaps is false and the code means gaps found.
     - name: Fail when permissions are missing or the input is invalid
       if: steps.check.outputs.exit-code != '0'
       shell: bash
       env:
         EXIT_CODE: ${{ steps.check.outputs.exit-code }}
-      run: exit "${EXIT_CODE:-2}"
+        FAIL_ON_GAPS: ${{ inputs.fail-on-gaps }}
+      run: |
+        if [ "$EXIT_CODE" = 1 ] && [ "$FAIL_ON_GAPS" = "false" ]; then
+          exit 0
+        fi
+        exit "${EXIT_CODE:-2}"
