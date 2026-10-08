@@ -38,10 +38,34 @@ func (g Gate) holds(rc *plan.ResourceChange) bool {
 	if g.Attribute != "" && !conditionMet(g.Attribute, g.ValueGuarded, rc) {
 		return false
 	}
-	if g.Changed != "" && rc.ChangedAttributes != nil && !rc.ChangedAttributes[g.Changed] {
+	if g.Changed != "" && !attributeChanged(g.Changed, rc) {
 		return false
 	}
 	return true
+}
+
+// attributeChanged reports whether a change guard on attr passes for this
+// resource change. An unknown change counts as a change.
+//
+// The parser keeps the path a guard names, such as
+// stream_mode_details.0.stream_mode. A nested path is read from the plan's
+// nested values when the change carries them. Otherwise its first segment
+// decides, since a change below an attribute changes the attribute.
+func attributeChanged(attr string, rc *plan.ResourceChange) bool {
+	top, nested := topAttribute(attr)
+	if nested {
+		if changed, known := rc.PathChanged(attr); known {
+			return changed
+		}
+	}
+	return rc.ChangedAttributes == nil || rc.ChangedAttributes[top]
+}
+
+// topAttribute returns the top-level attribute of a dotted path, and whether
+// the path goes below it.
+func topAttribute(path string) (string, bool) {
+	top, _, nested := strings.Cut(path, ".")
+	return top, nested
 }
 
 // evaluateGates checks an action against the gates of the paths that reach

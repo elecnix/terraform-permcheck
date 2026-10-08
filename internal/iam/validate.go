@@ -201,14 +201,25 @@ func gateAttribute(presenceAttr, changeAttr string) string {
 // so a value guard asks the configuration section instead. With no
 // configuration to read, both kinds fall back to presence, which keeps the
 // permission rather than dropping one the provider may still need.
+//
+// A guard on a nested path, such as ttl.0.enabled, reads the nested value of
+// the plan when the change carries it. The configuration section and the
+// top-level maps only know top-level attributes, so otherwise the path's
+// first segment decides.
 func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool {
+	top, nested := topAttribute(attr)
 	if valueGuarded && rc.Configured != nil {
-		return rc.Configured[attr]
+		return rc.Configured[top]
+	}
+	if nested {
+		if present, known := rc.PathPresent(attr); known {
+			return present
+		}
 	}
 	if rc.Attributes == nil {
 		return true
 	}
-	return rc.Attributes[attr]
+	return rc.Attributes[top]
 }
 
 // classTag returns a human-readable classification tag for a permissionClass.

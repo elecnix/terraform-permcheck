@@ -72,6 +72,23 @@ func TestValidate_VerdictIAM(t *testing.T) {
 				"aws_dynamodb_resource_policy dynamodb:PutResourcePolicy",
 			},
 		},
+		{
+			// A gate on a nested path reads the nested plan value.
+			name: "nested gate paths hold", plan: "nested_gate_plan.json", policy: "nested_gate_policy.json",
+			present: []string{
+				"aws_dynamodb_table dynamodb:UpdateTimeToLive",
+				"aws_dynamodb_table dynamodb:UpdateContinuousBackups",
+				"aws_kinesis_stream kinesis:UpdateStreamMode",
+			},
+		},
+		{
+			name: "nested gate paths do not hold", plan: "nested_gate_off_plan.json", policy: "nested_gate_policy.json",
+			present: []string{"aws_dynamodb_table dynamodb:UpdateContinuousBackups"},
+			absent: []string{
+				"aws_dynamodb_table dynamodb:UpdateTimeToLive",
+				"aws_kinesis_stream kinesis:UpdateStreamMode",
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { runVerdictCase(t, c) })

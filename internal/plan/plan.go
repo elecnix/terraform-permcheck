@@ -59,6 +59,10 @@ type ResourceChange struct {
 	// nil when the plan carries no configuration section, meaning the set of
 	// configured attributes is unknown.
 	Configured map[string]bool
+
+	// paths keeps the decoded states for gates on nested attribute paths.
+	// Nil for a change built without plan state.
+	paths *pathState
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -170,6 +174,7 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			AttributeValues:   attributeStringValues(attrSource),
 			References:        resourceReferences(plan.Configuration, rc.Type, rc.Name),
 			Configured:        configuredAttributes(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
+			paths:             newPathState(attrSource, afterUnknown, changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
 		})
 	}
 	return changes, nil
