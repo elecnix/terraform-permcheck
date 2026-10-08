@@ -116,6 +116,26 @@ func (p *SourceProvider) Has(tfType string) bool {
 	return ok
 }
 
+// Schemas parses the provider source and returns the schema of every resource
+// type it found. The map is a copy; the schemas are the ones Resolve returns.
+// It fails when the source holds no resources, so a generator never writes an
+// empty table.
+func (p *SourceProvider) Schemas() (map[string]*cloud.Schema, error) {
+	if err := p.Ensure(); err != nil {
+		return nil, err
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.schemas) == 0 {
+		return nil, fmt.Errorf("no resources found in provider source at %s", p.repoPath)
+	}
+	out := make(map[string]*cloud.Schema, len(p.schemas))
+	for tfType, s := range p.schemas {
+		out[tfType] = s
+	}
+	return out, nil
+}
+
 // runGit runs a git command in the given directory. If buf is nil, stderr is
 // buffered and only printed when the command fails — so the caller gets a
 // clean, silent run on success and the full git error on failure. The buffer

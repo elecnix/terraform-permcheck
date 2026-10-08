@@ -12,6 +12,10 @@
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 //
+// Regenerate the embedded permissions table after bumping DefaultProviderRef:
+//
+//	go run . generate-permissions --out internal/permdata/permissions.json
+//
 // GitHub Actions annotations (warn, don't fail):
 //
 //	terraform show -json plan.tfplan | terraform-permcheck validate \
@@ -37,13 +41,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/report"
+
+	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
 // errGapsFound is returned by validateCmd when permission gaps are detected
@@ -67,12 +75,14 @@ const version = "v0.8.1"
 
 func run(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("subcommand required: validate")
+		return fmt.Errorf("subcommand required: validate, generate-permissions or version")
 	}
 
 	switch args[0] {
 	case "validate":
 		return validateCmd(args[1:])
+	case "generate-permissions":
+		return generatePermissionsCmd(args[1:])
 	case "version":
 		fmt.Println("terraform-permcheck " + version)
 		return nil
@@ -98,12 +108,17 @@ func validateCmd(args []string) error {
 	showExcluded := fs.Bool("show-excluded", false, "list config-excluded permissions in the report (default: suppressed silently)")
 	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
+	providerSource := fs.String("provider-source", os.Getenv(check.ProviderSourceEnv), "where provider-source permissions come from: embedded (the table built into the binary) or live (clone and parse terraform-provider-aws) (default: $"+check.ProviderSourceEnv+", else embedded)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	outFormat, err := report.ParseFormat(*format)
+	if err != nil {
+		return err
+	}
+	source, err := check.ParseProviderSource(*providerSource)
 	if err != nil {
 		return err
 	}
@@ -131,6 +146,8 @@ func validateCmd(args []string) error {
 		Exclusions: cfg.Exclude,
 		Needs:      cfg.Needs,
 		Principal:  *principal,
+
+		Resolver: check.ResolverFor(source),
 	}
 
 	// Build resource-to-file location map when --terraform-root is set.
@@ -352,4 +369,51 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, opts check.O
 	}
 
 	return reportResult(res, format, exitZero, showExcluded, locations)
+}
+
+// generatePermissionsCmd parses the terraform-provider-aws source and writes
+// the permissions table that the binary embeds. Without --provider-dir it
+// clones provideraws.DefaultProviderRef into the provider cache.
+func generatePermissionsCmd(args []string) error {
+	fs := flag.NewFlagSet("generate-permissions", flag.ContinueOnError)
+	providerDir := fs.String("provider-dir", "", "use this terraform-provider-aws checkout, which must be at "+provideraws.DefaultProviderRef+" (default: clone it into the provider cache)")
+	out := fs.String("out", "-", "write the table to this file (default: stdout); the embedded table is "+permdata.EmbeddedFile)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	src := provideraws.NewSourceProvider()
+	if *providerDir != "" {
+		src = provideraws.NewSourceProviderWithPath(*providerDir)
+	}
+	data, err := permdata.Generate(src)
+	if err != nil {
+		return fmt.Errorf("generate permissions: %w", err)
+	}
+	if *out == "-" {
+		_, err := os.Stdout.Write(data)
+		return err
+	}
+	return writeFileAtomic(*out, data)
+}
+
+// writeFileAtomic writes data to a temporary file next to path and renames it
+// into place, so path never holds a partial table.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op once renamed
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

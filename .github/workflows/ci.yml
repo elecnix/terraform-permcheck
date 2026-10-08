@@ -40,3 +40,23 @@ jobs:
 
       - name: Test (live CFN registry)
         run: go test ./... -count=1 -v
+
+  permissions-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      # Clones terraform-provider-aws at DefaultProviderRef and parses it.
+      - name: Regenerate the embedded permissions table
+        run: go run . generate-permissions --out internal/permdata/permissions.json
+
+      - name: Fail on drift
+        run: |
+          git diff --exit-code -- internal/permdata/permissions.json || {
+            echo "::error file=internal/permdata/permissions.json::The embedded permissions table is stale. Run 'go run . generate-permissions --out internal/permdata/permissions.json' and commit the result."
+            exit 1
+          }

@@ -658,3 +658,28 @@ func TestIsReadOnlyAction(t *testing.T) {
 		}
 	}
 }
+
+// TestSourceProvider_Schemas checks that Schemas returns every parsed
+// resource type, as Resolve would, and fails on a tree with no resources, so
+// a generator never writes an empty table.
+func TestSourceProvider_Schemas(t *testing.T) {
+	p := NewSourceProviderWithPath("../check/testdata/provider")
+	schemas, err := p.Schemas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(schemas) != 1 {
+		t.Fatalf("Schemas() = %d types, want 1", len(schemas))
+	}
+	want, err := p.Resolve("aws_backup_vault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schemas["aws_backup_vault"] != want {
+		t.Errorf("Schemas()[aws_backup_vault] is not the schema Resolve returns")
+	}
+
+	if _, err := NewSourceProviderWithPath(t.TempDir()).Schemas(); err == nil {
+		t.Error("Schemas() on an empty tree: want an error")
+	}
+}

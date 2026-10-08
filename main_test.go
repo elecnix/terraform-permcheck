@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/report"
+
+	"github.com/elecnix/terraform-permcheck/internal/permdata"
 )
 
 // captureStdout runs fn while capturing everything written to os.Stdout.
@@ -1008,5 +1012,48 @@ func TestValidate_NeedsUnknownPrincipal(t *testing.T) {
 	err := run(needsArgs(t, "--principal", "deploi"))
 	if err == nil || errors.Is(err, errGapsFound) || !strings.Contains(err.Error(), `"deploi"`) {
 		t.Errorf("want an unknown principal error, got %v", err)
+	}
+}
+
+// TestGeneratePermissions_FromProviderDir generates a table from a small
+// provider tree twice. Both runs must write the same bytes, and the table
+// must hold the tree's resource type.
+func TestGeneratePermissions_FromProviderDir(t *testing.T) {
+	dir := t.TempDir()
+	var outs [2][]byte
+	for i := range outs {
+		out := filepath.Join(dir, fmt.Sprintf("permissions-%d.json", i))
+		err := run([]string{"generate-permissions",
+			"--provider-dir", "internal/check/testdata/provider",
+			"--out", out,
+		})
+		if err != nil {
+			t.Fatalf("run(generate-permissions): %v", err)
+		}
+		if outs[i], err = os.ReadFile(out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !bytes.Equal(outs[0], outs[1]) {
+		t.Error("two runs wrote different bytes")
+	}
+	tbl, err := permdata.Decode(outs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tbl.Schemas["aws_backup_vault"]; !ok || len(tbl.Schemas) != 1 {
+		t.Errorf("table types = %v, want only aws_backup_vault", tbl.Schemas)
+	}
+}
+
+// TestGeneratePermissions_EmptyDir fails rather than writing an empty table.
+func TestGeneratePermissions_EmptyDir(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "permissions.json")
+	err := run([]string{"generate-permissions", "--provider-dir", t.TempDir(), "--out", out})
+	if err == nil {
+		t.Fatal("want an error for a tree with no resources")
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Error("an output file was written despite the error")
 	}
 }
