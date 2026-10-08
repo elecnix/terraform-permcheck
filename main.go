@@ -12,9 +12,11 @@
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 //
-// Regenerate the embedded permissions table after bumping DefaultProviderRef:
+// Regenerate the embedded permissions table and the IAM service tables after
+// bumping DefaultProviderRef:
 //
 //	go run . generate-permissions --out internal/permdata/permissions.json
+//	go run internal/provideraws/gen_iam_services.go -provider <checkout>
 //
 // GitHub Actions annotations (warn, don't fail):
 //

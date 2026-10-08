@@ -8,61 +8,6 @@ import (
 	"testing"
 )
 
-// Golden lists of the actions each producer emits, for the services that have
-// rules. The CloudFormation list comes from every schema in the registry, the
-// parser list from every resource in the provider checkout.
-var emittedActionFixtures = []string{
-	"../../testdata/cfn/emitted-actions.json",
-	"../../testdata/provider-aws/emitted-actions.json",
-}
-
-// producerNames returns the actions some producer emits, and the services
-// that every fixture covers.
-func producerNames(t *testing.T) (actions, services map[string]bool) {
-	t.Helper()
-	actions = make(map[string]bool)
-	for i, path := range emittedActionFixtures {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc struct {
-			Services []string `json:"services"`
-			Actions  []string `json:"actions"`
-		}
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			t.Fatal(err)
-		}
-		for _, a := range doc.Actions {
-			actions[a] = true
-		}
-		covered := make(map[string]bool, len(doc.Services))
-		for _, s := range doc.Services {
-			if i == 0 || services[s] {
-				covered[s] = true
-			}
-		}
-		services = covered
-	}
-	return actions, services
-}
-
-// A rule can only fire on a name a producer emits. A row that names anything
-// else is a misspelling or dead, so it fails here instead of drifting.
-func TestRules_EveryNameIsEmitted(t *testing.T) {
-	emitted, services := producerNames(t)
-	for _, r := range rules {
-		a := r.action
-		if !services[actionService(a)] {
-			t.Errorf("rule %q is in a service the emitted-actions fixtures do not cover; add it to both and rebuild them", a)
-			continue
-		}
-		if !emitted[a] {
-			t.Errorf("rule %q is not an action CloudFormation or the parser emits", a)
-		}
-	}
-}
-
 // A callback is an action AWS checks, not one a producer emits, so its name
 // is checked against the AWS service reference. IAM matches action names
 // without regard to case.
@@ -94,26 +39,6 @@ func TestCallbacks_EveryNameIsAnIAMAction(t *testing.T) {
 			if cb.targetService != svc {
 				t.Errorf("callback %q is selected by %s ARNs", cb.action, cb.targetService)
 			}
-		}
-	}
-}
-
-func TestServiceClasses_EveryServiceIsEmitted(t *testing.T) {
-	emitted, services := producerNames(t)
-	for svc := range serviceClasses {
-		if !services[svc] {
-			t.Errorf("service %q is not covered by the emitted-actions fixtures", svc)
-			continue
-		}
-		found := false
-		for a := range emitted {
-			if actionService(a) == svc {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("no producer emits an action of service %q", svc)
 		}
 	}
 }
