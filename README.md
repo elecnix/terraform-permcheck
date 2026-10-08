@@ -530,11 +530,43 @@ data "tf-permcheck_iam_check" "deploy_role" {
 
 ## Install
 
+Download a binary for Linux, macOS or Windows from the
+[releases page](https://github.com/elecnix/terraform-permcheck/releases), or
+build from source with Go:
+
 ```bash
 go install github.com/elecnix/terraform-permcheck@latest
 ```
 
 ## CI integration
+
+### GitHub Action
+
+The repository is also a GitHub Action. It builds the tool from the tagged
+source and runs `validate`. Pin it to a release tag:
+
+```yaml
+- name: Plan
+  run: |
+    terraform plan -out=plan.tfplan
+    terraform show -json plan.tfplan > plan.json
+
+- name: Check IAM permissions
+  uses: elecnix/terraform-permcheck@v0.9.0
+  with:
+    plan-file: plan.json
+    policy-file: deploy_policy.json
+    terraform-root: .   # adds file and line to each annotation
+```
+
+Without `plan-file`, a `terraform-root` input runs static HCL mode, so a fork
+PR can run the check with no cloud credentials. The action reports gaps as
+`::warning` annotations by default and fails the step when permissions are
+missing. Set `exit-zero: "true"` to warn and pass. The other inputs match the
+CLI flags, as listed in [`action.yml`](action.yml). The `exit-code` output is 0 when
+covered, 1 when permissions are missing and 2 on bad input.
+
+### Shell step
 
 ### Hard fail (block the PR on missing permissions)
 

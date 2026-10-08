@@ -1,0 +1,147 @@
+name: Terraform IAM permission check
+description: Check that a Terraform deploy role's IAM policy grants every permission the plan needs, before terraform apply runs.
+author: elecnix
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  cloud:
+    description: Cloud provider. Only `aws` is supported today.
+    required: false
+    default: aws
+  plan-file:
+    description: Path to the plan JSON from `terraform show -json`. Leave empty and set `terraform-root` for static HCL mode.
+    required: false
+    default: ""
+  policy-file:
+    description: Path to the IAM policy JSON to check.
+    required: false
+    default: ""
+  policy-from-plan-output:
+    description: Read the policy from this named output in the plan JSON.
+    required: false
+    default: ""
+  policy-from-state-output:
+    description: Read the policy from this named output in the state JSON. Use with `state-file`.
+    required: false
+    default: ""
+  state-file:
+    description: Path to the state JSON from `terraform show -json`, used with `policy-from-state-output`.
+    required: false
+    default: ""
+  terraform-root:
+    description: Terraform root directory. Adds file and line to annotations. With no `plan-file`, it turns on static HCL mode.
+    required: false
+    default: ""
+  config:
+    description: Path to a permcheck config JSON. Defaults to `./permcheck.json` in `working-directory` when that file exists.
+    required: false
+    default: ""
+  format:
+    description: Output format, one of `text`, `github-annotations` or `json`.
+    required: false
+    default: github-annotations
+  exit-zero:
+    description: Set to `true` to pass the step even when permissions are missing.
+    required: false
+    default: "false"
+  only-required:
+    description: Set to `true` to report only unconditional `[required]` permissions.
+    required: false
+    default: "false"
+  show-excluded:
+    description: Set to `true` to list the permissions the config file excludes.
+    required: false
+    default: "false"
+  args:
+    description: Extra flags passed to `terraform-permcheck validate` as written.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory to run the check in. Relative paths in other inputs resolve from it.
+    required: false
+    default: "."
+
+outputs:
+  exit-code:
+    description: Exit code of the check. 0 means covered, 1 means missing permissions, 2 means bad input.
+    value: ${{ steps.check.outputs.exit-code }}
+  report-file:
+    description: Path to a file with the full report (stdout and stderr).
+    value: ${{ steps.check.outputs.report-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+
+    - name: Build terraform-permcheck
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -trimpath -o "$RUNNER_TEMP/terraform-permcheck" .
+
+    - name: Check IAM permissions
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_CLOUD: ${{ inputs.cloud }}
+        INPUT_PLAN_FILE: ${{ inputs.plan-file }}
+        INPUT_POLICY_FILE: ${{ inputs.policy-file }}
+        INPUT_POLICY_FROM_PLAN_OUTPUT: ${{ inputs.policy-from-plan-output }}
+        INPUT_POLICY_FROM_STATE_OUTPUT: ${{ inputs.policy-from-state-output }}
+        INPUT_STATE_FILE: ${{ inputs.state-file }}
+        INPUT_TERRAFORM_ROOT: ${{ inputs.terraform-root }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_EXIT_ZERO: ${{ inputs.exit-zero }}
+        INPUT_ONLY_REQUIRED: ${{ inputs.only-required }}
+        INPUT_SHOW_EXCLUDED: ${{ inputs.show-excluded }}
+        INPUT_ARGS: ${{ inputs.args }}
+        PERMCHECK_PROVIDER_CACHE_DIR: ${{ runner.temp }}/terraform-permcheck-provider-cache
+      run: |
+        set -uo pipefail
+        flags=(validate --cloud "$INPUT_CLOUD" --format "$INPUT_FORMAT")
+        [ -n "$INPUT_PLAN_FILE" ] && flags+=(--plan-file "$INPUT_PLAN_FILE")
+        [ -n "$INPUT_POLICY_FILE" ] && flags+=(--policy-file "$INPUT_POLICY_FILE")
+        [ -n "$INPUT_POLICY_FROM_PLAN_OUTPUT" ] && flags+=(--policy-from-plan-output "$INPUT_POLICY_FROM_PLAN_OUTPUT")
+        [ -n "$INPUT_POLICY_FROM_STATE_OUTPUT" ] && flags+=(--policy-from-state-output "$INPUT_POLICY_FROM_STATE_OUTPUT")
+        [ -n "$INPUT_STATE_FILE" ] && flags+=(--state-file "$INPUT_STATE_FILE")
+        [ -n "$INPUT_TERRAFORM_ROOT" ] && flags+=(--terraform-root "$INPUT_TERRAFORM_ROOT")
+        [ -n "$INPUT_CONFIG" ] && flags+=(--config "$INPUT_CONFIG")
+        [ "$INPUT_EXIT_ZERO" = "true" ] && flags+=(--exit-zero)
+        [ "$INPUT_ONLY_REQUIRED" = "true" ] && flags+=(--only-required)
+        [ "$INPUT_SHOW_EXCLUDED" = "true" ] && flags+=(--show-excluded)
+        if [ -n "$INPUT_ARGS" ]; then
+          read -r -a extra <<< "$INPUT_ARGS"
+          flags+=("${extra[@]}")
+        fi
+
+        # Each run gets its own file, so a second use of the action in the job
+        # does not overwrite the first one's report.
+        report="$(mktemp "$RUNNER_TEMP/terraform-permcheck-report-XXXXXX")"
+        # stdin is closed so the tool reads the plan from --plan-file only.
+        # GitHub runs bash with -e, so a non-zero exit would end the step here.
+        # The || keeps it running to record the code.
+        code=0
+        "$RUNNER_TEMP/terraform-permcheck" "${flags[@]}" < /dev/null 2>&1 | tee "$report" || code=${PIPESTATUS[0]}
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "report-file=$report" >> "$GITHUB_OUTPUT"
+        # GitHub drops every output of a composite action that fails, so the
+        # same values also go to the environment of the job's later steps.
+        echo "PERMCHECK_EXIT_CODE=$code" >> "$GITHUB_ENV"
+        echo "PERMCHECK_REPORT_FILE=$report" >> "$GITHUB_ENV"
+
+    # The check step above always succeeds, so the environment variables it
+    # sets reach the rest of the job. This step fails with the tool's exit code.
+    - name: Fail when permissions are missing or the input is invalid
+      if: steps.check.outputs.exit-code != '0'
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.check.outputs.exit-code }}
+      run: exit "${EXIT_CODE:-2}"
