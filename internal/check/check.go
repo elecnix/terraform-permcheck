@@ -6,6 +6,7 @@ package check
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
@@ -35,13 +36,24 @@ func (r providerResolver) Resolve(tfType string) (iam.SchemaLike, error) {
 }
 
 // DefaultResolver resolves schemas from the terraform-provider-aws source and
-// falls back to the CloudFormation schema registry.
+// falls back to the CloudFormation schema registry. The resolver is built on
+// the first call and shared for the life of the process, so the provider
+// source is parsed once, however many checks run. It reads the provider
+// cache directory when it is built.
 func DefaultResolver() Resolver {
-	return FromProvider(cloud.NewChainProvider(
-		provideraws.NewSourceProvider(),
-		cloud.NewAWSProvider(),
-	))
+	defaultOnce.Do(func() {
+		defaultResolver = FromProvider(cloud.NewChainProvider(
+			provideraws.NewSourceProvider(),
+			cloud.NewAWSProvider(),
+		))
+	})
+	return defaultResolver
 }
+
+var (
+	defaultOnce     sync.Once
+	defaultResolver Resolver
+)
 
 // Filter holds the filter settings of the validate command.
 type Filter struct {

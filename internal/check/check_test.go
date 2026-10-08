@@ -286,3 +286,12 @@ func sameSet(a, b []string) bool {
 	}
 	return true
 }
+
+// TestDefaultResolver_SharedPerProcess verifies that every caller gets the
+// same default resolver, so the provider source is parsed once per process
+// rather than once per check.
+func TestDefaultResolver_SharedPerProcess(t *testing.T) {
+	if DefaultResolver() != DefaultResolver() {
+		t.Error("DefaultResolver() built a new resolver on the second call")
+	}
+}
