@@ -147,12 +147,11 @@ const (
 // conditional context at the call site (e.g., if d.GetOk("replica") {
 // removeSecretReplicas(...) }).
 type helperCall struct {
-	Pkg        string        // service package of the helper, "" for the caller's own
-	Name       string        // helper function name
-	CondReason string        // attribute from call-site d.GetOk/d.Get/d.HasChange guard, empty if unconditional
-	CondKind   ConditionKind // kind of the call-site guard, empty if unconditional
-	BestEffort bool          // the call site sits on a path that handles a failure
-	Discard    discardKind   // how the call site drops the callee's error
+	Pkg        string      // service package of the helper, "" for the caller's own
+	Name       string      // helper function name
+	Cond       []condGuard // guards of the call site, any of which lets the call run; empty if unconditional
+	BestEffort bool        // the call site sits on a path that handles a failure
+	Discard    discardKind // how the call site drops the callee's error
 }
 
 // ParseResourceFileStructured parses a Go source file from the
@@ -633,17 +632,17 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 		bestEffort := hc.BestEffort || hc.Discard == discardAlways ||
 			(hc.Discard == discardIfError && target.errResult[hc.Name])
 		for _, ea := range target.resolve(hc.Name) {
-			paths := append([]iam.Gate(nil), ea.paths()...)
-			for i := range paths {
+			var paths []iam.Gate
+			for _, p := range ea.paths() {
 				if bestEffort {
-					paths[i].BestEffort = true
+					p.BestEffort = true
 				}
-				if hc.CondReason != "" && paths[i].Ungated() {
-					if hc.CondKind == ConditionChange {
-						paths[i].Changed = hc.CondReason
-					} else {
-						paths[i].Attribute = hc.CondReason
-					}
+				if len(hc.Cond) == 0 || !p.Ungated() {
+					paths = append(paths, p)
+					continue
+				}
+				for _, g := range hc.Cond {
+					paths = append(paths, g.gate(p.BestEffort))
 				}
 			}
 			resolved = append(resolved, withPaths(ea.Action, paths))
@@ -654,23 +653,24 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 	return resolved
 }
 
-// walkContext is the state the traversal owns: how many conditional blocks
-// deep the traversal is, the attribute name of the guard that put it there,
-// and the client variables currently in scope. Observers read it to label
+// walkContext is the state the traversal owns: the guards of the path it is
+// on and the client variables currently in scope. Observers read it to label
 // what they find; the traversal restores it when a block ends.
 type walkContext struct {
-	condDepth  int           // how many conditional if-blocks deep we are
-	condReason string        // attribute name from the outermost conditional guard
-	condKind   ConditionKind // kind of that guard
+	// cond is the gate of the path the traversal is on: the path runs only
+	// when one of these guards holds. Empty when the path tests nothing.
+	cond []condGuard
+
+	// priorGuards maps the boolean locals that the statements before an
+	// if-statement bound to a guard, such as nameOk in
+	// `_, nameOk := d.GetOk("x")`. It is set only while the traversal
+	// enters that if-statement.
+	priorGuards map[string][]condGuard
 
 	// conns maps each client variable in scope to the AWS service it talks
 	// to, e.g. "conn" → "backup". It is copied on write, so restoring a saved
 	// context also restores the scope.
 	conns map[string]string
-
-	// valueGuard is the attribute from the innermost value-comparison guard,
-	// empty when the call is not under one.
-	valueGuard string
 
 	// bestEffort is true on a path that only runs after a call failed and
 	// that returns the failure, such as the cleanup in
@@ -750,15 +750,37 @@ func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	// An SDK client method always returns an error last, so a statement
 	// that drops the last result drops the error.
 	discarded := ctx.discardOf(call) != discardNone && isClientMethodCall(call, ctx.conns)
-	o.actions = append(o.actions, ExtractedAction{
-		Action:        action,
-		Conditional:   ctx.condDepth > 0,
-		Condition:     ctx.condReason,
-		ConditionKind: ctx.condKind,
-		ValueGuarded:  ctx.valueGuard != "",
-		BestEffort:    ctx.bestEffort || discarded,
-	})
+	o.actions = append(o.actions, withPaths(action, ctx.gates(ctx.bestEffort || discarded)))
 	return true
+}
+
+// enterGuard puts the path under gs: from here on, the path runs only when
+// one of those guards holds. The outermost guard decides the gate, except under value guards: the
+// provider's default already satisfies them, so a nested guard decides the
+// call instead.
+func (c *walkContext) enterGuard(gs []condGuard) {
+	if len(gs) == 0 {
+		return
+	}
+	for _, g := range c.cond {
+		if !g.Value {
+			return
+		}
+	}
+	c.cond = gs
+}
+
+// gates returns the gate of each guard the path may run under, or one
+// ungated path when it runs under none.
+func (c *walkContext) gates(bestEffort bool) []iam.Gate {
+	if len(c.cond) == 0 {
+		return []iam.Gate{{BestEffort: bestEffort}}
+	}
+	out := make([]iam.Gate, len(c.cond))
+	for i, g := range c.cond {
+		out[i] = g.gate(bestEffort)
+	}
+	return out
 }
 
 // walkBody is the single AST traversal of this package. It walks every
@@ -789,52 +811,29 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		}
 		walkBody(n.Cond, ctx, obs)
 
-		// A guard here is one of three kinds: presence (d.GetOk/d.Get), change
-		// (d.HasChange), or a value comparison. The outermost guard wins as the
-		// reason and kind, except under a value guard: its default already
-		// satisfies the guard, so a nested guard decides the call instead.
-		guard := extractConditionGuard(n)
-		// A framework guard reads the model, and its else branch runs when
-		// the guard does not hold, so the branch never inherits it.
-		fwGuard := false
-		if guard.Attribute == "" {
-			guard = frameworkGuard(n.Cond, ctx)
-			fwGuard = guard.Attribute != ""
-		}
-		valueAttr := extractValueGuardAttribute(n)
-		if guard.Attribute != "" || valueAttr != "" {
-			ctx.condDepth++
-			if ctx.condReason == "" || ctx.valueGuard != "" {
-				if valueAttr != "" {
-					// A value guard is a presence guard whose value is also
-					// tested, so presence is its kind and ValueGuarded records
-					// that the provider's default satisfies it on its own.
-					ctx.condReason = valueAttr
-					ctx.condKind = ConditionPresence
-					ctx.valueGuard = valueAttr
-				} else {
-					ctx.condReason = guard.Attribute
-					ctx.condKind = guard.Kind
-					ctx.valueGuard = ""
-				}
-			}
-		}
+		// The body runs when the condition holds and the else branch when it
+		// does not, so each branch takes the gate its own outcome implies:
+		// the else branch of `if _, ok := d.GetOk("x"); ok` tests nothing,
+		// and the else branch of `if _, ok := d.GetOk("x"); !ok` runs only
+		// when x is set.
+		vars := initGuardVars(n.Init, ctx.priorGuards)
+		thenGuard, elseGuard := branchGuards(n, vars, ctx)
+		ctx.priorGuards = nil
+		branch := *ctx
 
-		// The body is walked in the guard's conditional context. The body of
-		// a branch that handles a failed call and returns the failure runs
-		// only when the apply is already failing.
+		// The body of a branch that handles a failed call and returns the
+		// failure runs only when the apply is already failing.
+		ctx.enterGuard(thenGuard)
 		if isFailureBranch(n, ctx.results) {
 			ctx.bestEffort = true
 		}
 		walkBody(n.Body, ctx, obs)
-		ctx.bestEffort = saved.bestEffort
 
-		// The else branch (including an else-if chain) is walked in the same
-		// context, except after a d.HasChange guard: that branch runs when the
-		// attribute did NOT change, so inheriting the change gate would drop the
-		// call exactly when it runs. It takes the context from before the guard.
-		if guard.Kind == ConditionChange || fwGuard {
-			*ctx = saved
+		// An else-if reads the locals the init of this if-statement binds.
+		*ctx = branch
+		ctx.enterGuard(elseGuard)
+		if _, chained := n.Else.(*ast.IfStmt); chained {
+			ctx.priorGuards = vars
 		}
 		walkBody(n.Else, ctx, obs)
 
@@ -975,8 +974,18 @@ func walkAssign(n *ast.AssignStmt, call *ast.CallExpr, kind discardKind, ctx *wa
 //	}
 //
 // drops that error.
+//
+// It also tracks the boolean locals the list binds to a guard, such as
+// nameOk in `_, nameOk := d.GetOk("x")`, so an if-statement later in the list
+// that tests them reads their guard.
 func walkStmts(list []ast.Stmt, ctx *walkContext, obs walker) {
+	var vars map[string][]condGuard
 	for i, stmt := range list {
+		ctx.priorGuards = nil
+		if _, ok := stmt.(*ast.IfStmt); ok {
+			ctx.priorGuards = vars
+		}
+		vars = trackGuardVars(vars, stmt)
 		assign, ok := stmt.(*ast.AssignStmt)
 		if ok && i+1 < len(list) {
 			if call, errName := errorBinding(assign); call != nil {
@@ -988,6 +997,69 @@ func walkStmts(list []ast.Stmt, ctx *walkContext, obs walker) {
 		}
 		walkBody(stmt, ctx, obs)
 	}
+}
+
+// trackGuardVars returns the guard locals in scope after stmt: an assignment
+// binds or rebinds them (see bindGuardVars), and a local that stmt may assign
+// in any other way, in a nested block or closure or through a pointer, no
+// longer holds a guard.
+func trackGuardVars(vars map[string][]condGuard, stmt ast.Stmt) map[string][]condGuard {
+	if assign, ok := stmt.(*ast.AssignStmt); ok {
+		vars = bindGuardVars(vars, assign)
+		for _, rhs := range assign.Rhs {
+			vars = dropAssigned(vars, rhs)
+		}
+		return vars
+	}
+	return dropAssigned(vars, stmt)
+}
+
+// dropAssigned returns vars without the locals node may assign.
+func dropAssigned(vars map[string][]condGuard, node ast.Node) map[string][]condGuard {
+	if len(vars) == 0 {
+		return vars
+	}
+	var names []string
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			for _, lhs := range n.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok {
+					names = append(names, id.Name)
+				}
+			}
+		case *ast.UnaryExpr:
+			if id, ok := n.X.(*ast.Ident); ok && n.Op == token.AND {
+				names = append(names, id.Name)
+			}
+		case *ast.ValueSpec:
+			for _, id := range n.Names {
+				names = append(names, id.Name)
+			}
+		case *ast.RangeStmt:
+			for _, e := range []ast.Expr{n.Key, n.Value} {
+				if id, ok := e.(*ast.Ident); ok {
+					names = append(names, id.Name)
+				}
+			}
+		}
+		return true
+	})
+	// The map may be shared with a saved context, so it is copied on write.
+	out, copied := vars, false
+	for _, name := range names {
+		if _, ok := out[name]; !ok {
+			continue
+		}
+		if !copied {
+			out, copied = make(map[string][]condGuard, len(vars)), true
+			for k, v := range vars {
+				out[k] = v
+			}
+		}
+		delete(out, name)
+	}
+	return out
 }
 
 // errorBinding returns the call of an assignment such as `x, err := f()` and
@@ -1250,113 +1322,250 @@ func isClientMethodCall(call *ast.CallExpr, conns map[string]string) bool {
 type condGuard struct {
 	Attribute string
 	Kind      ConditionKind
+	// Value is true for a presence guard that also tests the value is not
+	// empty, so the provider's default does not satisfy it.
+	Value bool
 }
 
-// extractConditionGuard checks if an if-statement's condition involves a
-// d.GetOk("attr"), d.Get("attr"), or d.HasChange("attr") guard and returns the
-// gating attribute together with the kind of gate.
-func extractConditionGuard(ifStmt *ast.IfStmt) condGuard {
-	// Check Init statement: if v, ok := d.GetOk("attr"); ok { ...
-	if ifStmt.Init != nil {
-		if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
-			for _, rhs := range assign.Rhs {
-				guard := extractGuardAttribute(rhs)
-				if guard.Attribute == "" {
-					continue
+// gate returns the gate of a path that runs under the guard.
+func (g condGuard) gate(bestEffort bool) iam.Gate {
+	if g.Kind == ConditionChange {
+		return iam.Gate{Changed: g.Attribute, BestEffort: bestEffort}
+	}
+	return iam.Gate{Attribute: g.Attribute, ValueGuarded: g.Value, BestEffort: bestEffort}
+}
+
+// branchGuards returns the gate of an if-statement's body and the gate of its
+// else branch. A branch runs only when one of its guards holds; nil means
+// the branch tests no attribute. vars maps the boolean locals in scope that
+// hold a guard (see initGuardVars).
+func branchGuards(n *ast.IfStmt, vars map[string][]condGuard, ctx *walkContext) (then, els []condGuard) {
+	r := guardReader{vars: vars, values: localAttrBindings(n.Init), ctx: ctx}
+	return r.implied(n.Cond, true), r.implied(n.Cond, false)
+}
+
+// guardReader reads the guards a condition implies.
+type guardReader struct {
+	// vars maps boolean locals to the guards they hold, as ok in
+	// `v, ok := d.GetOk("x")`.
+	vars map[string][]condGuard
+	// values maps locals to the attribute whose value they hold, as v in
+	// the same statement, for emptiness tests.
+	values map[string]string
+	ctx    *walkContext
+}
+
+// implied returns guards one of which holds whenever expr evaluates to truth,
+// or nil when that outcome tests no attribute the parser can name.
+//
+// A negation flips the outcome. When both operands of && or || take the
+// outcome (&& true, || false), the gate of either operand holds, so the
+// stronger one is kept. When only one of them needs to (&& false, || true),
+// the gate holds only if each operand has one, and it is their union.
+func (r guardReader) implied(expr ast.Expr, truth bool) []condGuard {
+	switch e := expr.(type) {
+	case *ast.ParenExpr:
+		return r.implied(e.X, truth)
+	case *ast.UnaryExpr:
+		if e.Op == token.NOT {
+			return r.implied(e.X, !truth)
+		}
+		return nil
+	case *ast.BinaryExpr:
+		switch e.Op {
+		case token.LAND, token.LOR:
+			left, right := r.implied(e.X, truth), r.implied(e.Y, truth)
+			if (e.Op == token.LAND) == truth {
+				return strongerGuard(left, right)
+			}
+			if left == nil || right == nil {
+				return nil
+			}
+			return append(append([]condGuard(nil), left...), right...)
+		}
+		// A collection that is not empty was set by the author.
+		if truth && isEmptinessTest(e) {
+			if attr := attributeUnderLengthCall(e, r.values); attr != "" {
+				return []condGuard{{Attribute: attr, Kind: ConditionPresence, Value: true}}
+			}
+		}
+		return nil
+	}
+	guards, when := r.atom(expr)
+	if when != truth {
+		return nil
+	}
+	return guards
+}
+
+// atom returns the guards a condition that is not a negation or a boolean
+// operator tests, and the outcome under which one of them holds.
+func (r guardReader) atom(expr ast.Expr) ([]condGuard, bool) {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return r.vars[e.Name], true
+	case *ast.TypeAssertExpr:
+		// d.Get("x").(bool)
+		return resourceDataGuards(e.X), true
+	case *ast.CallExpr:
+		if gs := resourceDataGuards(e); gs != nil {
+			return gs, true
+		}
+		return frameworkGuard(e, r.ctx)
+	}
+	return nil, false
+}
+
+// strongerGuard returns the gate of two that both hold: a single guard over a
+// choice of several, and a value guard over a presence guard.
+func strongerGuard(a, b []condGuard) []condGuard {
+	rank := func(gs []condGuard) int {
+		switch {
+		case len(gs) == 0:
+			return 0
+		case len(gs) > 1:
+			return 1
+		case !gs[0].Value:
+			return 2
+		}
+		return 3
+	}
+	if rank(b) > rank(a) {
+		return b
+	}
+	return a
+}
+
+// initGuardVars returns the boolean locals that hold a guard in the scope of
+// an if-statement: those bound before it (prior), and those its init binds.
+// A local the init binds to anything else is no longer a guard.
+func initGuardVars(init ast.Stmt, prior map[string][]condGuard) map[string][]condGuard {
+	assign, ok := init.(*ast.AssignStmt)
+	if !ok {
+		return prior
+	}
+	return bindGuardVars(prior, assign)
+}
+
+// bindGuardVars returns vars updated by an assignment: a local it binds to
+// the ok result of d.GetOk, or to d.HasChange, holds that guard, and any
+// other local it assigns holds none.
+func bindGuardVars(vars map[string][]condGuard, assign *ast.AssignStmt) map[string][]condGuard {
+	bound := make(map[string][]condGuard)
+	switch {
+	case len(assign.Rhs) == 1 && len(assign.Lhs) == 2:
+		// v, ok := d.GetOk("x")
+		if call, ok := unwrapExpr(assign.Rhs[0]).(*ast.CallExpr); ok && isResourceDataMethod(call, "GetOk") {
+			if id, ok := assign.Lhs[1].(*ast.Ident); ok {
+				bound[id.Name] = resourceDataGuards(call)
+			}
+		}
+	case len(assign.Rhs) == len(assign.Lhs):
+		// changed := d.HasChange("x"), enabled := d.Get("x").(bool)
+		for i, rhs := range assign.Rhs {
+			var gs []condGuard
+			switch e := unwrapExpr(rhs).(type) {
+			case *ast.TypeAssertExpr:
+				if t, ok := e.Type.(*ast.Ident); ok && t.Name == "bool" {
+					gs = resourceDataGuards(e.X)
 				}
-				// A change guard bound in the init statement gates the body
-				// only when the condition is the bare variable it binds, as in
-				// `if changed := d.HasChange("x"); changed`. A negated or
-				// compound condition runs the body when the attribute did NOT
-				// change, so it is no change gate.
-				if guard.Kind == ConditionChange && !condIsBoundVar(ifStmt.Cond, assign) {
-					return condGuard{}
+			case *ast.CallExpr:
+				if isResourceDataMethod(e, "HasChange") || isResourceDataMethod(e, "HasChanges") {
+					gs = resourceDataGuards(e)
 				}
-				return guard
+			}
+			if id, ok := assign.Lhs[i].(*ast.Ident); ok && gs != nil {
+				bound[id.Name] = gs
 			}
 		}
 	}
-
-	// Check condition expression: d.Get("attr").(bool)
-	// The condition may be wrapped in a type assertion or a negation.
-	cond := ifStmt.Cond
-	if ta, ok := cond.(*ast.TypeAssertExpr); ok {
-		cond = ta.X
-	}
-	return extractGuardAttribute(cond)
-}
-
-// condIsBoundVar reports whether cond is a bare identifier that the assignment
-// binds, as `changed` in `changed := d.HasChange("x")`.
-func condIsBoundVar(cond ast.Expr, assign *ast.AssignStmt) bool {
-	id, ok := unwrapExpr(cond).(*ast.Ident)
-	if !ok {
-		return false
+	out := make(map[string][]condGuard, len(vars)+len(bound))
+	for name, gs := range vars {
+		out[name] = gs
 	}
 	for _, lhs := range assign.Lhs {
-		if l, ok := lhs.(*ast.Ident); ok && l.Name == id.Name && l.Name != "_" {
-			return true
+		if id, ok := lhs.(*ast.Ident); ok {
+			delete(out, id.Name)
 		}
 	}
-	return false
+	for name, gs := range bound {
+		out[name] = gs
+	}
+	return out
 }
 
-// extractGuardAttribute checks if an expression is d.GetOk("attr"),
-// d.Get("attr"), or d.HasChange("attr") on the resource data and returns the
-// attribute name with the kind of gate. Parenthesised and negated expressions
-// are unwrapped, so `!d.HasChange("attr")` reads the same as the plain form.
-func extractGuardAttribute(expr ast.Expr) condGuard {
-	expr = unwrapExpr(expr)
-
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		return condGuard{}
+// isResourceDataMethod reports whether call is d.<method>(...).
+func isResourceDataMethod(call *ast.CallExpr, method string) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != method {
+		return false
 	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && id.Name == "d"
+}
 
+// resourceDataGuards returns the guards a call on the resource data tests
+// when it returns true: d.GetOk("attr") and d.Get("attr") test presence,
+// d.HasChange("attr") a change, and d.HasChanges("a", "b") a change to any of
+// its attributes. d.HasChangesExcept is a filter and names no attribute.
+// Returns nil for any other expression.
+func resourceDataGuards(expr ast.Expr) []condGuard {
+	call, ok := unwrapExpr(expr).(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return condGuard{}
+		return nil
 	}
-
-	// Must be a method call on something named "d"
-	ident, ok := sel.X.(*ast.Ident)
-	if !ok || ident.Name != "d" {
-		return condGuard{}
+	if id, ok := sel.X.(*ast.Ident); !ok || id.Name != "d" {
+		return nil
 	}
-
-	// Map the guard method to the kind of gate it applies. Only the
-	// single-attribute forms count: d.HasChanges spans several attributes and
-	// d.HasChangesExcept is a filter, so neither names one gating attribute.
 	var kind ConditionKind
+	args := call.Args
 	switch sel.Sel.Name {
 	case "GetOk", "Get":
 		kind = ConditionPresence
+		args = args[:min(len(args), 1)]
 	case "HasChange":
 		kind = ConditionChange
+		args = args[:min(len(args), 1)]
+	case "HasChanges":
+		kind = ConditionChange
 	default:
-		return condGuard{}
+		return nil
 	}
-
-	// First argument must be a string literal
-	if len(call.Args) < 1 {
-		return condGuard{}
+	var guards []condGuard
+	for _, arg := range args {
+		attr := attributeName(arg)
+		if attr == "" {
+			return nil
+		}
+		guards = append(guards, condGuard{Attribute: attr, Kind: kind})
 	}
+	return guards
+}
 
-	bl, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || bl.Kind != token.STRING {
-		return condGuard{}
+// attributeName returns the attribute name an argument spells, as a string
+// literal or as a constant of the provider's names package
+// (names.AttrKMSKeyID), or "".
+func attributeName(arg ast.Expr) string {
+	switch a := arg.(type) {
+	case *ast.BasicLit:
+		if a.Kind == token.STRING {
+			return strings.Trim(a.Value, "\"")
+		}
+	case *ast.SelectorExpr:
+		if pkg, ok := a.X.(*ast.Ident); ok && pkg.Name == "names" {
+			return namesAttrConsts[a.Sel.Name]
+		}
 	}
-
-	// Return the attribute name without quotes
-	return condGuard{Attribute: strings.Trim(bl.Value, "\""), Kind: kind}
+	return ""
 }
 
 // unwrapExpr strips parentheses from an expression, so a guard written as
-// `(d.HasChange("attr"))` is recognized. It does not strip a negation: the body
-// of `if !d.HasChange("attr")` runs when the attribute did NOT change, so
-// reading it as a change gate would drop the call exactly when it runs. A
-// negated guard gates nothing the validator can evaluate, and its body stays
-// unconditional, which keeps the permission in the report.
+// `(d.HasChange("attr"))` is recognized. It does not strip a negation, which
+// flips the branch a guard gates (see guardReader.implied).
 func unwrapExpr(expr ast.Expr) ast.Expr {
 	for {
 		paren, ok := expr.(*ast.ParenExpr)
@@ -1365,50 +1574,6 @@ func unwrapExpr(expr ast.Expr) ast.Expr {
 		}
 		expr = paren.X
 	}
-}
-
-// extractValueGuardAttribute returns the attribute a guard tests for emptiness,
-// e.g. `ok && v.(*schema.Set).Len() > 0` on a d.GetOk("version_stages") call.
-// The call it guards only runs when the author set the attribute, because the
-// provider's default alone leaves the value non-zero.
-//
-// Only emptiness tests count. A comparison on a scalar (`d.Get("x") != ""`,
-// `n > 0`) reads a value the default usually satisfies, so treating those as
-// needing configuration would drop permissions the provider really needs.
-// Returns "" when the guard tests presence alone, or compares something the
-// parser cannot tie back to an attribute.
-func extractValueGuardAttribute(ifStmt *ast.IfStmt) string {
-	if ifStmt == nil {
-		return ""
-	}
-
-	bindings := localAttrBindings(ifStmt.Init)
-
-	var attr string
-	found := false
-	scan := func(node ast.Node) {
-		if found || node == nil {
-			return
-		}
-		ast.Inspect(node, func(n ast.Node) bool {
-			if found {
-				return false
-			}
-			bin, ok := n.(*ast.BinaryExpr)
-			if !ok || !isEmptinessTest(bin) {
-				return true
-			}
-			if a := attributeUnderLengthCall(bin, bindings); a != "" {
-				attr, found = a, true
-				return false
-			}
-			return true
-		})
-	}
-
-	scan(ifStmt.Init)
-	scan(ifStmt.Cond)
-	return attr
 }
 
 // isEmptinessTest reports whether a binary expression compares a length
@@ -1917,7 +2082,7 @@ func (o *helperCallObserver) onFuncRef(ident *ast.Ident, ctx *walkContext) {
 func (o *helperCallObserver) record(pkg, name string, discard discardKind, ctx *walkContext) {
 	o.helpers = append(o.helpers, helperCall{
 		Pkg: pkg, Name: name,
-		CondReason: ctx.condReason, CondKind: ctx.condKind,
+		Cond:       ctx.cond,
 		BestEffort: ctx.bestEffort, Discard: discard,
 	})
 }
@@ -1973,7 +2138,7 @@ func unwrapIndex(expr ast.Expr) ast.Expr {
 
 // extractGetOkAttribute checks if an expression is d.GetOk("attr") or
 // d.Get("attr") and returns the attribute name. It is the presence-only reader
-// the value-guard helpers use; extractGuardAttribute performs the same
+// the value-guard helpers use; resourceDataGuards performs the same
 // inspection but also reports which kind of gate the call applies.
 func extractGetOkAttribute(expr ast.Node) string {
 	call, ok := expr.(*ast.CallExpr)
@@ -1997,15 +2162,8 @@ func extractGetOkAttribute(expr ast.Node) string {
 		return ""
 	}
 
-	// First argument must be a string literal
 	if len(call.Args) < 1 {
 		return ""
 	}
-
-	bl, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || bl.Kind != token.STRING {
-		return ""
-	}
-
-	return strings.Trim(bl.Value, "\"")
+	return attributeName(call.Args[0])
 }

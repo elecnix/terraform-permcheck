@@ -312,47 +312,31 @@ func (c *walkContext) modelAttribute(expr ast.Expr) string {
 	return c.structs[typ][sel.Sel.Name]
 }
 
-// frameworkGuard returns the gate a framework resource's if-condition puts on
-// its body, read from the model the plan was decoded into:
+// frameworkGuard returns the guard a framework resource's condition tests,
+// read from the model the plan was decoded into, and the outcome under which
+// it holds:
 //
-//	!data.Policy.IsNull()            presence of policy
-//	!new.Configuration.Equal(old.Configuration)   change of configuration
+//	data.Policy.IsNull()                         presence of policy, when false
+//	new.Configuration.Equal(old.Configuration)   change of configuration, when false
 //
-// A conjunction gates its body on each operand, so the first operand that is
-// a guard gates it. Any other condition, a disjunction or `data.X.IsNull()`
-// among them, gates nothing, and the body stays required.
-func frameworkGuard(cond ast.Expr, ctx *walkContext) condGuard {
-	if ctx.models == nil {
-		return condGuard{}
-	}
-	cond = unwrapExpr(cond)
-	if bin, ok := cond.(*ast.BinaryExpr); ok && bin.Op == token.LAND {
-		if g := frameworkGuard(bin.X, ctx); g.Attribute != "" {
-			return g
-		}
-		return frameworkGuard(bin.Y, ctx)
-	}
-	not, ok := cond.(*ast.UnaryExpr)
-	if !ok || not.Op != token.NOT {
-		return condGuard{}
-	}
-	call, ok := unwrapExpr(not.X).(*ast.CallExpr)
-	if !ok {
-		return condGuard{}
+// Any other call tests nothing.
+func frameworkGuard(call *ast.CallExpr, ctx *walkContext) ([]condGuard, bool) {
+	if ctx == nil || ctx.models == nil {
+		return nil, false
 	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return condGuard{}
+		return nil, false
 	}
 	attr := ctx.modelAttribute(sel.X)
 	if attr == "" {
-		return condGuard{}
+		return nil, false
 	}
 	switch {
 	case sel.Sel.Name == "IsNull" && len(call.Args) == 0:
-		return condGuard{Attribute: attr, Kind: ConditionPresence}
+		return []condGuard{{Attribute: attr, Kind: ConditionPresence}}, false
 	case sel.Sel.Name == "Equal" && len(call.Args) == 1 && ctx.modelAttribute(call.Args[0]) == attr:
-		return condGuard{Attribute: attr, Kind: ConditionChange}
+		return []condGuard{{Attribute: attr, Kind: ConditionChange}}, false
 	}
-	return condGuard{}
+	return nil, false
 }

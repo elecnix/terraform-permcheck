@@ -887,7 +887,8 @@ func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) d
 		}
 	}
 
-	// else / else-if are walked inside the first guard's conditional context.
+	// An else-if branch takes its own guard, and the final else none: each
+	// runs only when the guards before it do not hold.
 	if d.Get("primary").(bool) {
 		conn.DeleteBackupVaultCopyPoint(ctx, nil)
 	} else if d.Get("secondary").(bool) {
@@ -992,8 +993,8 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 		{Action: "backup:TagResource"},
 		{Action: "backup:PutBackupVaultAccessPolicy", Conditional: true, Condition: "outer", ConditionKind: ConditionPresence},
 		{Action: "backup:DeleteBackupVaultCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
-		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
-		{Action: "backup:DescribeCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
+		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "secondary", ConditionKind: ConditionPresence},
+		{Action: "backup:DescribeCopyPoint"},
 		{Action: "backup:DescribeBackupVault"},
 		{Action: "backup:ListTags"},
 		{Action: "backup:ListBackupPlanTemplates"},
@@ -1168,11 +1169,11 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 
 	want := []helperCall{
 		{Name: "helperBlock"},
-		{Name: "helperBlock", CondReason: "guard", CondKind: ConditionPresence},
-		{Name: "helperNested", CondReason: "guard", CondKind: ConditionPresence},
+		{Name: "helperBlock", Cond: []condGuard{{Attribute: "guard", Kind: ConditionPresence}}},
+		{Name: "helperNested", Cond: []condGuard{{Attribute: "guard", Kind: ConditionPresence}}},
 		{Name: "helperPlain"},
-		{Name: "helperBlock", CondReason: "primary", CondKind: ConditionPresence},
-		{Name: "helperPrimary", CondReason: "primary", CondKind: ConditionPresence},
+		{Name: "helperBlock", Cond: []condGuard{{Attribute: "primary", Kind: ConditionPresence}}},
+		{Name: "helperPrimary"},
 		{Name: "helperLoop"},
 		{Name: "helperRange"},
 		{Name: "helperSwitch"},
@@ -1459,11 +1460,21 @@ func TestExtractValueGuardAttribute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ifStmt := firstIfStmt(t, tt.src)
-			if got := extractValueGuardAttribute(ifStmt); got != tt.want {
-				t.Errorf("extractValueGuardAttribute = %q, want %q", got, tt.want)
+			if got := valueGuardOf(ifStmt); got != tt.want {
+				t.Errorf("value guard = %q, want %q", got, tt.want)
 			}
 		})
 	}
+}
+
+// valueGuardOf returns the attribute of the value guard that gates the body
+// of ifStmt, or "".
+func valueGuardOf(ifStmt *ast.IfStmt) string {
+	then, _ := branchGuards(ifStmt, initGuardVars(ifStmt.Init, nil), &walkContext{})
+	if len(then) == 1 && then[0].Value {
+		return then[0].Attribute
+	}
+	return ""
 }
 
 // firstIfStmt parses src and returns its first if-statement.
