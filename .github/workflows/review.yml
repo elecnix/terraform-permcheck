@@ -6,8 +6,15 @@ permissions:
   pull-requests: write
   checks: write
 concurrency:
-  group: cite-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # One queue for the whole repository. Every review makes one model call per
+  # changed file against one provider key, so reviews started together, as a
+  # pushed stack of pull requests does, get HTTP 429 and evaluate nothing.
+  # queue: max keeps up to 100 pending runs in arrival order. Without it,
+  # GitHub keeps one pending run per group and cancels the older ones.
+  # cancel-in-progress must stay false: GitHub rejects it with queue: max.
+  group: cite-global
+  cancel-in-progress: false
+  queue: max
 jobs:
   review:
     runs-on: ubuntu-latest

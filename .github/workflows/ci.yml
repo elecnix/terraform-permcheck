@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request runs CI, including stacked ones based on another
+  # pull request's branch rather than main.
   pull_request:
-    branches: [main]
 
 jobs:
   test:
