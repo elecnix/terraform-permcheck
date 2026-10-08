@@ -53,8 +53,11 @@ func knowledgeNames() []string {
 	for _, r := range rules {
 		names = append(names, r.action)
 	}
-	for _, rule := range crossServiceRules {
-		for _, cb := range rule.callbacks {
+	for _, rule := range resourceRules {
+		if rule.callbacks == nil {
+			continue
+		}
+		for _, cb := range rule.callbacks.callbacks {
 			names = append(names, cb.action)
 		}
 	}

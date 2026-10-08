@@ -16,41 +16,17 @@ import (
 // file cross-checks action coverage against the statements' Resource patterns
 // and reports the action missing when the grant is provably scoped elsewhere.
 
-// targetRules describe how to derive the resources a terraform resource
-// change acts on. A rule returns one target per resource, each the list of ARN
-// patterns that resource can take, and every target must be covered. Rules
-// are keyed by resource type; a type with no rule never participates in
-// resource-scoped coverage and falls back to action-only matching.
-var targetRules = map[string]func(rc *plan.ResourceChange, set *changeSet) [][]string{
-	// aws_secretsmanager_secret_version acts on the referenced secret named in
-	// secret_id (aws_secretsmanager_secret.b). The secret's name is a literal
-	// in the plan, so the version's ARN pattern is derivable even though the
-	// version's own ARN is computed at apply time.
-	"aws_secretsmanager_secret_version": secretVersionTargetARNs,
-	// aws_secretsmanager_secret is itself the target; a secret's name carries
-	// into its ARN.
-	"aws_secretsmanager_secret": ownTarget(secretARNPatterns),
-	// aws_sqs_queue is its own target; the queue name is the last ARN segment.
-	"aws_sqs_queue": ownTarget(sqsQueueARNPatterns),
-	// aws_cloudwatch_log_group is its own target; the group name carries into
-	// its ARN.
-	"aws_cloudwatch_log_group": ownTarget(logGroupARNsOf),
-	// aws_cloudwatch_log_stream acts on the group named in log_group_name,
-	// either a known value or a reference to a managed log group.
-	"aws_cloudwatch_log_stream": logStreamTargetARNs,
-}
-
 // resourceTargets returns the targets a resource change acts on, derivable
 // from plan-time values: one list of ARN patterns per resource. It returns nil
 // when the target cannot be determined (unknown values, static HCL mode,
 // unlisted resource types), in which case coverage falls back to action-only
 // matching.
 func resourceTargets(rc *plan.ResourceChange, set *changeSet) [][]string {
-	rule, ok := targetRules[rc.Type]
-	if !ok {
+	targets := resourceRules[rc.Type].targets
+	if targets == nil {
 		return nil
 	}
-	return rule(rc, set)
+	return targets(rc, set)
 }
 
 // ownTarget returns a target rule for a resource that acts on itself: its one

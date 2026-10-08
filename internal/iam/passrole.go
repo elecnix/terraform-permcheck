@@ -9,17 +9,6 @@ import "github.com/elecnix/terraform-permcheck/internal/plan"
 // schema lists it. The role is named by an attribute of the resource, and
 // AWS rejects the call when the policy grants PassRole only on other roles.
 
-// passRoleAttributes maps a terraform resource type to the attributes that
-// carry the role it passes.
-var passRoleAttributes = map[string][]string{
-	"aws_lambda_function":          {"role"},
-	"aws_sfn_state_machine":        {"role_arn"},
-	"aws_codebuild_project":        {"service_role"},
-	"aws_ecs_task_definition":      {"execution_role_arn", "task_role_arn"},
-	"aws_cloudwatch_event_target":  {"role_arn"},
-	"aws_apigatewayv2_integration": {"credentials_arn"},
-}
-
 // passRoleRequirements returns iam:PassRole on each role the resource
 // passes. A delete passes no role. A role the plan does not show is checked
 // only when the resource may set its attribute, and then only a grant scoped
@@ -31,7 +20,7 @@ func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 		return nil
 	}
 	var reqs []targeted
-	for _, attr := range passRoleAttributes[rc.Type] {
+	for _, attr := range resourceRules[rc.Type].passesRole {
 		targets := roleTargets(rc, attr, set)
 		if len(targets) == 0 && !passesRole(rc, attr) {
 			continue

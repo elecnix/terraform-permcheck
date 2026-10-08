@@ -1,18 +1,14 @@
 package iam
 
-import (
-	"strings"
-
-	"github.com/elecnix/terraform-permcheck/internal/plan"
-)
+import "strings"
 
 // AWS permission knowledge.
 //
 // The producers, the CloudFormation registry and the provider-source parser,
 // say which actions an operation on a resource reaches. This file says what
 // those actions mean: which ones touch data rather than infrastructure, which
-// ones configure an optional feature, which ones a dedicated sub-resource
-// owns, and which ones AWS calls in another service at apply time.
+// ones configure an optional feature, and which ones a dedicated sub-resource
+// owns.
 //
 // Each action name appears in one row, so the rule that classifies an action
 // and the rule that hands it to a sub-resource cannot spell it two ways.
@@ -20,8 +16,10 @@ import (
 // golden lists under testdata/. A row that names nothing a producer emits can
 // never fire.
 //
-// targetRules (resource_scope.go) stays apart. Its rows are functions of a
-// resource change, not facts about an action name.
+// resourceRules (resource_rules.go) stays apart. Its rows are facts about a
+// resource type, such as the callbacks AWS makes into another service, and
+// some are functions of a resource change. knowledge_test.go checks the
+// callback names too.
 
 // rule is what the tool knows about one action name.
 type rule struct {
@@ -346,77 +344,4 @@ func isRead(action string) bool {
 // actionService returns the service prefix of an action, e.g. "s3".
 func actionService(action string) string {
 	return strings.Split(action, ":")[0]
-}
-
-// Cross-service callback permissions.
-//
-// Some AWS APIs require IAM actions from a *different* service than the API
-// being called. The primary API performs a cross-service callback at apply
-// time that the terraform provider never invokes directly, so the required
-// action is invisible to both the CloudFormation schema and the provider
-// source parser.
-//
-// The canonical example is aws_wafv2_web_acl_association: the provider calls
-// wafv2:AssociateWebACL, but AWS WAFv2 then calls into the target service to
-// attach the ACL — elasticloadbalancing:SetWebACL for an ALB,
-// apigateway:SetWebACL for an API Gateway stage, and so on. Which callback
-// applies is determined by the service embedded in the target resource_arn.
-
-// crossServiceCallback is a required IAM action in a service other than the
-// one whose API the terraform provider calls directly.
-type crossServiceCallback struct {
-	// targetService is the AWS service prefix (as it appears in an ARN's third
-	// segment) that selects this callback, e.g. "elasticloadbalancing".
-	targetService string
-	// action is the IAM action required in the callback service.
-	action string
-}
-
-// crossServiceRule describes the cross-service callbacks for a terraform
-// resource type and the attribute whose ARN value selects among them.
-type crossServiceRule struct {
-	// arnAttribute is the resource attribute holding the target ARN.
-	arnAttribute string
-	// callbacks lists the candidate callbacks keyed by target service.
-	callbacks []crossServiceCallback
-	// targetTypes maps each terraform type arnAttribute can reference to
-	// what the reference says about the target. When the plan computes the
-	// ARN at apply time, the reference still names the target's service.
-	targetTypes map[string]targetType
-}
-
-// targetType is what a reference to one terraform type says about the
-// target of a cross-service callback.
-type targetType struct {
-	// service is the ARN service prefix of the type's resources.
-	service string
-	// arnPatterns derives a planned resource's ARN patterns from its known
-	// attributes, or returns nil. Nil when the type's ARN holds an ID that
-	// AWS assigns.
-	arnPatterns func(*plan.ResourceChange) []string
-}
-
-// crossServiceRules maps a terraform resource type to its cross-service
-// callback rule.
-var crossServiceRules = map[string]crossServiceRule{
-	"aws_wafv2_web_acl_association": {
-		arnAttribute: "resource_arn",
-		callbacks: []crossServiceCallback{
-			{targetService: "elasticloadbalancing", action: "elasticloadbalancing:SetWebACL"},
-			{targetService: "apigateway", action: "apigateway:SetWebACL"},
-			{targetService: "appsync", action: "appsync:SetWebACL"},
-		},
-		// The types resource_arn accepts, from the provider's documentation
-		// of aws_wafv2_web_acl_association. Cognito, App Runner and Verified
-		// Access have no callback above, so a reference to one selects none.
-		targetTypes: map[string]targetType{
-			"aws_lb":                      {service: "elasticloadbalancing", arnPatterns: albARNPatterns},
-			"aws_alb":                     {service: "elasticloadbalancing", arnPatterns: albARNPatterns},
-			"aws_api_gateway_stage":       {service: "apigateway", arnPatterns: apiStageARNPatterns},
-			"aws_appsync_graphql_api":     {service: "appsync"},
-			"aws_cognito_user_pool":       {service: "cognito-idp"},
-			"aws_apprunner_service":       {service: "apprunner"},
-			"aws_verifiedaccess_instance": {service: "ec2"},
-		},
-	},
 }
