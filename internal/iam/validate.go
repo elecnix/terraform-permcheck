@@ -39,14 +39,22 @@ var s3OptionalPrefixes = []string{
 	// Transfer acceleration
 	"s3:PutAccelerateConfiguration", "s3:GetAccelerateConfiguration",
 	"s3:PutBucketAccelerateConfiguration", "s3:GetBucketAccelerateConfiguration",
-	// Analytics, inventory, metrics, intelligent tiering
+	// Analytics, inventory, metrics, intelligent tiering. The two spellings
+	// of a feature sit together: S3 emits the bucket-level one
+	// (s3:PutBucketAnalyticsConfiguration) in the provider source and the
+	// CloudFormation schema the configuration-level one
+	// (s3:PutAnalyticsConfiguration). Neither is a prefix of the other.
 	"s3:PutAnalyticsConfiguration", "s3:GetAnalyticsConfiguration",
+	"s3:PutBucketAnalyticsConfiguration",
 	"s3:GetBucketAnalyticsConfiguration", "s3:DeleteBucketAnalyticsConfiguration",
 	"s3:PutInventoryConfiguration", "s3:GetInventoryConfiguration",
+	"s3:PutBucketInventoryConfiguration",
 	"s3:GetBucketInventoryConfiguration", "s3:DeleteBucketInventoryConfiguration",
 	"s3:PutMetricsConfiguration", "s3:GetMetricsConfiguration",
+	"s3:PutBucketMetricsConfiguration",
 	"s3:GetBucketMetricsConfiguration", "s3:DeleteBucketMetricsConfiguration",
 	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
+	"s3:PutBucketIntelligentTieringConfiguration",
 	"s3:GetBucketIntelligentTieringConfiguration", "s3:DeleteBucketIntelligentTieringConfiguration",
 	// Object lock
 	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
@@ -56,16 +64,17 @@ var s3OptionalPrefixes = []string{
 	"s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration",
 	// Lifecycle
 	"s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration", "s3:DeleteBucketLifecycle",
+	"s3:PutBucketLifecycleConfiguration", "s3:GetBucketLifecycleConfiguration",
 	// Notifications, versioning, ownership controls, public access block
 	"s3:PutBucketNotification", "s3:GetBucketNotification",
 	"s3:PutBucketVersioning", "s3:GetBucketVersioning",
-	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls",
+	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls", "s3:DeleteBucketOwnershipControls",
 	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock", "s3:DeleteBucketPublicAccessBlock",
 	// Tags
-	"s3:PutBucketTagging", "s3:GetBucketTagging",
+	"s3:PutBucketTagging", "s3:GetBucketTagging", "s3:DeleteBucketTagging",
 	"s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource",
 	// Bucket policy and requester pays
-	"s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
+	"s3:PutBucketPolicy", "s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
 	"s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment",
 	// Attribute-based access control
 	"s3:PutBucketAbac", "s3:GetBucketAbac",
@@ -92,6 +101,8 @@ func classifyPermission(action string) PermissionClass {
 		"s3:GetObject": true, "s3:GetObjectMetadata": true,
 		"s3:PutObject": true, "s3:PutObjectAcl": true,
 		"s3:DeleteObject": true, "s3:AbortMultipartUpload": true,
+		// The SDK names of the calls that empty a bucket on force_destroy
+		"s3:DeleteObjects": true, "s3:HeadObject": true, "s3:ListObjectVersions": true,
 		// KMS data-plane (encrypt/decrypt at object level)
 		"kms:Encrypt": true, "kms:Decrypt": true,
 		"kms:GenerateDataKey": true, "kms:GenerateDataKeyWithoutPlaintext": true,
@@ -226,6 +237,10 @@ type SchemaLike interface {
 	// compared by value, so its default keeps the guard satisfied on its own.
 	// Such an action is only required when the author configured the attribute.
 	GetValueConditional() map[string]map[string]bool
+	// GetBestEffort maps op → action → true when the provider ignores the
+	// action's failure. Such an action is never required: it is classed
+	// optional.
+	GetBestEffort() map[string]map[string]bool
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -278,6 +293,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		conditional := schema.GetConditional()[op]
 		changeGated := schema.GetChangeGated()[op]
 		valueConditional := schema.GetValueConditional()[op]
+		bestEffort := schema.GetBestEffort()[op]
 
 		for _, action := range required {
 			condAttr := conditional[action]
@@ -313,6 +329,11 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 
 			// Classify and optionally filter
 			class := classifyResourcePermission(rc.Type, action)
+			// A call whose failure the provider ignores cannot fail the
+			// apply, so it is optional whatever its action.
+			if bestEffort[action] && class == ClassManagement {
+				class = ClassOptional
+			}
 			if filter.ExcludeDataPlane && class == ClassDataPlane {
 				continue
 			}

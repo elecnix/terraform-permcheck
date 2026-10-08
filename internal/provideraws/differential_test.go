@@ -219,6 +219,7 @@ func legacyShape(m map[string][]ExtractedAction) map[string][]ExtractedAction {
 		stripped := make([]ExtractedAction, 0, len(actions))
 		for _, a := range actions {
 			a.ConditionKind = ""
+			a.BestEffort = false
 			stripped = append(stripped, a)
 		}
 		out[op] = stripped

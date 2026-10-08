@@ -534,10 +534,16 @@ func TestValidate_ExcludeSuppressesGap(t *testing.T) {
 	}
 }
 
+// allGapsConfig excludes every gap testdata/plan.json has against
+// policy_partial.json. The dynamodb table read also looks up the account's
+// default DynamoDB KMS key, but it ignores a failed lookup, so kms:DescribeKey
+// is no gap.
+const allGapsConfig = `{"exclude":[{"permission":"dynamodb:*"},{"permission":"iam:*"}]}`
+
 // TestValidate_ExcludeAllClearsExit verifies that when every gap is excluded the
 // run exits 0 even without --exit-zero.
 func TestValidate_ExcludeAllClearsExit(t *testing.T) {
-	cfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"dynamodb:*"},{"permission":"iam:*"}]}`)
+	cfg := writeConfig(t, t.TempDir(), allGapsConfig)
 
 	out := captureStdout(t, func() {
 		err := run([]string{"validate",
@@ -654,7 +660,7 @@ func TestValidate_AutoDiscoverConfig(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeConfig(t, dir, `{"exclude":[{"permission":"dynamodb:*"},{"permission":"iam:*"}]}`)
+	writeConfig(t, dir, allGapsConfig)
 
 	orig, err := os.Getwd()
 	if err != nil {
@@ -742,6 +748,7 @@ func (s fakePermSchema) GetConditional() map[string]map[string]string { return n
 func (s fakePermSchema) GetChangeGated() map[string]map[string]string { return nil }
 
 func (s fakePermSchema) GetValueConditional() map[string]map[string]bool { return nil }
+func (s fakePermSchema) GetBestEffort() map[string]map[string]bool       { return nil }
 
 // fakePermResolver resolves terraform resource types from a fixed table.
 type fakePermResolver map[string]map[string][]string

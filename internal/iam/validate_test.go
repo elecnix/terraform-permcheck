@@ -149,6 +149,8 @@ type fakeSchema struct {
 	// valueCond marks actions whose gating attribute is compared by value, so
 	// the gate needs the attribute configured rather than merely present.
 	valueCond map[string]map[string]bool
+	// bestEffort marks actions whose failure the provider ignores.
+	bestEffort map[string]map[string]bool
 }
 
 func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
@@ -157,6 +159,7 @@ func (f fakeSchema) GetChangeGated() map[string]map[string]string { return f.cha
 func (f fakeSchema) GetValueConditional() map[string]map[string]bool {
 	return f.valueCond
 }
+func (f fakeSchema) GetBestEffort() map[string]map[string]bool { return f.bestEffort }
 
 type fakeResolver struct{ s SchemaLike }
 
@@ -166,6 +169,40 @@ func (r fakeResolver) Resolve(string) (SchemaLike, error) { return r.s, nil }
 type denyAll struct{}
 
 func (denyAll) Covers(string) bool { return false }
+
+// TestValidate_BestEffortIsOptional checks that an action whose failure the
+// provider ignores is never reported as required. The default filter drops
+// it, and with no filter it is tagged [optional].
+func TestValidate_BestEffortIsOptional(t *testing.T) {
+	schema := fakeSchema{
+		perms:      map[string][]string{"read": {"dynamodb:DescribeTable", "kms:DescribeKey"}},
+		bestEffort: map[string]map[string]bool{"read": {"kms:DescribeKey": true}},
+	}
+	changes := []*plan.ResourceChange{{Type: "aws_dynamodb_table", Name: "t", Change: "read"}}
+
+	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, DefaultFilter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "kms:DescribeKey") {
+		t.Error("best-effort kms:DescribeKey reported under the default filter")
+	}
+	if !hasAction(missing, "dynamodb:DescribeTable") {
+		t.Error("dynamodb:DescribeTable missing from the report")
+	}
+
+	missing, err = Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	class, found := classOf(missing, "kms:DescribeKey")
+	if !found {
+		t.Fatal("kms:DescribeKey dropped with no filter")
+	}
+	if class != "[optional]" {
+		t.Errorf("kms:DescribeKey class = %q, want [optional]", class)
+	}
+}
 
 func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	schema := fakeSchema{
@@ -445,6 +482,17 @@ func hasAction(missing []MissingAction, action string) bool {
 		}
 	}
 	return false
+}
+
+// classOf returns the class tag the report gives an action, and whether the
+// action is in the report at all.
+func classOf(missing []MissingAction, action string) (string, bool) {
+	for _, m := range missing {
+		if m.Action == action {
+			return m.Class, true
+		}
+	}
+	return "", false
 }
 
 func TestFormatMissing_ConditionalAttribute(t *testing.T) {

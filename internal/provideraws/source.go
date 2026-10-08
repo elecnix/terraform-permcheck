@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -18,7 +19,7 @@ import (
 
 // sdkResourceAnnotationRE matches the @SDKResource annotation in provider source.
 // Format: // @SDKResource("aws_instance", name="Instance")
-var sdkResourceAnnotationRE = regexp.MustCompile(`@SDKResource\("(aws_[^"]+)"`)
+var sdkResourceAnnotationRE = regexp.MustCompile(`@SDKResource\("(aws_[^",]+)[",]`)
 
 // DefaultProviderRef is the pinned provider version used for parsing.
 // This is the framework-refactored codebase (v5+).
@@ -150,37 +151,109 @@ func (p *SourceProvider) parseAll() error {
 		return fmt.Errorf("read service directory: %w", err)
 	}
 
+	// Pass 1 indexes each service package and records its resource files.
+	// Only the indexes survive a package, not its syntax trees.
+	indexes := make(map[string]*pkgIndex)
+	var resources []resourceFile
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		svcDir := filepath.Join(serviceDir, entry.Name())
-		files, err := os.ReadDir(svcDir)
+		pkg, found := indexService(svcDir, entry.Name())
+		if pkg == nil {
+			continue
+		}
+		indexes[entry.Name()] = pkg.idx
+		resources = append(resources, found...)
+	}
+
+	// Pass 2 links the packages, so a call such as tfiam.FindRoleByName
+	// resolves, and builds each resource's schema.
+	for _, idx := range indexes {
+		idx.others = indexes
+	}
+	for _, r := range resources {
+		p.schemas[r.tfType] = r.schema()
+	}
+	return nil
+}
+
+// resourceFile is one resource found in a service package, with what pass 2
+// needs to build its schema.
+type resourceFile struct {
+	pkg        *Package
+	tfType     string
+	funcs      map[string][]string // operation → bound functions
+	tagged     bool                // the file carries a @Tags annotation
+	tagActions TagActions          // the service's transparent tagging actions
+}
+
+// indexService parses every non-test Go file of one service directory as a
+// package, so a resource's helpers resolve whichever file they live in, and
+// returns the package with the resources its files declare.
+func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
+	files, err := os.ReadDir(svcDir)
+	if err != nil {
+		return nil, nil
+	}
+	fset := token.NewFileSet()
+	parsed := make(map[string]*ast.File)
+	sources := make(map[string][]byte)
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".go") || strings.HasSuffix(file.Name(), "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(svcDir, file.Name()))
 		if err != nil {
 			continue
 		}
-
-		// Transparent tagging actions (e.g. kms:TagResource) live in the
-		// service's generated tags_gen.go, not in each resource's CRUD
-		// functions. Parse them once per service and attach to taggable
-		// resources below.
-		tagActions := tagActionsForService(svcDir)
-
-		for _, file := range files {
-			if file.IsDir() || !strings.HasSuffix(file.Name(), ".go") {
-				continue
-			}
-			// Skip test files and non-resource files
-			if strings.HasSuffix(file.Name(), "_test.go") {
-				continue
-			}
-
-			filePath := filepath.Join(svcDir, file.Name())
-			p.parseFile(filePath, entry.Name(), file.Name(), tagActions)
+		f, err := parser.ParseFile(fset, file.Name(), src, parser.ParseComments)
+		if err != nil {
+			continue
 		}
+		parsed[file.Name()] = f
+		sources[file.Name()] = src
 	}
+	if len(parsed) == 0 {
+		return nil, nil
+	}
+	pkg := newPackage(parsed)
 
-	return nil
+	// Transparent tagging actions (e.g. kms:TagResource) live in the
+	// service's generated tags_gen.go, not in each resource's CRUD
+	// functions. Parse them once per service and attach to taggable
+	// resources.
+	tagActions := tagActionsForService(svcDir)
+
+	names := make([]string, 0, len(parsed))
+	for name := range parsed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var found []resourceFile
+	for _, name := range names {
+		src := sources[name]
+		// Prefer the @SDKResource annotation (canonical), fall back to
+		// file-path derivation.
+		tfType := resourceTypeFromAnnotation(src)
+		if tfType == "" {
+			tfType = resourceTypeFromFile(serviceName, name)
+		}
+		resourceName := resourceNameFromFile(parsed[name])
+		if tfType == "" || resourceName == "" {
+			continue
+		}
+		found = append(found, resourceFile{
+			pkg:        pkg,
+			tfType:     tfType,
+			funcs:      pkg.resourceFuncs(name, resourceName),
+			tagged:     hasTagsAnnotation(src),
+			tagActions: tagActions,
+		})
+	}
+	pkg.files = nil
+	return pkg, found
 }
 
 // tagActionsForService reads a service directory's generated tags_gen.go (if
@@ -198,43 +271,20 @@ func tagActionsForService(svcDir string) TagActions {
 	return ta
 }
 
-// parseFile parses a single Go source file and extracts resource permissions.
-func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagActions TagActions) {
-	src, err := os.ReadFile(filePath)
-	if err != nil {
-		return
-	}
-
-	// Determine the terraform resource type.
-	// Prefer the @SDKResource annotation (canonical), fall back to file-path derivation.
-	tfType := resourceTypeFromAnnotation(src)
-	if tfType == "" {
-		tfType = resourceTypeFromFile(serviceName, fileName)
-	}
-	if tfType == "" {
-		return
-	}
-
-	// Determine the resource name from function names in the file
-	resourceName := resourceNameFromSource(src)
-	if resourceName == "" {
-		return
-	}
-
-	actions, err := ParseResourceFileStructured(string(src), tfType, resourceName)
-	if err != nil {
-		return
-	}
+// schema builds the cloud.Schema of one resource.
+func (r resourceFile) schema() *cloud.Schema {
+	actions, bound := r.pkg.actionsFor(r.funcs), boundFuncs(r.funcs)
 
 	// Build the cloud.Schema with permissions plus all three gate kinds:
 	// presence (d.GetOk/d.Get), change (d.HasChange), and value guards (the
 	// attribute's value is tested rather than its presence).
 	schema := &cloud.Schema{
-		TypeName:         tfType,
+		TypeName:         r.tfType,
 		Permissions:      make(map[string][]string),
 		Conditional:      make(map[string]map[string]string),
 		ChangeGated:      make(map[string]map[string]string),
 		ValueConditional: make(map[string]map[string]bool),
+		BestEffort:       make(map[string]map[string]bool),
 	}
 
 	for op, eas := range actions {
@@ -242,8 +292,12 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		conds := make(map[string]string, len(eas))
 		changes := make(map[string]string, len(eas))
 		valueConds := make(map[string]bool, len(eas))
+		bestEffort := make(map[string]bool)
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
+			if ea.BestEffort {
+				bestEffort[ea.Action] = true
+			}
 			if !ea.Conditional || ea.Condition == "" {
 				continue
 			}
@@ -267,26 +321,31 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		if len(valueConds) > 0 {
 			schema.ValueConditional[op] = valueConds
 		}
+		if len(bestEffort) > 0 {
+			schema.BestEffort[op] = bestEffort
+		}
 	}
+
+	schema.Incomplete = incompleteOperations(actions, bound, r.pkg.idx.reachesClient)
 
 	// If the resource opts into transparent tagging (@Tags annotation), the
 	// provider makes additional SDK tagging calls when `tags` is set — calls
 	// that don't appear in the resource's own CRUD functions. Add them as
 	// permissions gated on the `tags` attribute.
-	if hasTagsAnnotation(src) && !tagActions.Empty() {
-		addTagActions(schema, "create", tagActions.Apply)
-		addTagActions(schema, "update", tagActions.Apply)
-		addTagActions(schema, "update", tagActions.Remove)
+	if r.tagged && !r.tagActions.Empty() {
+		addTagActions(schema, "create", r.tagActions.Apply)
+		addTagActions(schema, "update", r.tagActions.Apply)
+		addTagActions(schema, "update", r.tagActions.Remove)
 
 		// The list-tags SDK call (e.g. kms:ListResourceTags) is made
 		// unconditionally on every resource Read for @Tags-annotated
 		// resources, and Create returns Read — so it's needed on both
 		// read and create without any attribute gating.
-		addUnconditionalActions(schema, "read", tagActions.List)
-		addUnconditionalActions(schema, "create", tagActions.List)
+		addUnconditionalActions(schema, "read", r.tagActions.List)
+		addUnconditionalActions(schema, "create", r.tagActions.List)
 	}
 
-	p.schemas[tfType] = schema
+	return schema
 }
 
 // addUnconditionalActions adds actions to the given operation without any
@@ -311,6 +370,9 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 			schema.Permissions[op] = append(schema.Permissions[op], action)
 			existing[action] = true
 		}
+		// Transparent tagging checks this call's error, whatever the
+		// resource's own functions do with theirs.
+		delete(schema.BestEffort[op], action)
 	}
 }
 
@@ -333,6 +395,7 @@ func addTagActions(schema *cloud.Schema, op string, actions []string) {
 			existing[action] = true
 		}
 		schema.Conditional[op][action] = "tags"
+		delete(schema.BestEffort[op], action)
 	}
 }
 
@@ -366,7 +429,11 @@ func resourceNameFromSource(src []byte) string {
 	if err != nil {
 		return ""
 	}
+	return resourceNameFromFile(f)
+}
 
+// resourceNameFromFile is resourceNameFromSource on an already parsed file.
+func resourceNameFromFile(f *ast.File) string {
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
 		if !ok {
@@ -388,4 +455,60 @@ func resourceNameFromSource(src []byte) string {
 		}
 	}
 	return ""
+}
+
+// incompleteOperations names the operations whose parse cannot be the whole
+// story. The resource binds a function to the operation and that function
+// uses an SDK client, yet the parse found no SDK call there, or, for a create
+// or a delete, found only calls that read. A create or a delete that changes
+// nothing in AWS means the parser missed the call that does, so the result
+// must not be taken as the full permission set. An operation bound to a no-op
+// such as schema.NoopContext, or to a function that never touches a client,
+// is not incomplete.
+func incompleteOperations(actions map[string][]ExtractedAction, bound map[string]string, usesClient func(string) bool) map[string]bool {
+	var out map[string]bool
+	for _, op := range []string{"create", "read", "delete"} {
+		fn, ok := bound[op]
+		if !ok || fn == "" || !usesClient(fn) {
+			continue
+		}
+		complete := len(actions[op]) > 0
+		if complete && op != "read" {
+			complete = false
+			for _, ea := range actions[op] {
+				if !isReadOnlyAction(ea.Action) {
+					complete = true
+					break
+				}
+			}
+		}
+		if !complete {
+			if out == nil {
+				out = make(map[string]bool)
+			}
+			out[op] = true
+		}
+	}
+	return out
+}
+
+// readOnlyVerbs are the IAM action prefixes of calls that only read.
+var readOnlyVerbs = []string{"Describe", "Get", "List", "Head", "BatchGet", "Search", "Lookup"}
+
+// isReadOnlyAction reports whether an IAM action only reads, judged by its
+// verb, e.g. "s3:HeadBucket" or "logs:DescribeLogGroups". The parser builds
+// every action as "service:Name", so the verb follows the colon; a name
+// without one is judged whole, which is also what a slice at Index+1 would
+// give when Index is -1.
+func isReadOnlyAction(action string) bool {
+	name := action
+	if i := strings.Index(action, ":"); i >= 0 {
+		name = action[i+1:]
+	}
+	for _, verb := range readOnlyVerbs {
+		if strings.HasPrefix(name, verb) {
+			return true
+		}
+	}
+	return false
 }

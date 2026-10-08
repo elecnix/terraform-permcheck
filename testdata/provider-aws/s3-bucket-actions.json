@@ -3,16 +3,104 @@
   "providerRef": "v5.90.0",
   "resources": {
     "aws_s3_bucket": {
+      "create": [
+        "s3:CreateBucket",
+        "s3:DeleteBucketCors",
+        "s3:DeleteBucketLifecycle",
+        "s3:DeleteBucketPolicy",
+        "s3:DeleteBucketReplication",
+        "s3:DeleteBucketTagging",
+        "s3:DeleteBucketWebsite",
+        "s3:DeleteEncryptionConfiguration",
+        "s3:GetBucketAccelerateConfiguration",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCors",
+        "s3:GetBucketLifecycleConfiguration",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketReplication",
+        "s3:GetBucketRequestPayment",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
+        "s3:GetEncryptionConfiguration",
+        "s3:HeadBucket",
+        "s3:PutBucketAccelerateConfiguration",
+        "s3:PutBucketAcl",
+        "s3:PutBucketCors",
+        "s3:PutBucketLifecycleConfiguration",
+        "s3:PutBucketLogging",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketReplication",
+        "s3:PutBucketRequestPayment",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketWebsite",
+        "s3:PutEncryptionConfiguration"
+      ],
       "delete": [
-        "s3:DeleteBucket"
+        "s3:DeleteBucket",
+        "s3:DeleteObject",
+        "s3:DeleteObjects",
+        "s3:HeadBucket",
+        "s3:ListObjectVersions",
+        "s3:PutObjectLegalHold"
       ],
       "read": [
+        "s3:GetBucketAccelerateConfiguration",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCors",
+        "s3:GetBucketLifecycleConfiguration",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketReplication",
+        "s3:GetBucketRequestPayment",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
+        "s3:GetEncryptionConfiguration",
         "s3:HeadBucket"
+      ],
+      "update": [
+        "s3:DeleteBucketCors",
+        "s3:DeleteBucketLifecycle",
+        "s3:DeleteBucketPolicy",
+        "s3:DeleteBucketReplication",
+        "s3:DeleteBucketWebsite",
+        "s3:DeleteEncryptionConfiguration",
+        "s3:GetBucketAccelerateConfiguration",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCors",
+        "s3:GetBucketLifecycleConfiguration",
+        "s3:GetBucketLogging",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketReplication",
+        "s3:GetBucketRequestPayment",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
+        "s3:GetEncryptionConfiguration",
+        "s3:HeadBucket",
+        "s3:PutBucketAccelerateConfiguration",
+        "s3:PutBucketAcl",
+        "s3:PutBucketCors",
+        "s3:PutBucketLifecycleConfiguration",
+        "s3:PutBucketLogging",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketReplication",
+        "s3:PutBucketRequestPayment",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketWebsite",
+        "s3:PutEncryptionConfiguration"
       ]
     },
     "aws_s3_bucket_accelerate_configuration": {
       "create": [
-        "s3:GetBucketAccelerateConfiguration"
+        "s3:GetBucketAccelerateConfiguration",
+        "s3:PutBucketAccelerateConfiguration"
       ],
       "delete": [
         "s3:PutBucketAccelerateConfiguration"
@@ -21,61 +109,95 @@
         "s3:GetBucketAccelerateConfiguration"
       ],
       "update": [
+        "s3:GetBucketAccelerateConfiguration",
         "s3:PutBucketAccelerateConfiguration"
       ]
     },
     "aws_s3_bucket_acl": {
       "create": [
-        "s3:GetBucketAcl"
+        "s3:GetBucketAcl",
+        "s3:PutBucketAcl"
       ],
       "read": [
         "s3:GetBucketAcl"
       ],
       "update": [
+        "s3:GetBucketAcl",
         "s3:PutBucketAcl"
       ]
     },
     "aws_s3_bucket_analytics_configuration": {
+      "create": [
+        "s3:GetBucketAnalyticsConfiguration",
+        "s3:PutBucketAnalyticsConfiguration"
+      ],
       "delete": [
-        "s3:DeleteBucketAnalyticsConfiguration"
+        "s3:DeleteBucketAnalyticsConfiguration",
+        "s3:GetBucketAnalyticsConfiguration"
       ],
       "read": [
         "s3:GetBucketAnalyticsConfiguration"
+      ],
+      "update": [
+        "s3:GetBucketAnalyticsConfiguration",
+        "s3:PutBucketAnalyticsConfiguration"
       ]
     },
     "aws_s3_bucket_cors_configuration": {
       "create": [
-        "s3:GetBucketCors"
+        "s3:GetBucketCors",
+        "s3:PutBucketCors"
       ],
       "delete": [
-        "s3:DeleteBucketCors"
+        "s3:DeleteBucketCors",
+        "s3:GetBucketCors"
       ],
       "read": [
         "s3:GetBucketCors"
       ],
       "update": [
+        "s3:GetBucketCors",
         "s3:PutBucketCors"
       ]
     },
     "aws_s3_bucket_intelligent_tiering_configuration": {
+      "create": [
+        "s3:GetBucketIntelligentTieringConfiguration",
+        "s3:PutBucketIntelligentTieringConfiguration"
+      ],
       "delete": [
-        "s3:DeleteBucketIntelligentTieringConfiguration"
+        "s3:DeleteBucketIntelligentTieringConfiguration",
+        "s3:GetBucketIntelligentTieringConfiguration"
       ],
       "read": [
         "s3:GetBucketIntelligentTieringConfiguration"
+      ],
+      "update": [
+        "s3:GetBucketIntelligentTieringConfiguration",
+        "s3:PutBucketIntelligentTieringConfiguration"
       ]
     },
     "aws_s3_bucket_inventory": {
+      "create": [
+        "s3:GetBucketInventoryConfiguration",
+        "s3:PutBucketInventoryConfiguration"
+      ],
       "delete": [
-        "s3:DeleteBucketInventoryConfiguration"
+        "s3:DeleteBucketInventoryConfiguration",
+        "s3:GetBucketInventoryConfiguration"
       ],
       "read": [
         "s3:GetBucketInventoryConfiguration"
+      ],
+      "update": [
+        "s3:GetBucketInventoryConfiguration",
+        "s3:PutBucketInventoryConfiguration"
       ]
     },
     "aws_s3_bucket_logging": {
       "create": [
-        "s3:GetBucketLogging"
+        "s3:GetBucketLogging",
+        "s3:PutBucketLogging"
       ],
       "delete": [
         "s3:PutBucketLogging"
@@ -84,27 +206,60 @@
         "s3:GetBucketLogging"
       ],
       "update": [
+        "s3:GetBucketLogging",
         "s3:PutBucketLogging"
       ]
     },
     "aws_s3_bucket_metric": {
+      "create": [
+        "s3:GetBucketMetricsConfiguration",
+        "s3:PutBucketMetricsConfiguration"
+      ],
       "delete": [
-        "s3:DeleteBucketMetricsConfiguration"
+        "s3:DeleteBucketMetricsConfiguration",
+        "s3:GetBucketMetricsConfiguration"
       ],
       "read": [
         "s3:GetBucketMetricsConfiguration"
+      ],
+      "update": [
+        "s3:GetBucketMetricsConfiguration",
+        "s3:PutBucketMetricsConfiguration"
       ]
     },
     "aws_s3_bucket_notification": {
+      "create": [
+        "s3:GetBucketNotification",
+        "s3:PutBucketNotification"
+      ],
       "delete": [
         "s3:PutBucketNotification"
       ],
       "read": [
         "s3:GetBucketNotification"
+      ],
+      "update": [
+        "s3:GetBucketNotification",
+        "s3:PutBucketNotification"
       ]
     },
     "aws_s3_bucket_object": {
+      "create": [
+        "s3:HeadObject",
+        "s3:PutObject"
+      ],
+      "delete": [
+        "s3:DeleteObject",
+        "s3:HeadObject",
+        "s3:ListObjectVersions",
+        "s3:PutObjectLegalHold"
+      ],
+      "read": [
+        "s3:HeadObject"
+      ],
       "update": [
+        "s3:HeadObject",
+        "s3:PutObject",
         "s3:PutObjectAcl",
         "s3:PutObjectLegalHold",
         "s3:PutObjectRetention"
@@ -112,7 +267,8 @@
     },
     "aws_s3_bucket_object_lock_configuration": {
       "create": [
-        "s3:GetBucketObjectLockConfiguration"
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:PutBucketObjectLockConfiguration"
       ],
       "delete": [
         "s3:PutBucketObjectLockConfiguration"
@@ -121,6 +277,7 @@
         "s3:GetBucketObjectLockConfiguration"
       ],
       "update": [
+        "s3:GetBucketObjectLockConfiguration",
         "s3:PutBucketObjectLockConfiguration"
       ]
     },
@@ -129,27 +286,43 @@
         "s3:GetBucketOwnershipControls",
         "s3:PutBucketOwnershipControls"
       ],
+      "delete": [
+        "s3:DeleteBucketOwnershipControls",
+        "s3:GetBucketOwnershipControls"
+      ],
       "read": [
         "s3:GetBucketOwnershipControls"
       ],
       "update": [
+        "s3:GetBucketOwnershipControls",
         "s3:PutBucketOwnershipControls"
       ]
     },
     "aws_s3_bucket_policy": {
+      "create": [
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy"
+      ],
       "delete": [
-        "s3:DeleteBucketPolicy"
+        "s3:DeleteBucketPolicy",
+        "s3:GetBucketPolicy"
       ],
       "read": [
         "s3:GetBucketPolicy"
+      ],
+      "update": [
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy"
       ]
     },
     "aws_s3_bucket_public_access_block": {
       "create": [
-        "s3:GetBucketPublicAccessBlock"
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketPublicAccessBlock"
       ],
       "delete": [
-        "s3:DeleteBucketPublicAccessBlock"
+        "s3:DeleteBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock"
       ],
       "read": [
         "s3:GetBucketPublicAccessBlock"
@@ -164,18 +337,21 @@
         "s3:PutBucketReplication"
       ],
       "delete": [
-        "s3:DeleteBucketReplication"
+        "s3:DeleteBucketReplication",
+        "s3:GetBucketReplication"
       ],
       "read": [
         "s3:GetBucketReplication"
       ],
       "update": [
+        "s3:GetBucketReplication",
         "s3:PutBucketReplication"
       ]
     },
     "aws_s3_bucket_request_payment_configuration": {
       "create": [
-        "s3:GetBucketRequestPayment"
+        "s3:GetBucketRequestPayment",
+        "s3:PutBucketRequestPayment"
       ],
       "delete": [
         "s3:PutBucketRequestPayment"
@@ -184,39 +360,59 @@
         "s3:GetBucketRequestPayment"
       ],
       "update": [
+        "s3:GetBucketRequestPayment",
         "s3:PutBucketRequestPayment"
       ]
     },
     "aws_s3_bucket_server_side_encryption_configuration": {
       "create": [
-        "s3:GetEncryptionConfiguration"
+        "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration"
       ],
       "delete": [
         "s3:DeleteEncryptionConfiguration"
       ],
       "read": [
         "s3:GetEncryptionConfiguration"
+      ],
+      "update": [
+        "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration"
       ]
     },
     "aws_s3_bucket_versioning": {
+      "create": [
+        "s3:GetBucketVersioning",
+        "s3:PutBucketVersioning"
+      ],
       "delete": [
         "s3:PutBucketVersioning"
       ],
+      "read": [
+        "s3:GetBucketVersioning"
+      ],
       "update": [
+        "s3:GetBucketVersioning",
         "s3:PutBucketVersioning"
       ]
     },
     "aws_s3_bucket_website_configuration": {
       "create": [
-        "s3:GetBucketWebsite"
+        "s3:GetBucketLocation",
+        "s3:GetBucketWebsite",
+        "s3:PutBucketWebsite"
       ],
       "delete": [
-        "s3:DeleteBucketWebsite"
+        "s3:DeleteBucketWebsite",
+        "s3:GetBucketWebsite"
       ],
       "read": [
+        "s3:GetBucketLocation",
         "s3:GetBucketWebsite"
       ],
       "update": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketWebsite",
         "s3:PutBucketWebsite"
       ]
     }

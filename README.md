@@ -34,6 +34,21 @@ the cross-reference:
 4. Diffs against your declared IAM policy documents.
 5. Fails the pipeline if any required permission is missing.
 
+### Provider source first, CloudFormation second
+
+For AWS, PermCheck first reads the terraform-provider-aws source and lists
+the SDK calls each resource's create, read, update and delete functions make.
+It follows calls into helper functions, retry closures and paginators, in any
+file of the service package and in other service packages. When it can't
+resolve a type from the source, it uses the CloudFormation schema.
+
+Sometimes the source parse comes back incomplete. A create or delete function
+uses an SDK client, yet the parser finds no call that changes anything. A read
+function finds no call at all. PermCheck then adds the CloudFormation
+permissions for that operation to what the parse found. A function that never
+touches a client, such as a delete that only logs that the resource can't be
+destroyed, counts as complete.
+
 ### Conditional & side-effect permissions
 
 Some permissions are only needed when a particular attribute is set. The AWS
@@ -69,6 +84,15 @@ the plan's configuration section instead: an attribute the configuration does
 not write is one holding a default, and the call does not run. With no
 configuration to read — static HCL mode — both kinds of guard fall back to
 presence and the permission is reported.
+
+Some calls can fail without failing the apply. The provider discards their
+error (`out, _ := conn.GetX(...)`, `if v, err := f(); err == nil`), swallows it
+(`if err != nil { return sseList }`), or makes the call only to clean up after
+an earlier call failed (`if err != nil { deleteRole(...); return err }`). The
+`aws_dynamodb_table` read, for example, looks up the account's default
+DynamoDB KMS key and keeps its state as it is when the lookup fails. PermCheck
+reports these calls as `[optional]`, so the default filter drops them and
+`--no-filter` shows them.
 
 ### Cross-service callback permissions
 

@@ -21,12 +21,14 @@ const (
 )
 
 // s3RequiredActions lists the S3 actions that stay [required]: the bucket's
-// own lifecycle, its ACL, and the object-level calls of aws_s3_bucket_object.
+// own lifecycle and location, its ACL, and the object-level calls of
+// aws_s3_bucket_object.
 // Every other S3 action either side emits is an optional bucket feature.
 var s3RequiredActions = map[string]bool{
 	"s3:CreateBucket":       true,
 	"s3:DeleteBucket":       true,
 	"s3:HeadBucket":         true,
+	"s3:GetBucketLocation":  true,
 	"s3:ListBucket":         true,
 	"s3:ListAllMyBuckets":   true,
 	"s3:GetBucketAcl":       true,
@@ -140,6 +142,46 @@ func TestS3OptionalPrefixes_EveryRowMatchesAnEmittedName(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("s3OptionalPrefixes row %q matches no action the schema or the parser emits", p)
+		}
+	}
+}
+
+// classifyPermission returns on the first row that matches, so a row another
+// row already covers is dead: it reads as coverage but can never be the reason
+// an action is optional. The two S3 name spaces differ by the "Bucket" infix
+// (s3:PutAnalyticsConfiguration next to s3:PutBucketAnalyticsConfiguration),
+// so the two spellings of one feature are different rows and neither shadows
+// the other.
+func TestS3OptionalPrefixes_NoRowIsShadowedByAnEarlierRow(t *testing.T) {
+	for i, p := range s3OptionalPrefixes {
+		first := ""
+		for _, q := range s3OptionalPrefixes {
+			if strings.HasPrefix(p, q) {
+				first = q
+				break
+			}
+		}
+		if first != p {
+			t.Errorf("s3OptionalPrefixes[%d] %q is shadowed by the earlier row %q", i, p, first)
+		}
+		if got := classifyPermission(p); got != ClassOptional {
+			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", p, got)
+		}
+	}
+}
+
+// The bucket-level spelling of a configuration feature (the one S3 emits) is
+// optional on the bucket, even though the same feature's configuration-level
+// spelling is a different row.
+func TestClassifyPermission_BucketLevelConfigurationSpellings(t *testing.T) {
+	for _, action := range []string{
+		"s3:PutBucketAnalyticsConfiguration",
+		"s3:PutBucketInventoryConfiguration",
+		"s3:PutBucketMetricsConfiguration",
+		"s3:PutBucketIntelligentTieringConfiguration",
+	} {
+		if got := classifyPermission(action); got != ClassOptional {
+			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", action, got)
 		}
 	}
 }

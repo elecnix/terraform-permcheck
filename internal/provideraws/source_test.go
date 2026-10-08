@@ -196,6 +196,21 @@ func resourceThingCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 package s3`,
 			want: "aws_s3_bucket_accelerate_configuration",
 		},
+		{
+			// Provider v5.90.0 drops the closing quote on a few annotations.
+			name: "annotation missing its closing quote",
+			src: `// @SDKResource("aws_vpc_ipam_preview_next_cidr, name="IPAM Preview Next CIDR")
+package ec2`,
+			want: "aws_vpc_ipam_preview_next_cidr",
+		},
+		{
+			// The quote that closes the type name is the one the pattern
+			// accepts when the annotation carries no further argument.
+			name: "annotation with no trailing arguments",
+			src: `// @SDKResource("aws_thing_widget")
+package thing`,
+			want: "aws_thing_widget",
+		},
 	}
 
 	for _, tt := range tests {
@@ -621,5 +636,35 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 	}
 	if _, ok := changed["iam:UpdateRole"]; ok {
 		t.Error("an unconditional action must not appear in ChangeGated")
+	}
+}
+
+// TestIsReadOnlyAction covers the verb test that decides whether a create or a
+// delete that found only this call is incomplete. Every action the parser
+// builds is "service:Name", and a name without a colon is judged whole rather
+// than sliced at a -1 index.
+func TestIsReadOnlyAction(t *testing.T) {
+	tests := map[string]bool{
+		"s3:HeadBucket":          true,
+		"logs:DescribeLogGroups": true,
+		"iam:ListRolePolicies":   true,
+		"ec2:BatchGetInstance":   true,
+		"s3:CreateBucket":        false,
+		"s3:PutBucketTagging":    false,
+		"s3:DeleteObjects":       false,
+		"iam:UpdateRole":         false,
+		// No colon: the whole string is the verb test's input.
+		"GetFoo":      true,
+		"ListThings":  true,
+		"TagResource": false,
+		"s3":          false,
+		"":            false,
+		// An empty verb keeps the call out of the read-only set.
+		"logs:": false,
+	}
+	for action, want := range tests {
+		if got := isReadOnlyAction(action); got != want {
+			t.Errorf("isReadOnlyAction(%q) = %v, want %v", action, got, want)
+		}
 	}
 }
