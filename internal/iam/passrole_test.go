@@ -107,10 +107,43 @@ func TestPassRoleMissing_ManagedRoleReference(t *testing.T) {
 	}
 }
 
-func TestPassRoleMissing_UnknownRoleIsSilent(t *testing.T) {
+// A role the plan does not show still needs a PassRole grant on some role.
+// A policy with none provably misses it.
+func TestPassRoleMissing_UnknownRoleWithoutAnyGrant(t *testing.T) {
+	set := &plan.ResourceChange{
+		Type: "aws_lambda_function", Name: "fn", Change: "create",
+		AttributeValues: map[string]string{},
+		Attributes:      map[string]bool{"role": true},
+	}
+	m := impliedMissing(set, grantNothing(), nil, false)
+	if !hasActionOn(m, "iam:PassRole", "aws_lambda_function", "fn") {
+		t.Fatalf("a set role with no PassRole grant must be missing, got %+v", m)
+	}
+	if m[0].ConditionAttribute != "" || m[0].ResourceScopeUnverified {
+		t.Errorf("want a plain missing finding, got %+v", m[0])
+	}
+
+	referenced := &plan.ResourceChange{
+		Type: "aws_lambda_function", Name: "fn", Change: "create",
+		References: map[string][]string{"role": {"var.role_arn"}},
+	}
+	if m := impliedMissing(referenced, grantNothing(), nil, false); !hasAction(m, "iam:PassRole") {
+		t.Errorf("a referenced role with no PassRole grant must be missing, got %+v", m)
+	}
+
+	// A grant on some role may cover the unknown one.
+	scoped := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/app-*"}]}`)
+	if m := impliedMissing(set, scoped, nil, false); len(m) != 0 {
+		t.Errorf("a scoped grant on an unknown role is not provably missing, got %+v", m)
+	}
+}
+
+// When the plan does not say which attributes are set, the resource may
+// pass no role, so nothing is reported.
+func TestPassRoleMissing_UnknownPresenceIsSilent(t *testing.T) {
 	rc := &plan.ResourceChange{Type: "aws_lambda_function", Name: "fn", Change: "create", AttributeValues: map[string]string{}}
 	if m := impliedMissing(rc, grantNothing(), nil, false); len(m) != 0 {
-		t.Errorf("unknown role must not be reported, got %+v", m)
+		t.Errorf("unknown presence must not be reported, got %+v", m)
 	}
 }
 

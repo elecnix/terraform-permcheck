@@ -211,7 +211,9 @@ rather than only the action name:
   `aws_ecs_task_definition`, `aws_cloudwatch_event_target`,
   `aws_apigatewayv2_integration`). The role comes from a literal ARN in the
   `role` or `role_arn` attribute, or from a reference to an `aws_iam_role`
-  with a known `name`.
+  with a known `name`. When the plan shows that the attribute is set but not
+  which role it holds, a policy with no `iam:PassRole` grant at all is
+  reported missing.
 - PermCheck checks cross-service callbacks, such as
   `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
   `aws_wafv2_web_acl_association`. The target is a literal ARN, or the
