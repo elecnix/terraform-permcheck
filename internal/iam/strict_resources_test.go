@@ -125,7 +125,9 @@ func TestValidate_StrictDerivedTargetIsChecked(t *testing.T) {
 }
 
 func TestValidate_StrictKeepsOtherFilters(t *testing.T) {
-	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"kinesis:PutRecords"}})}
+	// The stream makes its own management call, so PutRecords is a side
+	// call classed data-plane.
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"kinesis:CreateStream", "kinesis:PutRecords"}})}
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"kinesis:*","Resource":"arn:aws:kinesis:*:*:stream/x"}]}`)
 	filter := DefaultFilter()
@@ -134,8 +136,10 @@ func TestValidate_StrictKeepsOtherFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(missing) != 0 {
-		t.Errorf("the data-plane filter still applies in strict mode, got %+v", missing)
+	for _, m := range missing {
+		if m.Action == "kinesis:PutRecords" {
+			t.Errorf("the data-plane filter still applies in strict mode, got %+v", m)
+		}
 	}
 }
 

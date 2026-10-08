@@ -149,7 +149,7 @@ func TestDecide_BestEffortDowngradesOnlyManagement(t *testing.T) {
 		{"s3:PutBucketVersioning", classOptional},
 	}
 	for _, tt := range tests {
-		if got := decide("aws_s3_bucket", tt.action, true, nil).class; got != tt.want {
+		if got := decide("aws_s3_bucket", tt.action, true, false, nil).class; got != tt.want {
 			t.Errorf("decide(aws_s3_bucket, %q, bestEffort).class = %d, want %d", tt.action, got, tt.want)
 		}
 	}

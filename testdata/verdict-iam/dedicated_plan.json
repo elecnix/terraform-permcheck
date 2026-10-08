@@ -1,0 +1,7 @@
+{"resource_changes":[
+{"address":"aws_s3_object.o","mode":"managed","type":"aws_s3_object","name":"o","change":{"actions":["create"],"before":null,"after":{"bucket":"b","key":"k","content":"hi","tags":null},"after_unknown":{}}},
+{"address":"aws_iam_user_policy.p","mode":"managed","type":"aws_iam_user_policy","name":"p","change":{"actions":["create"],"before":null,"after":{"user":"u","name":"p","policy":"{}"},"after_unknown":{}}},
+{"address":"aws_backup_vault_policy.p","mode":"managed","type":"aws_backup_vault_policy","name":"p","change":{"actions":["create"],"before":null,"after":{"backup_vault_name":"v","policy":"{}"},"after_unknown":{}}},
+{"address":"aws_dynamodb_table_item.i","mode":"managed","type":"aws_dynamodb_table_item","name":"i","change":{"actions":["create"],"before":null,"after":{"table_name":"t","hash_key":"pk","item":"{}"},"after_unknown":{}}},
+{"address":"aws_dynamodb_resource_policy.r","mode":"managed","type":"aws_dynamodb_resource_policy","name":"r","change":{"actions":["create"],"before":null,"after":{"resource_arn":"arn:aws:dynamodb:us-east-1:1:table/t","policy":"{}"},"after_unknown":{}}}
+]}

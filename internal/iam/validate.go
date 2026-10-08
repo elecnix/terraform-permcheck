@@ -105,6 +105,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 		if !ok {
 			continue
 		}
+		dedicated := isDedicated(schema)
 
 		for _, paths := range pathsByAction(required) {
 			action := paths.action
@@ -119,7 +120,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 			}
 
 			// A sub-resource in the plan that owns the action reports it.
-			d := decide(rc.Type, action, bestEffort, inPlan)
+			d := decide(rc.Type, action, bestEffort, dedicated, inPlan)
 			if d.absorbedBy != "" {
 				continue
 			}

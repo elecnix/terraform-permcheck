@@ -94,12 +94,12 @@ func TestValidate_S3PolicyAndRequestPaymentAbsorbed(t *testing.T) {
 func TestDecide_EncryptionSpellingsAbsorbed(t *testing.T) {
 	inPlan := map[string]bool{"aws_s3_bucket_server_side_encryption_configuration": true}
 	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration", "s3:DeleteBucketEncryption"} {
-		if got := decide("aws_s3_bucket", a, false, inPlan).absorbedBy; got == "" {
+		if got := decide("aws_s3_bucket", a, false, false, inPlan).absorbedBy; got == "" {
 			t.Errorf("decide(aws_s3_bucket, %s) not absorbed", a)
 		}
 	}
 	// Only aws_s3_bucket hands actions over.
-	if got := decide("aws_s3_bucket_versioning", "s3:PutEncryptionConfiguration", false, inPlan).absorbedBy; got != "" {
+	if got := decide("aws_s3_bucket_versioning", "s3:PutEncryptionConfiguration", false, false, inPlan).absorbedBy; got != "" {
 		t.Errorf("decide on a sub-resource absorbed by %s", got)
 	}
 }
