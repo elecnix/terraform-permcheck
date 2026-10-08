@@ -75,6 +75,17 @@ To accept the gap for every unresolved type, pass `--allow-unresolved-types` or 
 
 A lookup that fails for another reason, such as a network error, a timeout, or an HTTP 5xx or 429 from the registry, stops the run with exit code 2. PermCheck can't tell whether such a type exists, so it neither checks it nor reports it as unresolved. Run the check again once the registry answers. The registry answers 403 or 404 for a type it doesn't hold, and PermCheck reads both as unresolved.
 
+### Plan actions
+
+PermCheck checks each managed resource change in the plan by its action:
+
+- A replace runs a delete of the old object and a create of the new one. PermCheck checks both. The delete reads the prior state and the create reads the planned state, and the report lists each with its own change (`aws_sqs_queue.q (delete)` and `aws_sqs_queue.q (create)`). The summary counts the replaced resource once.
+- A `forget` (a `removed` block with `destroy = false`) drops the object from state without an API call, so PermCheck skips it.
+- A data source read (`data.aws_iam_policy_document.p`) doesn't call a mutating API, so PermCheck skips it in plan mode and static HCL mode.
+- A no-op doesn't need a permission. PermCheck keeps its values so that a change referencing it can derive its target ARN.
+
+Each finding gives the full resource address, with its module and its `count` or `for_each` index: `module.prod.aws_sqs_queue.q[0] (delete)`. In `json` the module is in `module_address`, absent for the root module.
+
 ### Conditional & side-effect permissions
 
 Some permissions are only needed when a particular attribute is set. The AWS
@@ -83,8 +94,17 @@ provider, for example, makes an extra `kms:TagResource` call when an
 primary `kms:CreateKey` action. PermCheck reads the planned attribute values
 and only requires such permissions when their gating attribute is actually
 present, so you neither miss them (when tags are set) nor get false positives
-(when they aren't). A `tags` value computed at apply time (known after apply)
-still counts as set — the tags get applied, so the permission is still required.
+(when they aren't). An attribute computed at apply time (known after apply),
+such as `parent_id = aws_organizations_organizational_unit.ou.id`, counts as set
+when the configuration writes it. The check applies to a top-level attribute and
+to one inside a nested block. The provider reads a value for it at apply time,
+so PermCheck still requires the permission. An attribute the configuration leaves out
+is unknown only because the provider computes it, so it counts as unset.
+`tags_all` never counts, because it reads as unknown on every taggable resource.
+
+In static HCL mode PermCheck checks each resource block with the attributes
+that block writes. When one of two `aws_api_gateway_rest_api` blocks sets
+`body`, PermCheck reports the permission that depends on `body` for that block.
 
 ### Permissions gated on a change
 
@@ -303,9 +323,18 @@ directory, or pointed at with `--config`):
 - **`permission`** (required) — the IAM action to suppress. Supports glob
   patterns, e.g. `s3:*`.
 - **`resource`** (optional) — scopes the exclusion to matching terraform
-  resources. Matched against the resource type (`aws_secretsmanager_secret`) or
-  the full address (`aws_secretsmanager_secret.forwarder`); supports globs like
-  `aws_secretsmanager_*`. Omit to apply the exclusion to every resource.
+  resources. Supports globs like `aws_secretsmanager_*`. Omit to apply the
+  exclusion to every resource. PermCheck matches a pattern against:
+  - the resource type (`aws_secretsmanager_secret`), which matches the type in
+    every module.
+  - the address with its module, as terraform prints it. A pattern without a
+    module matches the root module only: `aws_sqs_queue.q` and
+    `aws_sqs_queue.*` leave `module.prod.aws_sqs_queue.q` reported. Write
+    `module.prod.aws_sqs_queue.q` for one module, `module.*.aws_sqs_queue.q`
+    for every module, or `*aws_sqs_queue.q` for the root and every module.
+  - the address without `count` and `for_each` keys, so `aws_s3_bucket.logs`
+    matches `aws_s3_bucket.logs[0]` and `module.app.aws_s3_bucket.logs`
+    matches `module.app["eu"].aws_s3_bucket.logs`.
 - **`operations`** (optional) — limits the exclusion to the named terraform
   operations: `create`, `update`, `delete`, or `read`. Omit to apply the
   exclusion to every operation.

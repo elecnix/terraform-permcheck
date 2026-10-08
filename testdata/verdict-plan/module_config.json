@@ -1,0 +1,1 @@
+{"exclude":[{"permission":"sqs:DeleteQueue","resource":"aws_sqs_queue.q","reason":"root legacy queue is deleted by hand"}]}

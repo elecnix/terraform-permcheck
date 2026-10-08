@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
@@ -175,5 +176,39 @@ func TestParse_ReferencesFollowModuleAddress(t *testing.T) {
 		if len(a) != 1 || a[0] != "aws_secretsmanager_secret.sa" || len(b) != 1 || b[0] != "aws_secretsmanager_secret.sb" {
 			t.Fatalf("run %d: module.a refs %v, module.b refs %v; want each module's own", i, a, b)
 		}
+	}
+}
+
+// TestParse_RealPlan reads a plan terraform wrote (testdata/realplan) and
+// checks each change it yields and the presence of the account's parent_id,
+// which the plan knows only after apply.
+func TestParse_RealPlan(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/realplan/plan.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"aws_iam_role.r create",
+		"aws_organizations_account.a create",
+		"aws_organizations_organizational_unit.ou create",
+		"aws_sqs_queue.q delete",
+		"aws_sqs_queue.q create",
+		"module.prod.aws_sqs_queue.q create",
+	}
+	if got := summary(changes); !reflect.DeepEqual(got, want) {
+		t.Fatalf("changes = %v, want %v", got, want)
+	}
+	if !changes[1].Attributes["parent_id"] {
+		t.Errorf("account attributes = %v, want parent_id present", changes[1].Attributes)
+	}
+	if changes[3].AttributeValues["name"] != "old-q" || changes[4].AttributeValues["name"] != "new-q" {
+		t.Errorf("replace names = %q, %q; want old-q, new-q", changes[3].AttributeValues["name"], changes[4].AttributeValues["name"])
+	}
+	if changes[5].Configured == nil || !changes[5].Configured["name"] {
+		t.Errorf("module queue configured = %v, want name from the module's configuration", changes[5].Configured)
 	}
 }

@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"data.aws_iam_policy_document.p","mode":"data","type":"aws_iam_policy_document","name":"p","change":{"actions":["read"],"before":null,"after":{},"after_unknown":{"json":true}},"action_reason":"read_because_dependency_pending"}]}
