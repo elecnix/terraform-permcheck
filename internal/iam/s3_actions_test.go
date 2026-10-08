@@ -168,9 +168,17 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 			continue
 		}
 		for _, a := range sortedKeys(actionSet(perms)) {
+			// aws_s3_bucket_object is the object resource, not a bucket-feature
+			// configurator: its s3:PutObjectAcl is data-plane on purpose, so it
+			// is excluded by name. Every aws_s3_bucket_* configurator exists to
+			// make its call, which is [required] and nothing else.
+			if tfType == "aws_s3_bucket_object" {
+				continue
+			}
 			got := classifyResourcePermission(tfType, a)
-			if got != ClassManagement && got != ClassDataPlane {
-				t.Errorf("classifyResourcePermission(%q, %q) = %d, want ClassManagement", tfType, a, got)
+			if got != ClassManagement {
+				t.Errorf("classifyResourcePermission(%q, %q) = %s, want ClassManagement",
+					tfType, a, classTag(got))
 			}
 		}
 	}
