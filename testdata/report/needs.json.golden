@@ -1,0 +1,35 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 1,
+  "label": "resource changes",
+  "missing": [
+    {
+      "need": "EcrImageVerification",
+      "need_resource": "arn:aws:ecr:us-east-1:111122223333:repository/a",
+      "missing_action": "ecr:DescribeImages",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    },
+    {
+      "need": "Logs",
+      "missing_action": "logs:CreateLogGroup",
+      "class": "[required]"
+    },
+    {
+      "need": "Logs",
+      "missing_action": "logs:PutLogEvents",
+      "class": "[required]",
+      "unverified": "resource_scope"
+    }
+  ]
+}
+--- stderr ---

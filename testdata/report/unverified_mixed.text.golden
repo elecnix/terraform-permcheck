@@ -1,0 +1,15 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (2):
+  s3:PutBucketTagging [required]
+    → aws_s3_bucket.a[0] (create) [s3.tf:3]
+  kms:CreateGrant [conditional: kms_key_arn]
+    → aws_backup_vault.v (delete) [modules/backup/main.tf:40]
+
+Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+  sqs:CreateQueue [required] [unverified: resource scope]
+    → aws_sqs_queue.q (create)
+    → aws_sqs_queue.r["k"] (create) [sqs.tf:7]
+
+
+3 resource changes checked, 2 distinct missing permissions found, 1 unverified (resource scope).

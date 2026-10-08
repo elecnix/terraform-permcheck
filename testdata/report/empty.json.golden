@@ -1,0 +1,8 @@
+--- stdout ---
+{
+  "status": "ok",
+  "checked": 4,
+  "label": "resource changes",
+  "missing": null
+}
+--- stderr ---

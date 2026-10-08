@@ -1,0 +1,17 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (4):
+  s3:PutBucketTagging [required]
+    → aws_s3_bucket.a[0] (create) [s3.tf:3]
+    → aws_s3_bucket.b["x"] (create) [s3.tf:12]
+    → aws_s3_bucket.c (update)
+  kms:DescribeKey [optional]
+    → aws_kms_key.main (create)
+  backup-storage:MountCapsule [data-plane]
+    → aws_backup_vault.v (delete) [modules/backup/main.tf:40]
+  kms:CreateGrant [conditional: kms_key_arn]
+    → aws_backup_vault.v (delete) [modules/backup/main.tf:40]
+    → aws_sns_topic.t[1] (create)
+
+
+6 resource changes checked, 4 distinct missing permissions found.

@@ -1,0 +1,68 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 6,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    },
+    {
+      "resource_type": "aws_kms_key",
+      "resource_name": "main",
+      "change": "create",
+      "missing_action": "kms:DescribeKey",
+      "class": "[optional]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b[\"x\"]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 12
+    },
+    {
+      "resource_type": "aws_backup_vault",
+      "resource_name": "v",
+      "change": "delete",
+      "missing_action": "backup-storage:MountCapsule",
+      "class": "[data-plane]",
+      "file": "modules/backup/main.tf",
+      "line": 40
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "c",
+      "change": "update",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_backup_vault",
+      "resource_name": "v",
+      "change": "delete",
+      "missing_action": "kms:CreateGrant",
+      "class": "[required]",
+      "condition_attribute": "kms_key_arn",
+      "file": "modules/backup/main.tf",
+      "line": 40
+    },
+    {
+      "resource_type": "aws_sns_topic",
+      "resource_name": "t[1]",
+      "change": "create",
+      "missing_action": "kms:CreateGrant",
+      "class": "[required]",
+      "condition_attribute": "kms_key_arn"
+    }
+  ]
+}
+--- stderr ---

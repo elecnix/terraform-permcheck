@@ -1,0 +1,5 @@
+--- stdout ---
+::warning file=s3.tf,line=3,title=Missing IAM permission::s3:PutBucketTagging needed by: aws_s3_bucket.a[0] (create)
+
+3 resource changes checked, 1 distinct missing permissions found.
+--- stderr ---

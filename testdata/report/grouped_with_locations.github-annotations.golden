@@ -1,0 +1,8 @@
+--- stdout ---
+::warning file=s3.tf,line=3,title=Missing IAM permission::s3:PutBucketTagging needed by: aws_s3_bucket.a[0] (create), aws_s3_bucket.b["x"] (create), aws_s3_bucket.c (update)
+::warning title=Missing IAM permission::kms:DescribeKey needed by: aws_kms_key.main (create)
+::warning file=modules/backup/main.tf,line=40,title=Missing IAM permission::backup-storage:MountCapsule needed by: aws_backup_vault.v (delete)
+::warning file=modules/backup/main.tf,line=40,title=Missing IAM permission::kms:CreateGrant [conditional: kms_key_arn] needed by: aws_backup_vault.v (delete), aws_sns_topic.t[1] (create)
+
+6 resource changes checked, 4 distinct missing permissions found.
+--- stderr ---

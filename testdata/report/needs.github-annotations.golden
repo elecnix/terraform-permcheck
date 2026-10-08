@@ -1,0 +1,8 @@
+--- stdout ---
+::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:us-east-1:111122223333:repository/a
+::warning file=s3.tf,line=3,title=Missing IAM permission::s3:PutBucketTagging needed by: aws_s3_bucket.a[0] (create)
+::warning title=Missing IAM permission::logs:CreateLogGroup needed by: needs "Logs"
+::warning title=Unverified IAM permission::logs:PutLogEvents [unverified: resource scope] needed by: needs "Logs"
+
+1 resource changes, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).
+--- stderr ---

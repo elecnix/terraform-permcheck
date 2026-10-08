@@ -1,0 +1,8 @@
+--- stdout ---
+{
+  "status": "ok",
+  "checked": 0,
+  "label": "resource types (static HCL)",
+  "missing": null
+}
+--- stderr ---

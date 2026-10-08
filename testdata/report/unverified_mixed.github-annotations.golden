@@ -1,0 +1,7 @@
+--- stdout ---
+::warning file=sqs.tf,line=7,title=Unverified IAM permission::sqs:CreateQueue [unverified: resource scope] needed by: aws_sqs_queue.q (create), aws_sqs_queue.r["k"] (create)
+::warning file=s3.tf,line=3,title=Missing IAM permission::s3:PutBucketTagging needed by: aws_s3_bucket.a[0] (create)
+::warning file=modules/backup/main.tf,line=40,title=Missing IAM permission::kms:CreateGrant [conditional: kms_key_arn] needed by: aws_backup_vault.v (delete)
+
+3 resource changes checked, 2 distinct missing permissions found, 1 unverified (resource scope).
+--- stderr ---

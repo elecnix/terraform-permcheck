@@ -1,0 +1,45 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 3,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    }
+  ],
+  "excluded": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "delete",
+      "excluded_action": "s3:DeleteBucket",
+      "reason": "bucket is retained"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b[\"x\"]",
+      "change": "delete",
+      "excluded_action": "s3:DeleteBucket",
+      "reason": "bucket is retained"
+    },
+    {
+      "resource_type": "aws_kms_key",
+      "resource_name": "main",
+      "change": "create",
+      "excluded_action": "kms:TagResource"
+    },
+    {
+      "need": "Logs",
+      "excluded_action": "logs:DeleteLogGroup",
+      "reason": "logs are kept"
+    }
+  ]
+}
+--- stderr ---

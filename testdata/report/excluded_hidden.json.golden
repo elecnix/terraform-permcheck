@@ -1,0 +1,18 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 3,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    }
+  ]
+}
+--- stderr ---
