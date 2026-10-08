@@ -849,30 +849,31 @@ func normalizeSDKMethod(service, method string) string {
 	return ""
 }
 
-// s3SDKMethodNormalization maps S3 SDK v2 method names to canonical IAM action
-// names where they diverge.
+// s3SDKMethodNames maps S3 SDK v2 method names to canonical IAM action names
+// where they diverge. The key is the SDK method name and the value is the IAM
+// action name, so PutPublicAccessBlock maps to PutBucketPublicAccessBlock. A
+// method that IAM spells the same way needs no row: an unmapped method passes
+// through unchanged.
+var s3SDKMethodNames = map[string]string{
+	"PutPublicAccessBlock":               "PutBucketPublicAccessBlock",
+	"GetPublicAccessBlock":               "GetBucketPublicAccessBlock",
+	"DeletePublicAccessBlock":            "DeleteBucketPublicAccessBlock",
+	"PutBucketNotificationConfiguration": "PutBucketNotification",
+	"GetBucketNotificationConfiguration": "GetBucketNotification",
+	// The SDK drops the Bucket infix that the object lock IAM actions keep.
+	"PutObjectLockConfiguration": "PutBucketObjectLockConfiguration",
+	"GetObjectLockConfiguration": "GetBucketObjectLockConfiguration",
+	// The encryption calls name the operation, not the resource, so S3
+	// spells them ...EncryptionConfiguration in IAM.
+	"GetBucketEncryption":    "GetEncryptionConfiguration",
+	"PutBucketEncryption":    "PutEncryptionConfiguration",
+	"DeleteBucketEncryption": "DeleteEncryptionConfiguration",
+}
+
+// s3SDKMethodNormalization returns the canonical IAM action name for an S3 SDK
+// v2 method, or "" when the two names agree.
 func s3SDKMethodNormalization(original string) string {
-	s3Names := map[string]string{
-		"PutPublicAccessBlock":               "PutBucketPublicAccessBlock",
-		"GetPublicAccessBlock":               "GetBucketPublicAccessBlock",
-		"DeletePublicAccessBlock":            "DeleteBucketPublicAccessBlock",
-		"PutBucketNotificationConfiguration": "PutBucketNotification",
-		"GetBucketNotificationConfiguration": "GetBucketNotification",
-		"PutBucketObjectLockConfiguration":   "PutObjectLockConfiguration",
-		"GetBucketObjectLockConfiguration":   "GetObjectLockConfiguration",
-		"PutBucketTagging":                   "PutBucketTagging",
-		"GetBucketTagging":                   "GetBucketTagging",
-		"DeleteBucketTagging":                "DeleteBucketTagging",
-		// The encryption calls name the operation, not the resource, so S3
-		// spells them ...EncryptionConfiguration in IAM.
-		"GetBucketEncryption":    "GetEncryptionConfiguration",
-		"PutBucketEncryption":    "PutEncryptionConfiguration",
-		"DeleteBucketEncryption": "DeleteEncryptionConfiguration",
-	}
-	if canonical, ok := s3Names[original]; ok {
-		return canonical
-	}
-	return ""
+	return s3SDKMethodNames[original]
 }
 
 // clientMethodToService extracts the AWS service name from a client accessor

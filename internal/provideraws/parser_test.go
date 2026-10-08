@@ -269,6 +269,11 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 		{"GetBucketEncryption", "s3", "s3:GetEncryptionConfiguration"},
 		{"PutBucketEncryption", "s3", "s3:PutEncryptionConfiguration"},
 		{"DeleteBucketEncryption", "s3", "s3:DeleteEncryptionConfiguration"},
+		// S3 object lock: the SDK drops the Bucket infix that IAM keeps
+		{"PutObjectLockConfiguration", "s3", "s3:PutBucketObjectLockConfiguration"},
+		{"GetObjectLockConfiguration", "s3", "s3:GetBucketObjectLockConfiguration"},
+		// Tagging needs no rename: the SDK and IAM spell it the same way
+		{"PutBucketTagging", "s3", "s3:PutBucketTagging"},
 	}
 
 	for _, tt := range tests {
@@ -278,6 +283,25 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 				t.Errorf("sdKMethodToIAMAction(%q, %q) = %q, want %q", tt.method, tt.service, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestS3SDKMethodNames_NoDeadRows checks that every rename row changes the
+// name and is keyed on an SDK method, not on an IAM action. A row that maps a
+// name to itself does nothing, because an unmapped method already passes
+// through unchanged. A row keyed on an IAM action never fires, because the
+// parser only sees SDK method names.
+func TestS3SDKMethodNames_NoDeadRows(t *testing.T) {
+	values := make(map[string]bool, len(s3SDKMethodNames))
+	for _, canonical := range s3SDKMethodNames {
+		values[canonical] = true
+	}
+	for method, canonical := range s3SDKMethodNames {
+		if method == canonical {
+			t.Errorf("row %q maps to itself", method)
+		} else if values[method] {
+			t.Errorf("row %q is keyed on a name that another row produces as an IAM action", method)
+		}
 	}
 }
 
