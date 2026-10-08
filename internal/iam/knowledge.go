@@ -1,6 +1,10 @@
 package iam
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/elecnix/terraform-permcheck/internal/plan"
+)
 
 // AWS permission knowledge.
 //
@@ -375,6 +379,21 @@ type crossServiceRule struct {
 	arnAttribute string
 	// callbacks lists the candidate callbacks keyed by target service.
 	callbacks []crossServiceCallback
+	// targetTypes maps each terraform type arnAttribute can reference to
+	// what the reference says about the target. When the plan computes the
+	// ARN at apply time, the reference still names the target's service.
+	targetTypes map[string]targetType
+}
+
+// targetType is what a reference to one terraform type says about the
+// target of a cross-service callback.
+type targetType struct {
+	// service is the ARN service prefix of the type's resources.
+	service string
+	// arnPatterns derives a planned resource's ARN patterns from its known
+	// attributes, or returns nil. Nil when the type's ARN holds an ID that
+	// AWS assigns.
+	arnPatterns func(*plan.ResourceChange) []string
 }
 
 // crossServiceRules maps a terraform resource type to its cross-service
@@ -386,6 +405,18 @@ var crossServiceRules = map[string]crossServiceRule{
 			{targetService: "elasticloadbalancing", action: "elasticloadbalancing:SetWebACL"},
 			{targetService: "apigateway", action: "apigateway:SetWebACL"},
 			{targetService: "appsync", action: "appsync:SetWebACL"},
+		},
+		// The types resource_arn accepts, from the provider's documentation
+		// of aws_wafv2_web_acl_association. Cognito, App Runner and Verified
+		// Access have no callback above, so a reference to one selects none.
+		targetTypes: map[string]targetType{
+			"aws_lb":                      {service: "elasticloadbalancing", arnPatterns: albARNPatterns},
+			"aws_alb":                     {service: "elasticloadbalancing", arnPatterns: albARNPatterns},
+			"aws_api_gateway_stage":       {service: "apigateway", arnPatterns: apiStageARNPatterns},
+			"aws_appsync_graphql_api":     {service: "appsync"},
+			"aws_cognito_user_pool":       {service: "cognito-idp"},
+			"aws_apprunner_service":       {service: "apprunner"},
+			"aws_verifiedaccess_instance": {service: "ec2"},
 		},
 	},
 }

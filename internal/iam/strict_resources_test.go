@@ -182,11 +182,11 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 
 	// The target is unknown, so the scoped grant may apply.
 	unknown := &plan.ResourceChange{Type: "aws_wafv2_web_acl_association", Name: "a", Change: "create"}
-	if hasAction(crossServiceMissing(unknown, policy, false), "elasticloadbalancing:SetWebACL") {
+	if hasAction(crossServiceMissing(unknown, policy, nil, false), "elasticloadbalancing:SetWebACL") {
 		t.Error("without strict mode the scoped grant covers a callback on an unknown target")
 	}
 	var found bool
-	for _, m := range crossServiceMissing(unknown, policy, true) {
+	for _, m := range crossServiceMissing(unknown, policy, nil, true) {
 		if m.Action == "elasticloadbalancing:SetWebACL" {
 			found = true
 			if !m.ResourceScopeUnverified {
@@ -205,7 +205,7 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 		AttributeValues: map[string]string{"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/web/1"},
 	}
 	for _, strict := range []bool{false, true} {
-		m := crossServiceMissing(known, policy, strict)
+		m := crossServiceMissing(known, policy, nil, strict)
 		if len(m) != 1 || m[0].ResourceScopeUnverified {
 			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
 		}
