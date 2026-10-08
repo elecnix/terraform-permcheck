@@ -515,7 +515,9 @@
           {"action":"amplify:GetDomainAssociation"}
         ],
         "update": [
-          {"action":"amplify:UpdateDomainAssociation"},
+          {"action":"amplify:UpdateDomainAssociation","changed":"certificate_settings"},
+          {"action":"amplify:UpdateDomainAssociation","changed":"enable_auto_sub_domain"},
+          {"action":"amplify:UpdateDomainAssociation","changed":"sub_domain"},
           {"action":"amplify:GetDomainAssociation"}
         ]
       }
@@ -933,7 +935,8 @@
         "create": [
           {"action":"apigateway:POST"},
           {"action":"apigateway:GET"},
-          {"action":"apigateway:PATCH"},
+          {"action":"apigateway:PATCH","attribute":"client_certificate_id"},
+          {"action":"apigateway:PATCH","attribute":"access_log_settings"},
           {"action":"apigateway:PUT","attribute":"tags"}
         ],
         "delete": [
@@ -1102,7 +1105,8 @@
           {"action":"apigateway:GET"}
         ],
         "update": [
-          {"action":"apigateway:PATCH"},
+          {"action":"apigateway:PATCH","changed":"domain_name_configuration"},
+          {"action":"apigateway:PATCH","changed":"mutual_tls_authentication"},
           {"action":"apigateway:GET"},
           {"action":"apigateway:POST","attribute":"tags"},
           {"action":"apigateway:DELETE","attribute":"tags"}
@@ -1432,7 +1436,9 @@
           {"action":"appconfig:ListTagsForResource"}
         ],
         "update": [
-          {"action":"appconfig:UpdateEnvironment"},
+          {"action":"appconfig:UpdateEnvironment","changed":"description"},
+          {"action":"appconfig:UpdateEnvironment","changed":"name"},
+          {"action":"appconfig:UpdateEnvironment","changed":"monitor"},
           {"action":"appconfig:TagResource","attribute":"tags"},
           {"action":"appconfig:UntagResource","attribute":"tags"}
         ]
@@ -1510,8 +1516,10 @@
           {"action":"appfabric:ListTagsForResource"}
         ],
         "update": [
-          {"action":"appfabric:UpdateAppAuthorization"},
-          {"action":"appfabric:GetAppAuthorization"},
+          {"action":"appfabric:UpdateAppAuthorization","changed":"credential"},
+          {"action":"appfabric:UpdateAppAuthorization","changed":"tenant"},
+          {"action":"appfabric:GetAppAuthorization","changed":"credential"},
+          {"action":"appfabric:GetAppAuthorization","changed":"tenant"},
           {"action":"appfabric:TagResource","attribute":"tags"},
           {"action":"appfabric:UntagResource","attribute":"tags"}
         ]
@@ -2373,7 +2381,8 @@
           {"action":"appsync:GetSourceApiAssociation"}
         ],
         "update": [
-          {"action":"appsync:UpdateSourceApiAssociation"},
+          {"action":"appsync:UpdateSourceApiAssociation","changed":"description"},
+          {"action":"appsync:UpdateSourceApiAssociation","changed":"source_api_association_config"},
           {"action":"appsync:GetSourceApiAssociation"}
         ]
       }
@@ -2505,7 +2514,8 @@
           {"action":"auditmanager:GetAccountStatus"}
         ],
         "update": [
-          {"action":"auditmanager:RegisterAccount"}
+          {"action":"auditmanager:RegisterAccount","changed":"delegated_admin_account"},
+          {"action":"auditmanager:RegisterAccount","changed":"kms_key"}
         ]
       }
     },
@@ -2524,7 +2534,11 @@
           {"action":"auditmanager:ListTagsForResource"}
         ],
         "update": [
-          {"action":"auditmanager:UpdateAssessment"},
+          {"action":"auditmanager:UpdateAssessment","changed":"assessment_reports_destination"},
+          {"action":"auditmanager:UpdateAssessment","changed":"description"},
+          {"action":"auditmanager:UpdateAssessment","changed":"name"},
+          {"action":"auditmanager:UpdateAssessment","changed":"roles"},
+          {"action":"auditmanager:UpdateAssessment","changed":"scope"},
           {"action":"auditmanager:TagResource","attribute":"tags"},
           {"action":"auditmanager:UntagResource","attribute":"tags"}
         ]
@@ -2571,7 +2585,12 @@
           {"action":"auditmanager:ListTagsForResource"}
         ],
         "update": [
-          {"action":"auditmanager:UpdateControl"},
+          {"action":"auditmanager:UpdateControl","changed":"name"},
+          {"action":"auditmanager:UpdateControl","changed":"control_mapping_sources"},
+          {"action":"auditmanager:UpdateControl","changed":"action_plan_instructions"},
+          {"action":"auditmanager:UpdateControl","changed":"action_plan_title"},
+          {"action":"auditmanager:UpdateControl","changed":"description"},
+          {"action":"auditmanager:UpdateControl","changed":"testing_information"},
           {"action":"auditmanager:TagResource","attribute":"tags"},
           {"action":"auditmanager:UntagResource","attribute":"tags"}
         ]
@@ -2592,7 +2611,10 @@
           {"action":"auditmanager:ListTagsForResource"}
         ],
         "update": [
-          {"action":"auditmanager:UpdateAssessmentFramework"},
+          {"action":"auditmanager:UpdateAssessmentFramework","changed":"name"},
+          {"action":"auditmanager:UpdateAssessmentFramework","changed":"control_sets"},
+          {"action":"auditmanager:UpdateAssessmentFramework","changed":"compliance_type"},
+          {"action":"auditmanager:UpdateAssessmentFramework","changed":"description"},
           {"action":"auditmanager:TagResource","attribute":"tags"},
           {"action":"auditmanager:UntagResource","attribute":"tags"}
         ]
@@ -2629,15 +2651,15 @@
       "ops": {
         "create": [
           {"action":"autoscaling:AttachLoadBalancers","attribute":"elb"},
-          {"action":"autoscaling:AttachLoadBalancerTargetGroups","attribute":"elb"},
-          {"action":"autoscaling:DescribeAutoScalingGroups","attribute":"elb"}
+          {"action":"autoscaling:AttachLoadBalancerTargetGroups"},
+          {"action":"autoscaling:DescribeAutoScalingGroups"}
         ],
         "delete": [
           {"action":"autoscaling:DetachLoadBalancers","attribute":"elb"},
-          {"action":"autoscaling:DetachLoadBalancerTargetGroups","attribute":"elb"}
+          {"action":"autoscaling:DetachLoadBalancerTargetGroups"}
         ],
         "read": [
-          {"action":"autoscaling:DescribeAutoScalingGroups","attribute":"elb"}
+          {"action":"autoscaling:DescribeAutoScalingGroups"}
         ]
       }
     },
@@ -2680,14 +2702,14 @@
           {"action":"autoscaling:EnableMetricsCollection","changed":"enabled_metrics"},
           {"action":"autoscaling:ResumeProcesses","changed":"suspended_processes"},
           {"action":"autoscaling:SuspendProcesses","changed":"suspended_processes"},
-          {"action":"autoscaling:DeleteTags"},
-          {"action":"autoscaling:CreateOrUpdateTags"},
+          {"action":"autoscaling:DeleteTags","changed":"tag"},
+          {"action":"autoscaling:CreateOrUpdateTags","changed":"tag"},
           {"action":"autoscaling:DescribeTrafficSources","changed":"traffic_source"},
           {"action":"autoscaling:DescribeLoadBalancers","changed":"load_balancers"},
           {"action":"autoscaling:DescribeLoadBalancerTargetGroups","changed":"target_group_arns"},
-          {"action":"autoscaling:StartInstanceRefresh","attribute":"instance_refresh"},
-          {"action":"autoscaling:CancelInstanceRefresh","attribute":"instance_refresh"},
-          {"action":"autoscaling:DescribeInstanceRefreshes","attribute":"instance_refresh"},
+          {"action":"autoscaling:StartInstanceRefresh","attribute":"instance_refresh","value_guarded":true},
+          {"action":"autoscaling:CancelInstanceRefresh","attribute":"instance_refresh","value_guarded":true},
+          {"action":"autoscaling:DescribeInstanceRefreshes","attribute":"instance_refresh","value_guarded":true},
           {"action":"autoscaling:DeleteWarmPool","changed":"warm_pool"},
           {"action":"autoscaling:DescribeWarmPool","changed":"warm_pool"},
           {"action":"autoscaling:DescribeScalingActivities","attribute":"wait_for_capacity_timeout"},
@@ -2933,7 +2955,10 @@
           {"action":"backup:ListTags"}
         ],
         "update": [
-          {"action":"backup:UpdateRestoreTestingPlan"},
+          {"action":"backup:UpdateRestoreTestingPlan","changed":"recovery_point_selection"},
+          {"action":"backup:UpdateRestoreTestingPlan","changed":"schedule_expression"},
+          {"action":"backup:UpdateRestoreTestingPlan","changed":"schedule_expression_timezone"},
+          {"action":"backup:UpdateRestoreTestingPlan","changed":"start_window_hours"},
           {"action":"backup:TagResource","attribute":"tags"},
           {"action":"backup:UntagResource","attribute":"tags"}
         ]
@@ -2952,7 +2977,10 @@
           {"action":"backup:GetRestoreTestingSelection"}
         ],
         "update": [
-          {"action":"backup:UpdateRestoreTestingSelection"}
+          {"action":"backup:UpdateRestoreTestingSelection","changed":"iam_role_arn"},
+          {"action":"backup:UpdateRestoreTestingSelection","changed":"protected_resource_conditions"},
+          {"action":"backup:UpdateRestoreTestingSelection","changed":"restore_metadata_overrides"},
+          {"action":"backup:UpdateRestoreTestingSelection","changed":"validation_window_hours"}
         ]
       }
     },
@@ -3085,7 +3113,7 @@
         ],
         "update": [
           {"action":"batch:RegisterJobDefinition"},
-          {"action":"batch:DeregisterJobDefinition","attribute":"deregister_on_new_revision"},
+          {"action":"batch:DeregisterJobDefinition"},
           {"action":"batch:DescribeJobDefinitions"},
           {"action":"batch:TagResource","attribute":"tags"},
           {"action":"batch:UntagResource","attribute":"tags"}
@@ -3204,8 +3232,26 @@
           {"action":"bedrock:ListTagsForResource"}
         ],
         "update": [
-          {"action":"bedrock:UpdateGuardrail"},
-          {"action":"bedrock:GetGuardrail"},
+          {"action":"bedrock:UpdateGuardrail","changed":"blocked_input_messaging"},
+          {"action":"bedrock:UpdateGuardrail","changed":"blocked_outputs_messaging"},
+          {"action":"bedrock:UpdateGuardrail","changed":"kms_key_arn"},
+          {"action":"bedrock:UpdateGuardrail","changed":"content_policy_config"},
+          {"action":"bedrock:UpdateGuardrail","changed":"contextual_grounding_policy_config"},
+          {"action":"bedrock:UpdateGuardrail","changed":"sensitive_information_policy_config"},
+          {"action":"bedrock:UpdateGuardrail","changed":"topic_policy_config"},
+          {"action":"bedrock:UpdateGuardrail","changed":"word_policy_config"},
+          {"action":"bedrock:UpdateGuardrail","changed":"name"},
+          {"action":"bedrock:UpdateGuardrail","changed":"description"},
+          {"action":"bedrock:GetGuardrail","changed":"blocked_input_messaging"},
+          {"action":"bedrock:GetGuardrail","changed":"blocked_outputs_messaging"},
+          {"action":"bedrock:GetGuardrail","changed":"kms_key_arn"},
+          {"action":"bedrock:GetGuardrail","changed":"content_policy_config"},
+          {"action":"bedrock:GetGuardrail","changed":"contextual_grounding_policy_config"},
+          {"action":"bedrock:GetGuardrail","changed":"sensitive_information_policy_config"},
+          {"action":"bedrock:GetGuardrail","changed":"topic_policy_config"},
+          {"action":"bedrock:GetGuardrail","changed":"word_policy_config"},
+          {"action":"bedrock:GetGuardrail","changed":"name"},
+          {"action":"bedrock:GetGuardrail","changed":"description"},
           {"action":"bedrock:TagResource","attribute":"tags"},
           {"action":"bedrock:UntagResource","attribute":"tags"}
         ]
@@ -3303,9 +3349,36 @@
           {"action":"bedrock:ListTagsForResource"}
         ],
         "update": [
-          {"action":"bedrock:UpdateAgent"},
-          {"action":"bedrock:GetAgent"},
-          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:UpdateAgent","changed":"agent_name"},
+          {"action":"bedrock:UpdateAgent","changed":"agent_resource_role_arn"},
+          {"action":"bedrock:UpdateAgent","changed":"customer_encryption_key_arn"},
+          {"action":"bedrock:UpdateAgent","changed":"description"},
+          {"action":"bedrock:UpdateAgent","changed":"instruction"},
+          {"action":"bedrock:UpdateAgent","changed":"idle_session_ttl_in_seconds"},
+          {"action":"bedrock:UpdateAgent","changed":"foundation_model"},
+          {"action":"bedrock:UpdateAgent","changed":"guardrail_configuration"},
+          {"action":"bedrock:UpdateAgent","changed":"prompt_override_configuration"},
+          {"action":"bedrock:UpdateAgent","changed":"agent_collaboration"},
+          {"action":"bedrock:GetAgent","changed":"agent_name"},
+          {"action":"bedrock:GetAgent","changed":"agent_resource_role_arn"},
+          {"action":"bedrock:GetAgent","changed":"customer_encryption_key_arn"},
+          {"action":"bedrock:GetAgent","changed":"description"},
+          {"action":"bedrock:GetAgent","changed":"instruction"},
+          {"action":"bedrock:GetAgent","changed":"idle_session_ttl_in_seconds"},
+          {"action":"bedrock:GetAgent","changed":"foundation_model"},
+          {"action":"bedrock:GetAgent","changed":"guardrail_configuration"},
+          {"action":"bedrock:GetAgent","changed":"prompt_override_configuration"},
+          {"action":"bedrock:GetAgent","changed":"agent_collaboration"},
+          {"action":"bedrock:PrepareAgent","changed":"agent_name"},
+          {"action":"bedrock:PrepareAgent","changed":"agent_resource_role_arn"},
+          {"action":"bedrock:PrepareAgent","changed":"customer_encryption_key_arn"},
+          {"action":"bedrock:PrepareAgent","changed":"description"},
+          {"action":"bedrock:PrepareAgent","changed":"instruction"},
+          {"action":"bedrock:PrepareAgent","changed":"idle_session_ttl_in_seconds"},
+          {"action":"bedrock:PrepareAgent","changed":"foundation_model"},
+          {"action":"bedrock:PrepareAgent","changed":"guardrail_configuration"},
+          {"action":"bedrock:PrepareAgent","changed":"prompt_override_configuration"},
+          {"action":"bedrock:PrepareAgent","changed":"agent_collaboration"},
           {"action":"bedrock:TagResource","attribute":"tags"},
           {"action":"bedrock:UntagResource","attribute":"tags"}
         ]
@@ -3325,7 +3398,13 @@
           {"action":"bedrock:GetAgentActionGroup"}
         ],
         "update": [
-          {"action":"bedrock:UpdateAgentActionGroup"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"action_group_executor"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"action_group_name"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"action_group_state"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"api_schema"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"description"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"function_schema"},
+          {"action":"bedrock:UpdateAgentActionGroup","changed":"parent_action_group_signature"},
           {"action":"bedrock:GetAgentActionGroup"},
           {"action":"bedrock:PrepareAgent"},
           {"action":"bedrock:GetAgent"}
@@ -3349,8 +3428,12 @@
           {"action":"bedrock:ListTagsForResource"}
         ],
         "update": [
-          {"action":"bedrock:UpdateAgentAlias"},
-          {"action":"bedrock:GetAgentAlias"},
+          {"action":"bedrock:UpdateAgentAlias","changed":"agent_alias_name"},
+          {"action":"bedrock:UpdateAgentAlias","changed":"description"},
+          {"action":"bedrock:UpdateAgentAlias","changed":"routing_configuration"},
+          {"action":"bedrock:GetAgentAlias","changed":"agent_alias_name"},
+          {"action":"bedrock:GetAgentAlias","changed":"description"},
+          {"action":"bedrock:GetAgentAlias","changed":"routing_configuration"},
           {"action":"bedrock:TagResource","attribute":"tags"},
           {"action":"bedrock:UntagResource","attribute":"tags"}
         ]
@@ -3373,9 +3456,18 @@
           {"action":"bedrock:GetAgentCollaborator"}
         ],
         "update": [
-          {"action":"bedrock:UpdateAgentCollaborator"},
-          {"action":"bedrock:PrepareAgent"},
-          {"action":"bedrock:GetAgent"}
+          {"action":"bedrock:UpdateAgentCollaborator","changed":"agent_descriptor"},
+          {"action":"bedrock:UpdateAgentCollaborator","changed":"collaboration_instruction"},
+          {"action":"bedrock:UpdateAgentCollaborator","changed":"collaborator_name"},
+          {"action":"bedrock:UpdateAgentCollaborator","changed":"relay_conversation_history"},
+          {"action":"bedrock:PrepareAgent","changed":"agent_descriptor"},
+          {"action":"bedrock:PrepareAgent","changed":"collaboration_instruction"},
+          {"action":"bedrock:PrepareAgent","changed":"collaborator_name"},
+          {"action":"bedrock:PrepareAgent","changed":"relay_conversation_history"},
+          {"action":"bedrock:GetAgent","changed":"agent_descriptor"},
+          {"action":"bedrock:GetAgent","changed":"collaboration_instruction"},
+          {"action":"bedrock:GetAgent","changed":"collaborator_name"},
+          {"action":"bedrock:GetAgent","changed":"relay_conversation_history"}
         ]
       }
     },
@@ -3434,8 +3526,12 @@
           {"action":"bedrock:ListTagsForResource"}
         ],
         "update": [
-          {"action":"bedrock:UpdateKnowledgeBase"},
-          {"action":"bedrock:GetKnowledgeBase"},
+          {"action":"bedrock:UpdateKnowledgeBase","changed":"description"},
+          {"action":"bedrock:UpdateKnowledgeBase","changed":"name"},
+          {"action":"bedrock:UpdateKnowledgeBase","changed":"role_arn"},
+          {"action":"bedrock:GetKnowledgeBase","changed":"description"},
+          {"action":"bedrock:GetKnowledgeBase","changed":"name"},
+          {"action":"bedrock:GetKnowledgeBase","changed":"role_arn"},
           {"action":"bedrock:TagResource","attribute":"tags"},
           {"action":"bedrock:UntagResource","attribute":"tags"}
         ]
@@ -3653,8 +3749,8 @@
         ],
         "delete": [
           {"action":"chime:DeleteVoiceConnectorGroup"},
-          {"action":"chime:GetVoiceConnectorGroup","attribute":"connector"},
-          {"action":"chime:UpdateVoiceConnectorGroup","attribute":"connector"}
+          {"action":"chime:GetVoiceConnectorGroup","attribute":"connector","value_guarded":true},
+          {"action":"chime:UpdateVoiceConnectorGroup","attribute":"connector","value_guarded":true}
         ],
         "read": [
           {"action":"chime:GetVoiceConnectorGroup"}
@@ -3678,7 +3774,8 @@
           {"action":"chime:GetVoiceConnectorLoggingConfiguration"}
         ],
         "update": [
-          {"action":"chime:PutVoiceConnectorLoggingConfiguration"},
+          {"action":"chime:PutVoiceConnectorLoggingConfiguration","changed":"enable_sip_logs"},
+          {"action":"chime:PutVoiceConnectorLoggingConfiguration","changed":"enable_media_metric_logs"},
           {"action":"chime:GetVoiceConnectorLoggingConfiguration"}
         ]
       }
@@ -3696,7 +3793,8 @@
           {"action":"chime:GetVoiceConnectorOrigination"}
         ],
         "update": [
-          {"action":"chime:PutVoiceConnectorOrigination"},
+          {"action":"chime:PutVoiceConnectorOrigination","changed":"route"},
+          {"action":"chime:PutVoiceConnectorOrigination","changed":"disabled"},
           {"action":"chime:GetVoiceConnectorOrigination"}
         ]
       }
@@ -3714,7 +3812,10 @@
           {"action":"chime:GetVoiceConnectorStreamingConfiguration"}
         ],
         "update": [
-          {"action":"chime:PutVoiceConnectorStreamingConfiguration"},
+          {"action":"chime:PutVoiceConnectorStreamingConfiguration","changed":"data_retention"},
+          {"action":"chime:PutVoiceConnectorStreamingConfiguration","changed":"disabled"},
+          {"action":"chime:PutVoiceConnectorStreamingConfiguration","changed":"streaming_notification_targets"},
+          {"action":"chime:PutVoiceConnectorStreamingConfiguration","changed":"media_insights_configuration"},
           {"action":"chime:GetVoiceConnectorStreamingConfiguration"}
         ]
       }
@@ -3732,7 +3833,11 @@
           {"action":"chime:GetVoiceConnectorTermination"}
         ],
         "update": [
-          {"action":"chime:PutVoiceConnectorTermination"},
+          {"action":"chime:PutVoiceConnectorTermination","changed":"calling_regions"},
+          {"action":"chime:PutVoiceConnectorTermination","changed":"cidr_allow_list"},
+          {"action":"chime:PutVoiceConnectorTermination","changed":"disabled"},
+          {"action":"chime:PutVoiceConnectorTermination","changed":"cps_limit"},
+          {"action":"chime:PutVoiceConnectorTermination","changed":"default_phone_number"},
           {"action":"chime:GetVoiceConnectorTermination"}
         ]
       }
@@ -3750,7 +3855,7 @@
           {"action":"chime:ListVoiceConnectorTerminationCredentials"}
         ],
         "update": [
-          {"action":"chime:PutVoiceConnectorTerminationCredentials"},
+          {"action":"chime:PutVoiceConnectorTerminationCredentials","changed":"credentials"},
           {"action":"chime:ListVoiceConnectorTerminationCredentials"}
         ]
       }
@@ -4037,7 +4142,10 @@
           {"action":"cloudformation:DescribeStackInstance"}
         ],
         "update": [
-          {"action":"cloudformation:UpdateStackInstances"},
+          {"action":"cloudformation:UpdateStackInstances","changed":"call_as"},
+          {"action":"cloudformation:UpdateStackInstances","changed":"deployment_targets.0.accounts_url"},
+          {"action":"cloudformation:UpdateStackInstances","changed":"operation_preferences"},
+          {"action":"cloudformation:UpdateStackInstances","changed":"parameter_overrides"},
           {"action":"cloudformation:DeleteStackInstances"},
           {"action":"cloudformation:DescribeStackSetOperation"},
           {"action":"cloudformation:ListStackSetOperationResults","best_effort":true},
@@ -4086,9 +4194,12 @@
           {"action":"cloudformation:ListStackInstances"}
         ],
         "update": [
-          {"action":"cloudformation:UpdateStackInstances"},
-          {"action":"cloudformation:DescribeStackSetOperation"},
-          {"action":"cloudformation:ListStackSetOperationResults","best_effort":true},
+          {"action":"cloudformation:UpdateStackInstances","changed":"parameter_overrides"},
+          {"action":"cloudformation:UpdateStackInstances","changed":"operation_preferences"},
+          {"action":"cloudformation:DescribeStackSetOperation","changed":"parameter_overrides"},
+          {"action":"cloudformation:DescribeStackSetOperation","changed":"operation_preferences"},
+          {"action":"cloudformation:ListStackSetOperationResults","changed":"parameter_overrides","best_effort":true},
+          {"action":"cloudformation:ListStackSetOperationResults","changed":"operation_preferences","best_effort":true},
           {"action":"cloudformation:DescribeStackInstance"},
           {"action":"cloudformation:ListStackInstances"}
         ]
@@ -4141,7 +4252,9 @@
           {"action":"cloudfront:GetContinuousDeploymentPolicy"}
         ],
         "update": [
-          {"action":"cloudfront:UpdateContinuousDeploymentPolicy"}
+          {"action":"cloudfront:UpdateContinuousDeploymentPolicy","changed":"enabled"},
+          {"action":"cloudfront:UpdateContinuousDeploymentPolicy","changed":"staging_distribution_dns_names"},
+          {"action":"cloudfront:UpdateContinuousDeploymentPolicy","changed":"traffic_config"}
         ]
       }
     },
@@ -4481,7 +4594,7 @@
           {"action":"cloudsearch:UpdateAvailabilityOptions","attribute":"multi_az"},
           {"action":"cloudsearch:UpdateDomainEndpointOptions","attribute":"endpoint_options","value_guarded":true},
           {"action":"cloudsearch:IndexDocuments","attribute":"index_field","value_guarded":true},
-          {"action":"cloudsearch:DefineIndexField","attribute":"index_field"},
+          {"action":"cloudsearch:DefineIndexField","attribute":"index_field","value_guarded":true},
           {"action":"cloudsearch:DescribeDomains"},
           {"action":"cloudsearch:DescribeIndexFields"},
           {"action":"cloudsearch:DescribeAvailabilityOptions"},
@@ -4666,7 +4779,7 @@
       "ops": {
         "create": [
           {"action":"cloudwatch:PutManagedInsightRules"},
-          {"action":"cloudwatch:DisableInsightRules"},
+          {"action":"cloudwatch:DisableInsightRules","attribute":"state"},
           {"action":"cloudwatch:ListManagedInsightRules"},
           {"action":"cloudwatch:TagResource","attribute":"tags"},
           {"action":"cloudwatch:ListTagsForResource"}
@@ -4959,7 +5072,9 @@
           {"action":"logs:ListTagsForResource"}
         ],
         "update": [
-          {"action":"logs:UpdateDeliveryConfiguration"},
+          {"action":"logs:UpdateDeliveryConfiguration","changed":"field_delimiter"},
+          {"action":"logs:UpdateDeliveryConfiguration","changed":"record_fields"},
+          {"action":"logs:UpdateDeliveryConfiguration","changed":"s3_delivery_configuration"},
           {"action":"logs:TagResource","attribute":"tags"},
           {"action":"logs:UntagResource","attribute":"tags"}
         ]
@@ -4980,7 +5095,8 @@
           {"action":"logs:ListTagsForResource"}
         ],
         "update": [
-          {"action":"logs:PutDeliveryDestination"},
+          {"action":"logs:PutDeliveryDestination","changed":"delivery_destination_configuration"},
+          {"action":"logs:PutDeliveryDestination","changed":"output_format"},
           {"action":"logs:TagResource","attribute":"tags"},
           {"action":"logs:UntagResource","attribute":"tags"}
         ]
@@ -5339,7 +5455,8 @@
           {"action":"codebuild:BatchGetProjects"}
         ],
         "update": [
-          {"action":"codebuild:UpdateProjectVisibility"},
+          {"action":"codebuild:UpdateProjectVisibility","changed":"project_visibility"},
+          {"action":"codebuild:UpdateProjectVisibility","changed":"resource_access_role"},
           {"action":"codebuild:UpdateProject"},
           {"action":"codebuild:BatchGetProjects"}
         ]
@@ -5584,8 +5701,10 @@
           {"action":"codeconnections:ListTagsForResource"}
         ],
         "update": [
-          {"action":"codeconnections:UpdateHost"},
-          {"action":"codeconnections:GetHost"},
+          {"action":"codeconnections:UpdateHost","changed":"provider_endpoint"},
+          {"action":"codeconnections:UpdateHost","changed":"vpc_configuration"},
+          {"action":"codeconnections:GetHost","changed":"provider_endpoint"},
+          {"action":"codeconnections:GetHost","changed":"vpc_configuration"},
           {"action":"codeconnections:TagResource","attribute":"tags"},
           {"action":"codeconnections:UntagResource","attribute":"tags"}
         ]
@@ -5864,7 +5983,8 @@
           {"action":"cognito-identity:GetPrincipalTagAttributeMap"}
         ],
         "update": [
-          {"action":"cognito-identity:SetPrincipalTagAttributeMap"},
+          {"action":"cognito-identity:SetPrincipalTagAttributeMap","changed":"principal_tags"},
+          {"action":"cognito-identity:SetPrincipalTagAttributeMap","changed":"use_defaults"},
           {"action":"cognito-identity:GetPrincipalTagAttributeMap"}
         ]
       }
@@ -6016,7 +6136,7 @@
       "ops": {
         "create": [
           {"action":"cognito-idp:CreateUserPool"},
-          {"action":"cognito-idp:SetUserPoolMfaConfig","attribute":"web_authn_configuration","value_guarded":true},
+          {"action":"cognito-idp:SetUserPoolMfaConfig"},
           {"action":"cognito-idp:DescribeUserPool"},
           {"action":"cognito-idp:GetUserPoolMfaConfig"},
           {"action":"cognito-idp:TagResource","attribute":"tags"},
@@ -6031,7 +6151,12 @@
           {"action":"cognito-idp:ListTagsForResource"}
         ],
         "update": [
-          {"action":"cognito-idp:SetUserPoolMfaConfig"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"email_mfa_configuration"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"mfa_configuration"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"sms_authentication_message"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"sms_configuration"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"software_token_mfa_configuration"},
+          {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"web_authn_configuration"},
           {"action":"cognito-idp:UpdateUserPool"},
           {"action":"cognito-idp:AddCustomAttributes"},
           {"action":"cognito-idp:DescribeUserPool"},
@@ -6901,7 +7026,8 @@
           {"action":"cost-optimization-hub:GetPreferences"}
         ],
         "update": [
-          {"action":"cost-optimization-hub:UpdatePreferences"}
+          {"action":"cost-optimization-hub:UpdatePreferences","changed":"member_account_discount_visibility"},
+          {"action":"cost-optimization-hub:UpdatePreferences","changed":"savings_estimation_mode"}
         ]
       }
     },
@@ -7399,7 +7525,10 @@
           {"action":"datazone:ListTagsForResource"}
         ],
         "update": [
-          {"action":"datazone:UpdateDomain"},
+          {"action":"datazone:UpdateDomain","changed":"description"},
+          {"action":"datazone:UpdateDomain","changed":"domain_execution_role"},
+          {"action":"datazone:UpdateDomain","changed":"name"},
+          {"action":"datazone:UpdateDomain","changed":"single_sign_on"},
           {"action":"datazone:TagResource","attribute":"tags"},
           {"action":"datazone:UntagResource","attribute":"tags"}
         ]
@@ -7419,8 +7548,12 @@
           {"action":"datazone:GetEnvironment"}
         ],
         "update": [
-          {"action":"datazone:UpdateEnvironment"},
-          {"action":"datazone:GetEnvironment"}
+          {"action":"datazone:UpdateEnvironment","changed":"name"},
+          {"action":"datazone:UpdateEnvironment","changed":"description"},
+          {"action":"datazone:UpdateEnvironment","changed":"glossary_terms"},
+          {"action":"datazone:GetEnvironment","changed":"name"},
+          {"action":"datazone:GetEnvironment","changed":"description"},
+          {"action":"datazone:GetEnvironment","changed":"glossary_terms"}
         ]
       }
     },
@@ -7439,7 +7572,10 @@
           {"action":"datazone:GetEnvironmentBlueprintConfiguration"}
         ],
         "update": [
-          {"action":"datazone:PutEnvironmentBlueprintConfiguration"}
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration","changed":"enabled_regions"},
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration","changed":"manage_access_role_arn"},
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration","changed":"provisioning_role_arn"},
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration","changed":"regional_parameters"}
         ]
       }
     },
@@ -7455,7 +7591,11 @@
           {"action":"datazone:GetEnvironmentProfile"}
         ],
         "update": [
-          {"action":"datazone:UpdateEnvironmentProfile"}
+          {"action":"datazone:UpdateEnvironmentProfile","changed":"description"},
+          {"action":"datazone:UpdateEnvironmentProfile","changed":"name"},
+          {"action":"datazone:UpdateEnvironmentProfile","changed":"user_parameters"},
+          {"action":"datazone:UpdateEnvironmentProfile","changed":"aws_account_id"},
+          {"action":"datazone:UpdateEnvironmentProfile","changed":"aws_account_region"}
         ]
       }
     },
@@ -7486,7 +7626,8 @@
           {"action":"datazone:GetGlossary"}
         ],
         "update": [
-          {"action":"datazone:UpdateGlossary"}
+          {"action":"datazone:UpdateGlossary","changed":"description"},
+          {"action":"datazone:UpdateGlossary","changed":"name"}
         ]
       }
     },
@@ -7504,7 +7645,11 @@
           {"action":"datazone:GetGlossaryTerm"}
         ],
         "update": [
-          {"action":"datazone:UpdateGlossaryTerm"}
+          {"action":"datazone:UpdateGlossaryTerm","changed":"short_description"},
+          {"action":"datazone:UpdateGlossaryTerm","changed":"long_description"},
+          {"action":"datazone:UpdateGlossaryTerm","changed":"name"},
+          {"action":"datazone:UpdateGlossaryTerm","changed":"status"},
+          {"action":"datazone:UpdateGlossaryTerm","changed":"term_relations"}
         ]
       }
     },
@@ -7522,7 +7667,9 @@
           {"action":"datazone:GetProject"}
         ],
         "update": [
-          {"action":"datazone:UpdateProject"}
+          {"action":"datazone:UpdateProject","changed":"description"},
+          {"action":"datazone:UpdateProject","changed":"glossary_terms"},
+          {"action":"datazone:UpdateProject","changed":"name"}
         ]
       }
     },
@@ -7663,10 +7810,10 @@
     "aws_db_instance": {
       "ops": {
         "create": [
-          {"action":"rds:RestoreDBInstanceFromS3","attribute":"replicate_source_db"},
-          {"action":"rds:RestoreDBInstanceFromDBSnapshot","attribute":"replicate_source_db"},
-          {"action":"rds:RestoreDBInstanceToPointInTime","attribute":"replicate_source_db"},
-          {"action":"rds:CreateDBInstance","attribute":"replicate_source_db"},
+          {"action":"rds:RestoreDBInstanceFromS3","attribute":"s3_import"},
+          {"action":"rds:RestoreDBInstanceFromDBSnapshot","attribute":"snapshot_identifier"},
+          {"action":"rds:RestoreDBInstanceToPointInTime","attribute":"restore_to_point_in_time","value_guarded":true},
+          {"action":"rds:CreateDBInstance"},
           {"action":"rds:ModifyDBInstance"},
           {"action":"rds:RebootDBInstance"},
           {"action":"rds:CreateDBInstanceReadReplica","attribute":"replicate_source_db"},
@@ -7685,10 +7832,10 @@
         ],
         "update": [
           {"action":"rds:PromoteReadReplica","changed":"replicate_source_db"},
-          {"action":"rds:DeleteBlueGreenDeployment"},
-          {"action":"rds:DeleteDBInstance"},
+          {"action":"rds:DeleteBlueGreenDeployment","attribute":"blue_green_update.0.enabled"},
+          {"action":"rds:DeleteDBInstance","attribute":"blue_green_update.0.enabled"},
           {"action":"rds:DescribeDBInstances"},
-          {"action":"rds:DescribeBlueGreenDeployments"},
+          {"action":"rds:DescribeBlueGreenDeployments","attribute":"blue_green_update.0.enabled"},
           {"action":"rds:ModifyDBInstance"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
@@ -7922,8 +8069,8 @@
         "create": [
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DeleteNetworkAclEntry"},
-          {"action":"ec2:CreateNetworkAclEntry","attribute":"egress"},
-          {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress"},
+          {"action":"ec2:CreateNetworkAclEntry","attribute":"egress","value_guarded":true},
+          {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress","value_guarded":true},
           {"action":"ec2:ReplaceNetworkAclAssociation"},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
@@ -7951,8 +8098,8 @@
           {"action":"ec2:DeleteRoute"},
           {"action":"ec2:DescribeRouteTables"},
           {"action":"ec2:DisableVgwRoutePropagation"},
-          {"action":"ec2:EnableVgwRoutePropagation","attribute":"propagating_vgws"},
-          {"action":"ec2:CreateRoute","attribute":"route"},
+          {"action":"ec2:EnableVgwRoutePropagation","attribute":"propagating_vgws","value_guarded":true},
+          {"action":"ec2:CreateRoute","attribute":"route","value_guarded":true},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribeNetworkInterfaces"},
@@ -8030,7 +8177,15 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:ModifySubnetAttribute"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"customer_owned_ipv4_pool"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"map_customer_owned_ip_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"assign_ipv6_address_on_creation"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_dns64"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_lni_at_device_index"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_resource_name_dns_aaaa_record_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_resource_name_dns_a_record_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"map_public_ip_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"private_dns_hostname_type_on_launch"},
           {"action":"ec2:DescribeSubnets"},
           {"action":"ec2:DisassociateSubnetCidrBlock","changed":"ipv6_cidr_block"},
           {"action":"ec2:AssociateSubnetCidrBlock","changed":"ipv6_cidr_block"},
@@ -8074,8 +8229,14 @@
           {"action":"ec2:ModifyVpcAttribute","changed":"enable_network_address_usage_metrics"},
           {"action":"ec2:DescribeVpcAttribute"},
           {"action":"ec2:ModifyVpcTenancy","changed":"instance_tenancy"},
-          {"action":"ec2:DisassociateVpcCidrBlock"},
-          {"action":"ec2:AssociateVpcCidrBlock"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"assign_generated_ipv6_cidr_block"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_cidr_block_network_border_group"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_cidr_block"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_ipam_pool_id"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"assign_generated_ipv6_cidr_block"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_cidr_block_network_border_group"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_cidr_block"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_ipam_pool_id"},
           {"action":"ec2:DescribeVpcs"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
@@ -8356,8 +8517,12 @@
           {"action":"devops-guru:DescribeServiceIntegration"}
         ],
         "update": [
-          {"action":"devops-guru:UpdateServiceIntegration"},
-          {"action":"devops-guru:DescribeServiceIntegration"}
+          {"action":"devops-guru:UpdateServiceIntegration","changed":"kms_server_side_encryption"},
+          {"action":"devops-guru:UpdateServiceIntegration","changed":"logs_anomaly_detection"},
+          {"action":"devops-guru:UpdateServiceIntegration","changed":"ops_center"},
+          {"action":"devops-guru:DescribeServiceIntegration","changed":"kms_server_side_encryption"},
+          {"action":"devops-guru:DescribeServiceIntegration","changed":"logs_anomaly_detection"},
+          {"action":"devops-guru:DescribeServiceIntegration","changed":"ops_center"}
         ]
       }
     },
@@ -8590,10 +8755,10 @@
         ],
         "update": [
           {"action":"dms:ModifyEndpoint"},
-          {"action":"dms:DescribeReplicationTasks"},
-          {"action":"dms:StopReplicationTask"},
-          {"action":"dms:TestConnection"},
-          {"action":"dms:StartReplicationTask"},
+          {"action":"dms:DescribeReplicationTasks","attribute":"pause_replication_tasks"},
+          {"action":"dms:StopReplicationTask","attribute":"pause_replication_tasks"},
+          {"action":"dms:TestConnection","attribute":"pause_replication_tasks"},
+          {"action":"dms:StartReplicationTask","attribute":"pause_replication_tasks"},
           {"action":"dms:DescribeEndpoints"},
           {"action":"dms:AddTagsToResource","attribute":"tags"},
           {"action":"dms:RemoveTagsFromResource","attribute":"tags"}
@@ -8727,6 +8892,7 @@
           {"action":"dms:DescribeReplicationTasks"},
           {"action":"dms:StartReplicationTask","attribute":"start_replication_task"},
           {"action":"dms:StartReplicationTask","changed":"replication_instance_arn"},
+          {"action":"dms:StartReplicationTask","changed":"start_replication_task"},
           {"action":"dms:AddTagsToResource","attribute":"tags"},
           {"action":"dms:RemoveTagsFromResource","attribute":"tags"}
         ]
@@ -8761,8 +8927,8 @@
       "ops": {
         "create": [
           {"action":"rds:RestoreDBClusterFromSnapshot","attribute":"snapshot_identifier"},
-          {"action":"rds:RestoreDBClusterToPointInTime","attribute":"snapshot_identifier"},
-          {"action":"rds:CreateDBCluster","attribute":"snapshot_identifier"},
+          {"action":"rds:RestoreDBClusterToPointInTime","attribute":"restore_to_point_in_time","value_guarded":true},
+          {"action":"rds:CreateDBCluster"},
           {"action":"rds:ModifyDBCluster"},
           {"action":"rds:DescribeDBClusters"},
           {"action":"rds:DescribeGlobalClusters"},
@@ -9447,20 +9613,21 @@
     "aws_dynamodb_table": {
       "ops": {
         "create": [
-          {"action":"dynamodb:RestoreTableToPointInTime"},
+          {"action":"dynamodb:RestoreTableToPointInTime","attribute":"restore_source_name"},
+          {"action":"dynamodb:RestoreTableToPointInTime","attribute":"restore_source_table_arn"},
           {"action":"dynamodb:ImportTable","attribute":"import_table","value_guarded":true},
-          {"action":"dynamodb:CreateTable","attribute":"import_table","value_guarded":true},
-          {"action":"dynamodb:DescribeImport","attribute":"import_table"},
+          {"action":"dynamodb:CreateTable"},
+          {"action":"dynamodb:DescribeImport","attribute":"import_table","value_guarded":true},
           {"action":"dynamodb:DescribeTable"},
           {"action":"dynamodb:UpdateTimeToLive","attribute":"ttl.0.enabled"},
           {"action":"dynamodb:DescribeTimeToLive"},
           {"action":"dynamodb:UpdateContinuousBackups","attribute":"point_in_time_recovery.0.enabled"},
-          {"action":"dynamodb:UpdateContinuousBackups","attribute":"replica"},
+          {"action":"dynamodb:UpdateContinuousBackups","attribute":"replica","value_guarded":true},
           {"action":"dynamodb:DescribeContinuousBackups"},
-          {"action":"dynamodb:UpdateTable","attribute":"replica"},
-          {"action":"dynamodb:ListTagsOfResource","attribute":"replica"},
-          {"action":"dynamodb:UntagResource","attribute":"replica"},
-          {"action":"dynamodb:TagResource","attribute":"replica"},
+          {"action":"dynamodb:UpdateTable","attribute":"replica","value_guarded":true},
+          {"action":"dynamodb:ListTagsOfResource","attribute":"replica","value_guarded":true},
+          {"action":"dynamodb:UntagResource","attribute":"replica","value_guarded":true},
+          {"action":"dynamodb:TagResource","attribute":"replica","value_guarded":true},
           {"action":"dynamodb:TagResource","attribute":"tags"},
           {"action":"kms:DescribeKey","best_effort":true}
         ],
@@ -9484,10 +9651,10 @@
           {"action":"dynamodb:UpdateContinuousBackups","changed":"replica"},
           {"action":"dynamodb:UpdateContinuousBackups","changed":"point_in_time_recovery"},
           {"action":"dynamodb:DescribeContinuousBackups"},
-          {"action":"dynamodb:ListTagsOfResource","attribute":"replica"},
-          {"action":"dynamodb:UntagResource","attribute":"replica"},
+          {"action":"dynamodb:ListTagsOfResource","attribute":"replica","value_guarded":true},
+          {"action":"dynamodb:UntagResource","attribute":"replica","value_guarded":true},
           {"action":"dynamodb:UntagResource","attribute":"tags"},
-          {"action":"dynamodb:TagResource","attribute":"replica"},
+          {"action":"dynamodb:TagResource","attribute":"replica","value_guarded":true},
           {"action":"dynamodb:TagResource","attribute":"tags"},
           {"action":"kms:DescribeKey","best_effort":true}
         ]
@@ -9533,6 +9700,7 @@
           {"action":"dynamodb:ListTagsOfResource"},
           {"action":"kms:DescribeKey"},
           {"action":"dynamodb:UpdateContinuousBackups","changed":"point_in_time_recovery"},
+          {"action":"dynamodb:UpdateContinuousBackups","changed":"deletion_protection_enabled"},
           {"action":"dynamodb:DescribeContinuousBackups"}
         ],
         "delete": [
@@ -9550,6 +9718,7 @@
           {"action":"kms:DescribeKey"},
           {"action":"dynamodb:DescribeTable"},
           {"action":"dynamodb:UpdateContinuousBackups","changed":"point_in_time_recovery"},
+          {"action":"dynamodb:UpdateContinuousBackups","changed":"deletion_protection_enabled"},
           {"action":"dynamodb:DescribeContinuousBackups"},
           {"action":"dynamodb:TagResource","attribute":"tags"},
           {"action":"dynamodb:UntagResource","attribute":"tags"}
@@ -10331,9 +10500,13 @@
         "update": [
           {"action":"ec2:DescribeTransitGateways"},
           {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations"},
           {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
           {"action":"ec2:DescribeTransitGatewayConnects"},
@@ -10686,12 +10859,19 @@
         "update": [
           {"action":"ec2:ModifyTransitGatewayVpcAttachment"},
           {"action":"ec2:DescribeTransitGatewayVpcAttachments"},
-          {"action":"ec2:DescribeTransitGateways"},
+          {"action":"ec2:DescribeTransitGateways","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:DescribeTransitGateways","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:GetTransitGatewayRouteTableAssociations","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:GetTransitGatewayRouteTablePropagations","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
@@ -10726,12 +10906,19 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:DescribeTransitGateways"},
+          {"action":"ec2:DescribeTransitGateways","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:DescribeTransitGateways","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:AssociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:GetTransitGatewayRouteTableAssociations","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_association"},
+          {"action":"ec2:DisassociateTransitGatewayRouteTable","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation","changed":"transit_gateway_default_route_table_propagation"},
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations","changed":"transit_gateway_default_route_table_association"},
           {"action":"ec2:GetTransitGatewayRouteTablePropagations","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
@@ -11189,9 +11376,10 @@
           {"action":"elasticfilesystem:DescribeTags"}
         ],
         "update": [
-          {"action":"elasticfilesystem:UpdateFileSystem"},
+          {"action":"elasticfilesystem:UpdateFileSystem","changed":"provisioned_throughput_in_mibps"},
+          {"action":"elasticfilesystem:UpdateFileSystem","changed":"throughput_mode"},
           {"action":"elasticfilesystem:PutLifecycleConfiguration","changed":"lifecycle_policy"},
-          {"action":"elasticfilesystem:UpdateFileSystemProtection","attribute":"protection","value_guarded":true},
+          {"action":"elasticfilesystem:UpdateFileSystemProtection","changed":"protection"},
           {"action":"elasticfilesystem:DescribeFileSystems"},
           {"action":"elasticfilesystem:DescribeLifecycleConfiguration"},
           {"action":"elasticfilesystem:TagResource","attribute":"tags"},
@@ -11298,8 +11486,12 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:DisassociateAddress"},
-          {"action":"ec2:AssociateAddress"},
+          {"action":"ec2:DisassociateAddress","changed":"associate_with_private_ip"},
+          {"action":"ec2:DisassociateAddress","changed":"instance"},
+          {"action":"ec2:DisassociateAddress","changed":"network_interface"},
+          {"action":"ec2:AssociateAddress","changed":"associate_with_private_ip"},
+          {"action":"ec2:AssociateAddress","changed":"instance"},
+          {"action":"ec2:AssociateAddress","changed":"network_interface"},
           {"action":"ec2:DescribeAddresses"},
           {"action":"ec2:DescribeAddressesAttribute"},
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -11396,8 +11588,14 @@
           {"action":"eks:ListTagsForResource"}
         ],
         "update": [
-          {"action":"eks:UpdateAddon"},
-          {"action":"eks:DescribeUpdate"},
+          {"action":"eks:UpdateAddon","changed":"addon_version"},
+          {"action":"eks:UpdateAddon","changed":"service_account_role_arn"},
+          {"action":"eks:UpdateAddon","changed":"configuration_values"},
+          {"action":"eks:UpdateAddon","changed":"pod_identity_association"},
+          {"action":"eks:DescribeUpdate","changed":"addon_version"},
+          {"action":"eks:DescribeUpdate","changed":"service_account_role_arn"},
+          {"action":"eks:DescribeUpdate","changed":"configuration_values"},
+          {"action":"eks:DescribeUpdate","changed":"pod_identity_association"},
           {"action":"eks:DescribeAddon"},
           {"action":"eks:DescribePodIdentityAssociation"},
           {"action":"eks:TagResource","attribute":"tags"},
@@ -11423,7 +11621,18 @@
         ],
         "update": [
           {"action":"eks:UpdateClusterVersion"},
-          {"action":"eks:UpdateClusterConfig"},
+          {"action":"eks:UpdateClusterConfig","changed":"access_config"},
+          {"action":"eks:UpdateClusterConfig","changed":"compute_config"},
+          {"action":"eks:UpdateClusterConfig","changed":"kubernetes_network_config"},
+          {"action":"eks:UpdateClusterConfig","changed":"storage_config"},
+          {"action":"eks:UpdateClusterConfig","changed":"enabled_cluster_log_types"},
+          {"action":"eks:UpdateClusterConfig","changed":"upgrade_policy"},
+          {"action":"eks:UpdateClusterConfig","changed":"zonal_shift_config"},
+          {"action":"eks:UpdateClusterConfig","changed":"vpc_config.0.endpoint_private_access"},
+          {"action":"eks:UpdateClusterConfig","changed":"vpc_config.0.endpoint_public_access"},
+          {"action":"eks:UpdateClusterConfig","changed":"vpc_config.0.public_access_cidrs"},
+          {"action":"eks:UpdateClusterConfig","changed":"vpc_config.0.subnet_ids"},
+          {"action":"eks:UpdateClusterConfig","changed":"vpc_config.0.security_group_ids"},
           {"action":"eks:AssociateEncryptionConfig","changed":"encryption_config"},
           {"action":"eks:DescribeUpdate"},
           {"action":"eks:DescribeCluster"},
@@ -11496,7 +11705,11 @@
         ],
         "update": [
           {"action":"eks:UpdateNodegroupVersion"},
-          {"action":"eks:UpdateNodegroupConfig"},
+          {"action":"eks:UpdateNodegroupConfig","changed":"labels"},
+          {"action":"eks:UpdateNodegroupConfig","changed":"node_repair_config"},
+          {"action":"eks:UpdateNodegroupConfig","changed":"scaling_config"},
+          {"action":"eks:UpdateNodegroupConfig","changed":"taint"},
+          {"action":"eks:UpdateNodegroupConfig","changed":"update_config"},
           {"action":"eks:DescribeUpdate"},
           {"action":"eks:DescribeNodegroup"},
           {"action":"eks:TagResource","attribute":"tags"},
@@ -11716,10 +11929,10 @@
         ],
         "delete": [
           {"action":"elasticache:DeleteReplicationGroup"},
-          {"action":"elasticache:DisassociateGlobalReplicationGroup"},
-          {"action":"elasticache:DescribeGlobalReplicationGroups"},
+          {"action":"elasticache:DisassociateGlobalReplicationGroup","attribute":"global_replication_group_id"},
+          {"action":"elasticache:DescribeGlobalReplicationGroups","attribute":"global_replication_group_id"},
           {"action":"elasticache:DescribeReplicationGroups"},
-          {"action":"elasticache:DeleteCacheParameterGroup"}
+          {"action":"elasticache:DeleteCacheParameterGroup","attribute":"global_replication_group_id"}
         ],
         "read": [
           {"action":"elasticache:DescribeCacheClusters"},
@@ -12001,7 +12214,12 @@
           {"action":"elasticloadbalancing:CreateLoadBalancerListeners","changed":"listener"},
           {"action":"elasticloadbalancing:RegisterInstancesWithLoadBalancer","changed":"instances"},
           {"action":"elasticloadbalancing:DeregisterInstancesFromLoadBalancer","changed":"instances"},
-          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"cross_zone_load_balancing"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"idle_timeout"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"access_logs"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"desync_mitigation_mode"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"connection_draining"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"connection_draining_timeout"},
           {"action":"elasticloadbalancing:ConfigureHealthCheck"},
           {"action":"elasticloadbalancing:ApplySecurityGroupsToLoadBalancer"},
           {"action":"elasticloadbalancing:EnableAvailabilityZonesForLoadBalancer"},
@@ -12031,7 +12249,12 @@
           {"action":"elasticloadbalancing:CreateLoadBalancerListeners","changed":"listener"},
           {"action":"elasticloadbalancing:RegisterInstancesWithLoadBalancer","changed":"instances"},
           {"action":"elasticloadbalancing:DeregisterInstancesFromLoadBalancer","changed":"instances"},
-          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"cross_zone_load_balancing"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"idle_timeout"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"access_logs"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"desync_mitigation_mode"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"connection_draining"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes","changed":"connection_draining_timeout"},
           {"action":"elasticloadbalancing:ConfigureHealthCheck"},
           {"action":"elasticloadbalancing:ApplySecurityGroupsToLoadBalancer"},
           {"action":"elasticloadbalancing:EnableAvailabilityZonesForLoadBalancer"},
@@ -12473,7 +12696,8 @@
         ],
         "update": [
           {"action":"finspace:UpdateKxEnvironment"},
-          {"action":"finspace:UpdateKxEnvironmentNetwork"},
+          {"action":"finspace:UpdateKxEnvironmentNetwork","changed":"transit_gateway_configuration"},
+          {"action":"finspace:UpdateKxEnvironmentNetwork","changed":"custom_dns_configuration"},
           {"action":"finspace:GetKxEnvironment"},
           {"action":"finspace:TagResource","attribute":"tags"},
           {"action":"finspace:UntagResource","attribute":"tags"}
@@ -12731,7 +12955,7 @@
       "ops": {
         "create": [
           {"action":"fsx:CreateFileSystemFromBackup","attribute":"backup_id"},
-          {"action":"fsx:CreateFileSystem","attribute":"backup_id"},
+          {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
           {"action":"fsx:TagResource","attribute":"tags"},
           {"action":"fsx:ListTagsForResource"}
@@ -12828,7 +13052,7 @@
       "ops": {
         "create": [
           {"action":"fsx:CreateFileSystemFromBackup","attribute":"backup_id"},
-          {"action":"fsx:CreateFileSystem","attribute":"backup_id"},
+          {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
           {"action":"fsx:DescribeVolumes"},
           {"action":"fsx:TagResource","attribute":"tags"},
@@ -12905,7 +13129,7 @@
       "ops": {
         "create": [
           {"action":"fsx:CreateFileSystemFromBackup","attribute":"backup_id"},
-          {"action":"fsx:CreateFileSystem","attribute":"backup_id"},
+          {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
           {"action":"fsx:TagResource","attribute":"tags"},
           {"action":"fsx:ListTagsForResource"}
@@ -13177,7 +13401,9 @@
           {"action":"globalaccelerator:ListTagsForResource"}
         ],
         "update": [
-          {"action":"globalaccelerator:UpdateCrossAccountAttachment"},
+          {"action":"globalaccelerator:UpdateCrossAccountAttachment","changed":"name"},
+          {"action":"globalaccelerator:UpdateCrossAccountAttachment","changed":"principals"},
+          {"action":"globalaccelerator:UpdateCrossAccountAttachment","changed":"resource"},
           {"action":"globalaccelerator:TagResource","attribute":"tags"},
           {"action":"globalaccelerator:UntagResource","attribute":"tags"}
         ]
@@ -14297,15 +14523,15 @@
       "ops": {
         "create": [
           {"action":"iam:CreateRole"},
-          {"action":"iam:PutRolePolicy","attribute":"inline_policy"},
-          {"action":"iam:DeleteRole","attribute":"inline_policy","best_effort":true},
-          {"action":"iam:RemoveRoleFromInstanceProfile","attribute":"inline_policy","best_effort":true},
-          {"action":"iam:ListInstanceProfilesForRole","attribute":"inline_policy","best_effort":true},
+          {"action":"iam:PutRolePolicy","attribute":"inline_policy","value_guarded":true},
+          {"action":"iam:DeleteRole","attribute":"inline_policy","value_guarded":true,"best_effort":true},
+          {"action":"iam:RemoveRoleFromInstanceProfile","attribute":"inline_policy","value_guarded":true,"best_effort":true},
+          {"action":"iam:ListInstanceProfilesForRole","attribute":"inline_policy","value_guarded":true,"best_effort":true},
           {"action":"iam:ListAttachedRolePolicies"},
-          {"action":"iam:DetachRolePolicy","attribute":"inline_policy","best_effort":true},
+          {"action":"iam:DetachRolePolicy","attribute":"inline_policy","value_guarded":true,"best_effort":true},
           {"action":"iam:ListRolePolicies"},
-          {"action":"iam:DeleteRolePolicy","attribute":"inline_policy","best_effort":true},
-          {"action":"iam:AttachRolePolicy","attribute":"managed_policy_arns"},
+          {"action":"iam:DeleteRolePolicy","attribute":"inline_policy","value_guarded":true,"best_effort":true},
+          {"action":"iam:AttachRolePolicy","attribute":"managed_policy_arns","value_guarded":true},
           {"action":"iam:UntagRole"},
           {"action":"iam:TagRole"},
           {"action":"iam:GetRole"},
@@ -14332,8 +14558,8 @@
           {"action":"iam:UpdateRole","changed":"max_session_duration"},
           {"action":"iam:PutRolePermissionsBoundary","changed":"permissions_boundary"},
           {"action":"iam:DeleteRolePermissionsBoundary","changed":"permissions_boundary"},
-          {"action":"iam:DeleteRolePolicy"},
-          {"action":"iam:PutRolePolicy"},
+          {"action":"iam:DeleteRolePolicy","changed":"inline_policy"},
+          {"action":"iam:PutRolePolicy","changed":"inline_policy"},
           {"action":"iam:DetachRolePolicy","changed":"managed_policy_arns"},
           {"action":"iam:AttachRolePolicy","changed":"managed_policy_arns"},
           {"action":"iam:GetRole"},
@@ -14913,7 +15139,12 @@
           {"action":"imagebuilder:ListTagsForResource"}
         ],
         "update": [
-          {"action":"imagebuilder:UpdateLifecyclePolicy"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"description"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"execution_role"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"policy_detail"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"resource_selection"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"resource_type"},
+          {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"status"},
           {"action":"imagebuilder:TagResource","attribute":"tags"},
           {"action":"imagebuilder:UntagResource","attribute":"tags"}
         ]
@@ -15034,7 +15265,7 @@
         "create": [
           {"action":"inspector:CreateAssessmentTemplate"},
           {"action":"inspector:SetTagsForResource"},
-          {"action":"inspector:SubscribeToEvent","attribute":"event_subscription"},
+          {"action":"inspector:SubscribeToEvent","attribute":"event_subscription","value_guarded":true},
           {"action":"inspector:DescribeAssessmentTemplates"},
           {"action":"inspector:ListEventSubscriptions"},
           {"action":"inspector:ListTagsForResource"}
@@ -15076,28 +15307,28 @@
           {"action":"ec2:DescribeInstances"},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
-          {"action":"ec2:DescribeIamInstanceProfileAssociations"},
-          {"action":"ec2:ReplaceIamInstanceProfileAssociation","attribute":"iam_instance_profile"},
+          {"action":"ec2:DescribeIamInstanceProfileAssociations","changed":"iam_instance_profile"},
+          {"action":"ec2:ReplaceIamInstanceProfileAssociation","changed":"iam_instance_profile"},
           {"action":"ec2:ModifyInstanceAttribute"},
           {"action":"ec2:ModifyNetworkInterfaceAttribute"},
-          {"action":"ec2:AssignIpv6Addresses"},
-          {"action":"ec2:UnassignIpv6Addresses"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_address_count"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_address_count"},
           {"action":"ec2:UnassignPrivateIpAddresses","changed":"secondary_private_ips"},
           {"action":"ec2:AssignPrivateIpAddresses","changed":"secondary_private_ips"},
-          {"action":"ec2:ModifyInstanceMaintenanceOptions"},
+          {"action":"ec2:ModifyInstanceMaintenanceOptions","changed":"maintenance_options"},
           {"action":"ec2:MonitorInstances","changed":"monitoring"},
           {"action":"ec2:UnmonitorInstances","changed":"monitoring"},
-          {"action":"ec2:ModifyInstanceCreditSpecification","attribute":"credit_specification","value_guarded":true},
-          {"action":"ec2:ModifyInstanceMetadataOptions","attribute":"metadata_options"},
-          {"action":"ec2:ModifyVolume"},
-          {"action":"ec2:ModifyInstanceCapacityReservationAttributes","attribute":"capacity_reservation_specification","value_guarded":true},
-          {"action":"ec2:ModifyPrivateDnsNameOptions","attribute":"private_dns_name_options","value_guarded":true},
+          {"action":"ec2:ModifyInstanceCreditSpecification","changed":"credit_specification"},
+          {"action":"ec2:ModifyInstanceMetadataOptions","changed":"metadata_options"},
+          {"action":"ec2:ModifyVolume","changed":"root_block_device.0"},
+          {"action":"ec2:ModifyInstanceCapacityReservationAttributes","changed":"capacity_reservation_specification"},
+          {"action":"ec2:ModifyPrivateDnsNameOptions","changed":"private_dns_name_options"},
           {"action":"ec2:DescribeVolumes"},
-          {"action":"ec2:AssociateIamInstanceProfile","attribute":"iam_instance_profile"},
-          {"action":"ec2:DisassociateIamInstanceProfile","attribute":"iam_instance_profile"},
+          {"action":"ec2:AssociateIamInstanceProfile","changed":"iam_instance_profile"},
+          {"action":"ec2:DisassociateIamInstanceProfile","changed":"iam_instance_profile"},
           {"action":"ec2:StopInstances"},
           {"action":"ec2:StartInstances"},
-          {"action":"ec2:DescribeVolumesModifications"},
+          {"action":"ec2:DescribeVolumesModifications","changed":"root_block_device.0"},
           {"action":"ec2:DescribeInstanceAttribute"},
           {"action":"ec2:DescribeTags"},
           {"action":"ec2:DescribeLaunchTemplates"},
@@ -15126,31 +15357,35 @@
           {"action":"ec2:DescribeSpotInstanceRequests"}
         ],
         "update": [
-          {"action":"ec2:DescribeIamInstanceProfileAssociations"},
-          {"action":"ec2:ReplaceIamInstanceProfileAssociation","attribute":"iam_instance_profile"},
+          {"action":"ec2:DescribeIamInstanceProfileAssociations","changed":"iam_instance_profile"},
+          {"action":"ec2:ReplaceIamInstanceProfileAssociation","changed":"iam_instance_profile"},
           {"action":"ec2:ModifyInstanceAttribute"},
           {"action":"ec2:ModifyNetworkInterfaceAttribute"},
-          {"action":"ec2:AssignIpv6Addresses"},
-          {"action":"ec2:UnassignIpv6Addresses"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_address_count"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_address_count"},
           {"action":"ec2:UnassignPrivateIpAddresses","changed":"secondary_private_ips"},
           {"action":"ec2:AssignPrivateIpAddresses","changed":"secondary_private_ips"},
-          {"action":"ec2:ModifyInstanceMaintenanceOptions"},
+          {"action":"ec2:ModifyInstanceMaintenanceOptions","changed":"maintenance_options"},
           {"action":"ec2:MonitorInstances","changed":"monitoring"},
           {"action":"ec2:UnmonitorInstances","changed":"monitoring"},
-          {"action":"ec2:ModifyInstanceCreditSpecification","attribute":"credit_specification","value_guarded":true},
-          {"action":"ec2:ModifyInstanceMetadataOptions","attribute":"metadata_options"},
-          {"action":"ec2:ModifyVolume"},
-          {"action":"ec2:ModifyInstanceCapacityReservationAttributes","attribute":"capacity_reservation_specification","value_guarded":true},
-          {"action":"ec2:ModifyPrivateDnsNameOptions","attribute":"private_dns_name_options","value_guarded":true},
+          {"action":"ec2:ModifyInstanceCreditSpecification","changed":"credit_specification"},
+          {"action":"ec2:ModifyInstanceMetadataOptions","changed":"metadata_options"},
+          {"action":"ec2:ModifyVolume","changed":"root_block_device.0"},
+          {"action":"ec2:ModifyInstanceCapacityReservationAttributes","changed":"capacity_reservation_specification"},
+          {"action":"ec2:ModifyPrivateDnsNameOptions","changed":"private_dns_name_options"},
           {"action":"ec2:DescribeVolumes"},
-          {"action":"ec2:DeleteTags"},
-          {"action":"ec2:CreateTags"},
-          {"action":"ec2:AssociateIamInstanceProfile","attribute":"iam_instance_profile"},
-          {"action":"ec2:DisassociateIamInstanceProfile","attribute":"iam_instance_profile"},
+          {"action":"ec2:DeleteTags","changed":"volume_tags"},
+          {"action":"ec2:DeleteTags","changed":"root_block_device.0"},
+          {"action":"ec2:DeleteTags","attribute":"tags"},
+          {"action":"ec2:CreateTags","changed":"volume_tags"},
+          {"action":"ec2:CreateTags","changed":"root_block_device.0"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:AssociateIamInstanceProfile","changed":"iam_instance_profile"},
+          {"action":"ec2:DisassociateIamInstanceProfile","changed":"iam_instance_profile"},
           {"action":"ec2:DescribeInstances"},
           {"action":"ec2:StopInstances"},
           {"action":"ec2:StartInstances"},
-          {"action":"ec2:DescribeVolumesModifications"},
+          {"action":"ec2:DescribeVolumesModifications","changed":"root_block_device.0"},
           {"action":"ec2:DescribeInstanceAttribute"},
           {"action":"ec2:DescribeInstanceTypes"},
           {"action":"ec2:DescribeTags"},
@@ -15305,9 +15540,9 @@
       "ops": {
         "create": [
           {"action":"iot:CreateCertificateFromCsr","attribute":"csr"},
-          {"action":"iot:RegisterCertificate","attribute":"csr"},
-          {"action":"iot:RegisterCertificateWithoutCA","attribute":"csr"},
-          {"action":"iot:CreateKeysAndCertificate","attribute":"csr"},
+          {"action":"iot:RegisterCertificate","attribute":"certificate_pem"},
+          {"action":"iot:RegisterCertificateWithoutCA","attribute":"certificate_pem"},
+          {"action":"iot:CreateKeysAndCertificate"},
           {"action":"iot:DescribeCertificate"}
         ],
         "delete": [
@@ -15508,7 +15743,7 @@
       "ops": {
         "create": [
           {"action":"iot:CreateThingType"},
-          {"action":"iot:DeprecateThingType"},
+          {"action":"iot:DeprecateThingType","attribute":"deprecated"},
           {"action":"iot:DescribeThingType"},
           {"action":"iot:TagResource","attribute":"tags"},
           {"action":"iot:ListTagsForResource"}
@@ -15929,15 +16164,55 @@
         ],
         "update": [
           {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"code"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"inputs"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"outputs"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"reference_data_sources"},
           {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"code"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"inputs"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"outputs"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"code"},
           {"action":"kinesisanalytics:AddApplicationInput","changed":"inputs"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"outputs"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"code"},
           {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"inputs"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"outputs"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"code"},
           {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"inputs"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"outputs"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"code"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"inputs"},
           {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"outputs"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"code"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"inputs"},
           {"action":"kinesisanalytics:AddApplicationOutput","changed":"outputs"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"code"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"inputs"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"outputs"},
           {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"reference_data_sources"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"code"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"inputs"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"outputs"},
           {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"reference_data_sources"},
-          {"action":"kinesisanalytics:UpdateApplication"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"code"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"inputs"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"outputs"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"reference_data_sources"},
           {"action":"kinesisanalytics:DescribeApplication"},
           {"action":"kinesisanalytics:StartApplication","changed":"start_application"},
           {"action":"kinesisanalytics:StopApplication","changed":"start_application"},
@@ -16013,7 +16288,7 @@
         ],
         "update": [
           {"action":"kinesis:UpdateStreamMode","changed":"stream_mode_details.0.stream_mode"},
-          {"action":"kinesis:UpdateShardCount"},
+          {"action":"kinesis:UpdateShardCount","changed":"shard_count"},
           {"action":"kinesis:IncreaseStreamRetentionPeriod"},
           {"action":"kinesis:DecreaseStreamRetentionPeriod"},
           {"action":"kinesis:DisableEnhancedMonitoring","changed":"shard_level_metrics"},
@@ -16085,19 +16360,46 @@
         ],
         "update": [
           {"action":"kinesisanalytics:AddApplicationInput","changed":"application_configuration"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationInput","changed":"service_execution_role"},
           {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"application_configuration"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationInputProcessingConfiguration","changed":"service_execution_role"},
           {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"application_configuration"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationInputProcessingConfiguration","changed":"service_execution_role"},
           {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"application_configuration"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationOutput","changed":"service_execution_role"},
           {"action":"kinesisanalytics:AddApplicationOutput","changed":"application_configuration"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationOutput","changed":"service_execution_role"},
           {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"application_configuration"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationReferenceDataSource","changed":"service_execution_role"},
           {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"application_configuration"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationReferenceDataSource","changed":"service_execution_role"},
           {"action":"kinesisanalytics:AddApplicationVpcConfiguration","changed":"application_configuration"},
+          {"action":"kinesisanalytics:AddApplicationVpcConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationVpcConfiguration","changed":"service_execution_role"},
           {"action":"kinesisanalytics:DeleteApplicationVpcConfiguration","changed":"application_configuration"},
+          {"action":"kinesisanalytics:DeleteApplicationVpcConfiguration","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DeleteApplicationVpcConfiguration","changed":"service_execution_role"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"application_configuration"},
           {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:AddApplicationCloudWatchLoggingOption","changed":"service_execution_role"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"application_configuration"},
           {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"cloudwatch_logging_options"},
-          {"action":"kinesisanalytics:UpdateApplication"},
+          {"action":"kinesisanalytics:DeleteApplicationCloudWatchLoggingOption","changed":"service_execution_role"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"application_configuration"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:UpdateApplication","changed":"service_execution_role"},
           {"action":"kinesisanalytics:DescribeApplication"},
-          {"action":"kinesisanalytics:DescribeApplicationOperation"},
+          {"action":"kinesisanalytics:DescribeApplicationOperation","changed":"application_configuration"},
+          {"action":"kinesisanalytics:DescribeApplicationOperation","changed":"cloudwatch_logging_options"},
+          {"action":"kinesisanalytics:DescribeApplicationOperation","changed":"service_execution_role"},
+          {"action":"kinesisanalytics:DescribeApplicationOperation","changed":"start_application"},
           {"action":"kinesisanalytics:StartApplication","changed":"start_application"},
           {"action":"kinesisanalytics:StopApplication","changed":"start_application"},
           {"action":"kinesisanalytics:TagResource","attribute":"tags"},
@@ -16211,7 +16513,7 @@
         ],
         "delete": [
           {"action":"kms:RetireGrant","attribute":"retire_on_delete"},
-          {"action":"kms:RevokeGrant","attribute":"retire_on_delete"},
+          {"action":"kms:RevokeGrant"},
           {"action":"kms:ListGrants"}
         ],
         "read": [
@@ -16223,8 +16525,8 @@
       "ops": {
         "create": [
           {"action":"kms:CreateKey"},
-          {"action":"kms:EnableKeyRotation"},
-          {"action":"kms:DisableKeyRotation"},
+          {"action":"kms:EnableKeyRotation","attribute":"enable_key_rotation"},
+          {"action":"kms:DisableKeyRotation","attribute":"enable_key_rotation"},
           {"action":"kms:GetKeyRotationStatus"},
           {"action":"kms:EnableKey"},
           {"action":"kms:DisableKey"},
@@ -16244,11 +16546,13 @@
           {"action":"kms:ListResourceTags"}
         ],
         "update": [
-          {"action":"kms:EnableKey"},
-          {"action":"kms:DisableKey"},
+          {"action":"kms:EnableKey","changed":"is_enabled"},
+          {"action":"kms:DisableKey","changed":"is_enabled"},
           {"action":"kms:DescribeKey"},
-          {"action":"kms:EnableKeyRotation"},
-          {"action":"kms:DisableKeyRotation"},
+          {"action":"kms:EnableKeyRotation","changed":"enable_key_rotation"},
+          {"action":"kms:EnableKeyRotation","attribute":"enable_key_rotation"},
+          {"action":"kms:DisableKeyRotation","changed":"enable_key_rotation"},
+          {"action":"kms:DisableKeyRotation","attribute":"enable_key_rotation"},
           {"action":"kms:GetKeyRotationStatus"},
           {"action":"kms:UpdateKeyDescription"},
           {"action":"kms:PutKeyPolicy"},
@@ -16567,7 +16871,7 @@
         "delete": [
           {"action":"lambda:DeleteFunction"},
           {"action":"lambda:UpdateFunctionConfiguration","attribute":"replace_security_groups_on_destroy"},
-          {"action":"ec2:DescribeSecurityGroups","attribute":"replacement_security_group_ids"},
+          {"action":"ec2:DescribeSecurityGroups","attribute":"replace_security_groups_on_destroy"},
           {"action":"lambda:GetFunction","attribute":"replace_security_groups_on_destroy"}
         ],
         "read": [
@@ -16583,7 +16887,7 @@
           {"action":"lambda:UpdateFunctionCode"},
           {"action":"lambda:PutFunctionConcurrency","changed":"reserved_concurrent_executions"},
           {"action":"lambda:DeleteFunctionConcurrency","changed":"reserved_concurrent_executions"},
-          {"action":"lambda:PublishVersion"},
+          {"action":"lambda:PublishVersion","attribute":"publish"},
           {"action":"lambda:GetFunction"},
           {"action":"lambda:GetFunctionCodeSigningConfig"},
           {"action":"lambda:ListVersionsByFunction"},
@@ -16734,7 +17038,8 @@
           {"action":"lambda:GetRuntimeManagementConfig"}
         ],
         "update": [
-          {"action":"lambda:PutRuntimeManagementConfig"}
+          {"action":"lambda:PutRuntimeManagementConfig","changed":"runtime_version_arn"},
+          {"action":"lambda:PutRuntimeManagementConfig","changed":"update_runtime_on"}
         ]
       }
     },
@@ -16775,7 +17080,8 @@
         ],
         "update": [
           {"action":"ec2:CreateLaunchTemplateVersion"},
-          {"action":"ec2:ModifyLaunchTemplate"},
+          {"action":"ec2:ModifyLaunchTemplate","attribute":"update_default_version"},
+          {"action":"ec2:ModifyLaunchTemplate","changed":"default_version"},
           {"action":"ec2:DescribeInstanceTypes"},
           {"action":"ec2:DescribeLaunchTemplates"},
           {"action":"ec2:DescribeLaunchTemplateVersions"},
@@ -16961,8 +17267,18 @@
           {"action":"lex:ListTagsForResource"}
         ],
         "update": [
-          {"action":"lex:UpdateBot"},
-          {"action":"lex:DescribeBot"},
+          {"action":"lex:UpdateBot","changed":"description"},
+          {"action":"lex:UpdateBot","changed":"idle_session_ttl_in_seconds"},
+          {"action":"lex:UpdateBot","changed":"role_arn"},
+          {"action":"lex:UpdateBot","changed":"test_bot_alias_tags"},
+          {"action":"lex:UpdateBot","changed":"data_privacy"},
+          {"action":"lex:UpdateBot","changed":"type"},
+          {"action":"lex:DescribeBot","changed":"description"},
+          {"action":"lex:DescribeBot","changed":"idle_session_ttl_in_seconds"},
+          {"action":"lex:DescribeBot","changed":"role_arn"},
+          {"action":"lex:DescribeBot","changed":"test_bot_alias_tags"},
+          {"action":"lex:DescribeBot","changed":"data_privacy"},
+          {"action":"lex:DescribeBot","changed":"type"},
           {"action":"lex:TagResource","attribute":"tags"},
           {"action":"lex:UntagResource","attribute":"tags"}
         ]
@@ -16982,8 +17298,20 @@
           {"action":"lex:DescribeBotLocale"}
         ],
         "update": [
-          {"action":"lex:UpdateBotLocale"},
-          {"action":"lex:DescribeBotLocale"}
+          {"action":"lex:UpdateBotLocale","changed":"bot_id"},
+          {"action":"lex:UpdateBotLocale","changed":"description"},
+          {"action":"lex:UpdateBotLocale","changed":"bot_version"},
+          {"action":"lex:UpdateBotLocale","changed":"locale_id"},
+          {"action":"lex:UpdateBotLocale","changed":"name"},
+          {"action":"lex:UpdateBotLocale","changed":"voice_settings"},
+          {"action":"lex:UpdateBotLocale","changed":"n_lu_intent_confidence_threshold"},
+          {"action":"lex:DescribeBotLocale","changed":"bot_id"},
+          {"action":"lex:DescribeBotLocale","changed":"description"},
+          {"action":"lex:DescribeBotLocale","changed":"bot_version"},
+          {"action":"lex:DescribeBotLocale","changed":"locale_id"},
+          {"action":"lex:DescribeBotLocale","changed":"name"},
+          {"action":"lex:DescribeBotLocale","changed":"voice_settings"},
+          {"action":"lex:DescribeBotLocale","changed":"n_lu_intent_confidence_threshold"}
         ]
       }
     },
@@ -17767,8 +18095,10 @@
           {"action":"m2:ListTagsForResource"}
         ],
         "update": [
-          {"action":"m2:UpdateApplication"},
-          {"action":"m2:GetApplicationVersion"},
+          {"action":"m2:UpdateApplication","changed":"definition"},
+          {"action":"m2:UpdateApplication","changed":"description"},
+          {"action":"m2:GetApplicationVersion","changed":"definition"},
+          {"action":"m2:GetApplicationVersion","changed":"description"},
           {"action":"m2:TagResource","attribute":"tags"},
           {"action":"m2:UntagResource","attribute":"tags"}
         ]
@@ -17820,8 +18150,14 @@
           {"action":"m2:ListTagsForResource"}
         ],
         "update": [
-          {"action":"m2:UpdateEnvironment"},
-          {"action":"m2:GetEnvironment"},
+          {"action":"m2:UpdateEnvironment","changed":"engine_version"},
+          {"action":"m2:UpdateEnvironment","changed":"high_availability_config"},
+          {"action":"m2:UpdateEnvironment","changed":"instance_type"},
+          {"action":"m2:UpdateEnvironment","changed":"preferred_maintenance_window"},
+          {"action":"m2:GetEnvironment","changed":"engine_version"},
+          {"action":"m2:GetEnvironment","changed":"high_availability_config"},
+          {"action":"m2:GetEnvironment","changed":"instance_type"},
+          {"action":"m2:GetEnvironment","changed":"preferred_maintenance_window"},
           {"action":"m2:TagResource","attribute":"tags"},
           {"action":"m2:UntagResource","attribute":"tags"}
         ]
@@ -18501,13 +18837,26 @@
         "update": [
           {"action":"kafka:UpdateConnectivity","changed":"broker_node_group_info.0.connectivity_info"},
           {"action":"kafka:UpdateBrokerType","changed":"broker_node_group_info.0.instance_type"},
-          {"action":"kafka:UpdateBrokerStorage"},
+          {"action":"kafka:UpdateBrokerStorage","changed":"broker_node_group_info.0.storage_info"},
           {"action":"kafka:UpdateBrokerCount","changed":"number_of_broker_nodes"},
-          {"action":"kafka:UpdateMonitoring"},
-          {"action":"kafka:UpdateClusterConfiguration"},
+          {"action":"kafka:UpdateMonitoring","changed":"enhanced_monitoring"},
+          {"action":"kafka:UpdateMonitoring","changed":"logging_info"},
+          {"action":"kafka:UpdateMonitoring","changed":"open_monitoring"},
+          {"action":"kafka:UpdateClusterConfiguration","changed":"configuration_info"},
           {"action":"kafka:UpdateClusterKafkaVersion","changed":"kafka_version"},
-          {"action":"kafka:UpdateSecurity"},
-          {"action":"kafka:DescribeClusterOperation"},
+          {"action":"kafka:UpdateSecurity","changed":"encryption_info"},
+          {"action":"kafka:UpdateSecurity","changed":"client_authentication"},
+          {"action":"kafka:DescribeClusterOperation","changed":"broker_node_group_info.0.connectivity_info"},
+          {"action":"kafka:DescribeClusterOperation","changed":"broker_node_group_info.0.instance_type"},
+          {"action":"kafka:DescribeClusterOperation","changed":"broker_node_group_info.0.storage_info"},
+          {"action":"kafka:DescribeClusterOperation","changed":"number_of_broker_nodes"},
+          {"action":"kafka:DescribeClusterOperation","changed":"enhanced_monitoring"},
+          {"action":"kafka:DescribeClusterOperation","changed":"logging_info"},
+          {"action":"kafka:DescribeClusterOperation","changed":"open_monitoring"},
+          {"action":"kafka:DescribeClusterOperation","changed":"configuration_info"},
+          {"action":"kafka:DescribeClusterOperation","changed":"kafka_version"},
+          {"action":"kafka:DescribeClusterOperation","changed":"encryption_info"},
+          {"action":"kafka:DescribeClusterOperation","changed":"client_authentication"},
           {"action":"kafka:DescribeCluster"},
           {"action":"kafka:GetBootstrapBrokers"},
           {"action":"kafka:TagResource","attribute":"tags"},
@@ -18760,10 +19109,10 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:AssignPrivateNatGatewayAddress"},
-          {"action":"ec2:UnassignPrivateNatGatewayAddress"},
-          {"action":"ec2:AssociateNatGatewayAddress"},
-          {"action":"ec2:DisassociateNatGatewayAddress"},
+          {"action":"ec2:AssignPrivateNatGatewayAddress","changed":"secondary_private_ip_addresses"},
+          {"action":"ec2:UnassignPrivateNatGatewayAddress","changed":"secondary_private_ip_addresses"},
+          {"action":"ec2:AssociateNatGatewayAddress","changed":"secondary_allocation_ids"},
+          {"action":"ec2:DisassociateNatGatewayAddress","changed":"secondary_allocation_ids"},
           {"action":"ec2:DescribeNatGateways"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
@@ -19013,8 +19362,18 @@
           {"action":"neptune-graph:ListTagsForResource"}
         ],
         "update": [
-          {"action":"neptune-graph:UpdateGraph"},
-          {"action":"neptune-graph:GetGraph"},
+          {"action":"neptune-graph:UpdateGraph","changed":"graph_name"},
+          {"action":"neptune-graph:UpdateGraph","changed":"graph_name_prefix"},
+          {"action":"neptune-graph:UpdateGraph","changed":"deletion_protection"},
+          {"action":"neptune-graph:UpdateGraph","changed":"provisioned_memory"},
+          {"action":"neptune-graph:UpdateGraph","changed":"public_connectivity"},
+          {"action":"neptune-graph:UpdateGraph","changed":"replica_count"},
+          {"action":"neptune-graph:GetGraph","changed":"graph_name"},
+          {"action":"neptune-graph:GetGraph","changed":"graph_name_prefix"},
+          {"action":"neptune-graph:GetGraph","changed":"deletion_protection"},
+          {"action":"neptune-graph:GetGraph","changed":"provisioned_memory"},
+          {"action":"neptune-graph:GetGraph","changed":"public_connectivity"},
+          {"action":"neptune-graph:GetGraph","changed":"replica_count"},
           {"action":"neptune-graph:TagResource","attribute":"tags"},
           {"action":"neptune-graph:UntagResource","attribute":"tags"}
         ]
@@ -19024,8 +19383,8 @@
       "ops": {
         "create": [
           {"action":"ec2:CreateNetworkAcl"},
-          {"action":"ec2:CreateNetworkAclEntry","attribute":"egress"},
-          {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress"},
+          {"action":"ec2:CreateNetworkAclEntry","attribute":"egress","value_guarded":true},
+          {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress","value_guarded":true},
           {"action":"ec2:ReplaceNetworkAclAssociation"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -19090,12 +19449,12 @@
           {"action":"ec2:DescribeNetworkInterfaces"},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
-          {"action":"ec2:AttachNetworkInterface","attribute":"attachment"},
+          {"action":"ec2:AttachNetworkInterface","attribute":"attachment","value_guarded":true},
           {"action":"ec2:DescribeTags"}
         ],
         "delete": [
-          {"action":"ec2:DetachNetworkInterface","attribute":"attachment"},
-          {"action":"ec2:DescribeNetworkInterfaces","attribute":"attachment"},
+          {"action":"ec2:DetachNetworkInterface","attribute":"attachment","value_guarded":true},
+          {"action":"ec2:DescribeNetworkInterfaces","attribute":"attachment","value_guarded":true},
           {"action":"ec2:DeleteNetworkInterface"}
         ],
         "read": [
@@ -19103,11 +19462,27 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:UnassignPrivateIpAddresses"},
-          {"action":"ec2:AssignPrivateIpAddresses"},
+          {"action":"ec2:UnassignPrivateIpAddresses","changed":"private_ips"},
+          {"action":"ec2:UnassignPrivateIpAddresses","changed":"private_ip_list"},
+          {"action":"ec2:UnassignPrivateIpAddresses","changed":"private_ips_count"},
+          {"action":"ec2:UnassignPrivateIpAddresses","changed":"ipv4_prefix_count"},
+          {"action":"ec2:UnassignPrivateIpAddresses","changed":"ipv4_prefixes"},
+          {"action":"ec2:AssignPrivateIpAddresses","changed":"private_ips"},
+          {"action":"ec2:AssignPrivateIpAddresses","changed":"private_ip_list"},
+          {"action":"ec2:AssignPrivateIpAddresses","changed":"private_ips_count"},
+          {"action":"ec2:AssignPrivateIpAddresses","changed":"ipv4_prefix_count"},
+          {"action":"ec2:AssignPrivateIpAddresses","changed":"ipv4_prefixes"},
           {"action":"ec2:ModifyNetworkInterfaceAttribute"},
-          {"action":"ec2:UnassignIpv6Addresses"},
-          {"action":"ec2:AssignIpv6Addresses"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_addresses"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_address_count"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_address_list"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_prefixes"},
+          {"action":"ec2:UnassignIpv6Addresses","changed":"ipv6_prefix_count"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_addresses"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_address_count"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_address_list"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_prefixes"},
+          {"action":"ec2:AssignIpv6Addresses","changed":"ipv6_prefix_count"},
           {"action":"ec2:DetachNetworkInterface","changed":"attachment"},
           {"action":"ec2:DescribeNetworkInterfaces"},
           {"action":"ec2:AttachNetworkInterface","changed":"attachment"},
@@ -19282,8 +19657,12 @@
           {"action":"network-firewall:ListTagsForResource"}
         ],
         "update": [
-          {"action":"network-firewall:UpdateTLSInspectionConfiguration"},
-          {"action":"network-firewall:DescribeTLSInspectionConfiguration"},
+          {"action":"network-firewall:UpdateTLSInspectionConfiguration","changed":"description"},
+          {"action":"network-firewall:UpdateTLSInspectionConfiguration","changed":"encryption_configuration"},
+          {"action":"network-firewall:UpdateTLSInspectionConfiguration","changed":"tls_inspection_configuration"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration","changed":"description"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration","changed":"encryption_configuration"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration","changed":"tls_inspection_configuration"},
           {"action":"network-firewall:TagResource","attribute":"tags"},
           {"action":"network-firewall:UntagResource","attribute":"tags"}
         ]
@@ -19725,8 +20104,14 @@
           {"action":"networkmonitor:ListTagsForResource"}
         ],
         "update": [
-          {"action":"networkmonitor:UpdateProbe"},
-          {"action":"networkmonitor:GetProbe"},
+          {"action":"networkmonitor:UpdateProbe","changed":"destination"},
+          {"action":"networkmonitor:UpdateProbe","changed":"destination_port"},
+          {"action":"networkmonitor:UpdateProbe","changed":"packet_size"},
+          {"action":"networkmonitor:UpdateProbe","changed":"protocol"},
+          {"action":"networkmonitor:GetProbe","changed":"destination"},
+          {"action":"networkmonitor:GetProbe","changed":"destination_port"},
+          {"action":"networkmonitor:GetProbe","changed":"packet_size"},
+          {"action":"networkmonitor:GetProbe","changed":"protocol"},
           {"action":"networkmonitor:TagResource","attribute":"tags"},
           {"action":"networkmonitor:UntagResource","attribute":"tags"}
         ]
@@ -19956,7 +20341,8 @@
           {"action":"aoss:GetAccessPolicy"}
         ],
         "update": [
-          {"action":"aoss:UpdateAccessPolicy"}
+          {"action":"aoss:UpdateAccessPolicy","changed":"description"},
+          {"action":"aoss:UpdateAccessPolicy","changed":"policy"}
         ]
       }
     },
@@ -19995,7 +20381,8 @@
           {"action":"aoss:BatchGetLifecyclePolicy"}
         ],
         "update": [
-          {"action":"aoss:UpdateLifecyclePolicy"}
+          {"action":"aoss:UpdateLifecyclePolicy","changed":"description"},
+          {"action":"aoss:UpdateLifecyclePolicy","changed":"policy"}
         ]
       }
     },
@@ -20160,7 +20547,7 @@
       "ops": {
         "create": [
           {"action":"organizations:CreateGovCloudAccount","attribute":"create_govcloud"},
-          {"action":"organizations:CreateAccount","attribute":"create_govcloud"},
+          {"action":"organizations:CreateAccount"},
           {"action":"organizations:MoveAccount","attribute":"parent_id"},
           {"action":"organizations:DescribeCreateAccountStatus"},
           {"action":"organizations:ListParents"},
@@ -20169,9 +20556,9 @@
           {"action":"organizations:ListTagsForResource"}
         ],
         "delete": [
-          {"action":"organizations:CloseAccount"},
+          {"action":"organizations:CloseAccount","attribute":"close_on_deletion"},
           {"action":"organizations:RemoveAccountFromOrganization"},
-          {"action":"organizations:DescribeAccount"}
+          {"action":"organizations:DescribeAccount","attribute":"close_on_deletion"}
         ],
         "read": [
           {"action":"organizations:DescribeAccount"},
@@ -20205,9 +20592,9 @@
       "ops": {
         "create": [
           {"action":"organizations:CreateOrganization"},
-          {"action":"organizations:EnableAWSServiceAccess","attribute":"aws_service_access_principals"},
+          {"action":"organizations:EnableAWSServiceAccess","attribute":"aws_service_access_principals","value_guarded":true},
           {"action":"organizations:ListRoots"},
-          {"action":"organizations:EnablePolicyType","attribute":"enabled_policy_types"},
+          {"action":"organizations:EnablePolicyType","attribute":"enabled_policy_types","value_guarded":true},
           {"action":"organizations:DescribeOrganization"},
           {"action":"organizations:ListAccounts"},
           {"action":"organizations:ListAWSServiceAccessForOrganization"}
@@ -20390,7 +20777,8 @@
           {"action":"payment-cryptography:GetAlias"}
         ],
         "update": [
-          {"action":"payment-cryptography:UpdateAlias"}
+          {"action":"payment-cryptography:UpdateAlias","changed":"alias_name"},
+          {"action":"payment-cryptography:UpdateAlias","changed":"key_arn"}
         ]
       }
     },
@@ -20562,7 +20950,9 @@
           {"action":"mobiletargeting:ListTagsForResource"}
         ],
         "update": [
-          {"action":"mobiletargeting:UpdateEmailTemplate"},
+          {"action":"mobiletargeting:UpdateEmailTemplate","changed":"template_name"},
+          {"action":"mobiletargeting:UpdateEmailTemplate","changed":"arn"},
+          {"action":"mobiletargeting:UpdateEmailTemplate","changed":"email_template"},
           {"action":"mobiletargeting:GetEmailTemplate"},
           {"action":"mobiletargeting:TagResource","attribute":"tags"},
           {"action":"mobiletargeting:UntagResource","attribute":"tags"}
@@ -20671,7 +21061,9 @@
       "ops": {
         "create": [
           {"action":"sms-voice:RequestPhoneNumber"},
-          {"action":"sms-voice:UpdatePhoneNumber"},
+          {"action":"sms-voice:UpdatePhoneNumber","attribute":"self_managed_opt_outs_enabled"},
+          {"action":"sms-voice:UpdatePhoneNumber","attribute":"two_way_channel_arn"},
+          {"action":"sms-voice:UpdatePhoneNumber","attribute":"two_way_channel_enabled"},
           {"action":"sms-voice:DescribePhoneNumbers"},
           {"action":"sms-voice:TagResource","attribute":"tags"},
           {"action":"sms-voice:ListTagsForResource"}
@@ -20685,8 +21077,16 @@
           {"action":"sms-voice:ListTagsForResource"}
         ],
         "update": [
-          {"action":"sms-voice:UpdatePhoneNumber"},
-          {"action":"sms-voice:DescribePhoneNumbers"},
+          {"action":"sms-voice:UpdatePhoneNumber","changed":"deletion_protection_enabled"},
+          {"action":"sms-voice:UpdatePhoneNumber","changed":"opt_out_list_name"},
+          {"action":"sms-voice:UpdatePhoneNumber","changed":"self_managed_opt_outs_enabled"},
+          {"action":"sms-voice:UpdatePhoneNumber","changed":"two_way_channel_arn"},
+          {"action":"sms-voice:UpdatePhoneNumber","changed":"two_way_channel_enabled"},
+          {"action":"sms-voice:DescribePhoneNumbers","changed":"deletion_protection_enabled"},
+          {"action":"sms-voice:DescribePhoneNumbers","changed":"opt_out_list_name"},
+          {"action":"sms-voice:DescribePhoneNumbers","changed":"self_managed_opt_outs_enabled"},
+          {"action":"sms-voice:DescribePhoneNumbers","changed":"two_way_channel_arn"},
+          {"action":"sms-voice:DescribePhoneNumbers","changed":"two_way_channel_enabled"},
           {"action":"sms-voice:TagResource","attribute":"tags"},
           {"action":"sms-voice:UntagResource","attribute":"tags"}
         ]
@@ -20873,8 +21273,18 @@
           {"action":"qbusiness:ListTagsForResource"}
         ],
         "update": [
-          {"action":"qbusiness:UpdateApplication"},
-          {"action":"qbusiness:GetApplication"},
+          {"action":"qbusiness:UpdateApplication","changed":"attachments_configuration"},
+          {"action":"qbusiness:UpdateApplication","changed":"encryption_configuration"},
+          {"action":"qbusiness:UpdateApplication","changed":"description"},
+          {"action":"qbusiness:UpdateApplication","changed":"display_name"},
+          {"action":"qbusiness:UpdateApplication","changed":"iam_service_role_arn"},
+          {"action":"qbusiness:UpdateApplication","changed":"identity_center_instance_arn"},
+          {"action":"qbusiness:GetApplication","changed":"attachments_configuration"},
+          {"action":"qbusiness:GetApplication","changed":"encryption_configuration"},
+          {"action":"qbusiness:GetApplication","changed":"description"},
+          {"action":"qbusiness:GetApplication","changed":"display_name"},
+          {"action":"qbusiness:GetApplication","changed":"iam_service_role_arn"},
+          {"action":"qbusiness:GetApplication","changed":"identity_center_instance_arn"},
           {"action":"qbusiness:TagResource","attribute":"tags"},
           {"action":"qbusiness:UntagResource","attribute":"tags"}
         ]
@@ -21144,7 +21554,9 @@
           {"action":"quicksight:DescribeIAMPolicyAssignment"}
         ],
         "update": [
-          {"action":"quicksight:UpdateIAMPolicyAssignment"}
+          {"action":"quicksight:UpdateIAMPolicyAssignment","changed":"assignment_status"},
+          {"action":"quicksight:UpdateIAMPolicyAssignment","changed":"identities"},
+          {"action":"quicksight:UpdateIAMPolicyAssignment","changed":"policy_arn"}
         ]
       }
     },
@@ -21319,8 +21731,16 @@
           {"action":"quicksight:ListTagsForResource"}
         ],
         "update": [
-          {"action":"quicksight:UpdateVPCConnection"},
-          {"action":"quicksight:DescribeVPCConnection"},
+          {"action":"quicksight:UpdateVPCConnection","changed":"name"},
+          {"action":"quicksight:UpdateVPCConnection","changed":"dns_resolvers"},
+          {"action":"quicksight:UpdateVPCConnection","changed":"role_arn"},
+          {"action":"quicksight:UpdateVPCConnection","changed":"security_group_ids"},
+          {"action":"quicksight:UpdateVPCConnection","changed":"subnet_ids"},
+          {"action":"quicksight:DescribeVPCConnection","changed":"name"},
+          {"action":"quicksight:DescribeVPCConnection","changed":"dns_resolvers"},
+          {"action":"quicksight:DescribeVPCConnection","changed":"role_arn"},
+          {"action":"quicksight:DescribeVPCConnection","changed":"security_group_ids"},
+          {"action":"quicksight:DescribeVPCConnection","changed":"subnet_ids"},
           {"action":"quicksight:TagResource","attribute":"tags"},
           {"action":"quicksight:UntagResource","attribute":"tags"}
         ]
@@ -21464,12 +21884,12 @@
       "ops": {
         "create": [
           {"action":"rds:RestoreDBClusterFromSnapshot","attribute":"snapshot_identifier"},
-          {"action":"rds:RestoreDBClusterFromS3","attribute":"snapshot_identifier"},
-          {"action":"rds:RestoreDBClusterToPointInTime","attribute":"snapshot_identifier"},
-          {"action":"rds:CreateDBCluster","attribute":"snapshot_identifier"},
+          {"action":"rds:RestoreDBClusterFromS3","attribute":"s3_import"},
+          {"action":"rds:RestoreDBClusterToPointInTime","attribute":"restore_to_point_in_time","value_guarded":true},
+          {"action":"rds:CreateDBCluster"},
           {"action":"rds:ModifyDBCluster"},
           {"action":"rds:DescribeDBClusters"},
-          {"action":"rds:AddRoleToDBCluster","attribute":"iam_roles"},
+          {"action":"rds:AddRoleToDBCluster","attribute":"iam_roles","value_guarded":true},
           {"action":"rds:DescribeGlobalClusters"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:ListTagsForResource"}
@@ -21489,8 +21909,8 @@
           {"action":"rds:PromoteReadReplicaDBCluster","changed":"replication_source_identifier"},
           {"action":"rds:ModifyDBCluster"},
           {"action":"rds:RemoveFromGlobalCluster","changed":"global_cluster_identifier"},
-          {"action":"rds:EnableHttpEndpoint"},
-          {"action":"rds:DisableHttpEndpoint"},
+          {"action":"rds:EnableHttpEndpoint","changed":"enable_http_endpoint"},
+          {"action":"rds:DisableHttpEndpoint","changed":"enable_http_endpoint"},
           {"action":"rds:DescribeDBClusters"},
           {"action":"rds:AddRoleToDBCluster","changed":"iam_roles"},
           {"action":"rds:RemoveRoleFromDBCluster","changed":"iam_roles"},
@@ -21781,9 +22201,15 @@
           {"action":"rds:ListTagsForResource"}
         ],
         "update": [
-          {"action":"rds:ModifyDBShardGroup"},
-          {"action":"rds:DescribeDBShardGroups"},
-          {"action":"rds:DescribeDBClusters"},
+          {"action":"rds:ModifyDBShardGroup","changed":"compute_redundancy"},
+          {"action":"rds:ModifyDBShardGroup","changed":"max_acu"},
+          {"action":"rds:ModifyDBShardGroup","changed":"min_acu"},
+          {"action":"rds:DescribeDBShardGroups","changed":"compute_redundancy"},
+          {"action":"rds:DescribeDBShardGroups","changed":"max_acu"},
+          {"action":"rds:DescribeDBShardGroups","changed":"min_acu"},
+          {"action":"rds:DescribeDBClusters","changed":"compute_redundancy"},
+          {"action":"rds:DescribeDBClusters","changed":"max_acu"},
+          {"action":"rds:DescribeDBClusters","changed":"min_acu"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
         ]
@@ -21813,8 +22239,8 @@
           {"action":"redshift:RestoreFromClusterSnapshot"},
           {"action":"redshift:CreateCluster"},
           {"action":"redshift:DescribeClusters"},
-          {"action":"redshift:EnableSnapshotCopy","attribute":"snapshot_copy"},
-          {"action":"redshift:EnableLogging","attribute":"logging"},
+          {"action":"redshift:EnableSnapshotCopy","attribute":"snapshot_copy","value_guarded":true},
+          {"action":"redshift:EnableLogging","attribute":"logging","value_guarded":true},
           {"action":"redshift:DescribeLoggingStatus"},
           {"action":"redshift:CreateTags","attribute":"tags"}
         ],
@@ -21828,7 +22254,8 @@
         ],
         "update": [
           {"action":"redshift:ModifyCluster"},
-          {"action":"redshift:ModifyClusterIamRoles"},
+          {"action":"redshift:ModifyClusterIamRoles","changed":"default_iam_role_arn"},
+          {"action":"redshift:ModifyClusterIamRoles","changed":"iam_roles"},
           {"action":"redshift:ModifyAquaConfiguration","changed":"aqua_configuration_status"},
           {"action":"redshift:RebootCluster","changed":"aqua_configuration_status"},
           {"action":"redshift:DescribeClusters"},
@@ -21941,8 +22368,8 @@
           {"action":"redshift:DescribeEndpointAuthorization"}
         ],
         "update": [
-          {"action":"redshift:AuthorizeEndpointAccess"},
-          {"action":"redshift:RevokeEndpointAccess"},
+          {"action":"redshift:AuthorizeEndpointAccess","changed":"vpc_ids"},
+          {"action":"redshift:RevokeEndpointAccess","changed":"vpc_ids"},
           {"action":"redshift:DescribeEndpointAuthorization"}
         ]
       }
@@ -22020,7 +22447,10 @@
           {"action":"redshift:DescribeLoggingStatus"}
         ],
         "update": [
-          {"action":"redshift:EnableLogging"}
+          {"action":"redshift:EnableLogging","changed":"bucket_name"},
+          {"action":"redshift:EnableLogging","changed":"log_destination_type"},
+          {"action":"redshift:EnableLogging","changed":"log_exports"},
+          {"action":"redshift:EnableLogging","changed":"s3_key_prefix"}
         ]
       }
     },
@@ -22424,8 +22854,12 @@
           {"action":"rekognition:ListTagsForResource"}
         ],
         "update": [
-          {"action":"rekognition:UpdateStreamProcessor"},
-          {"action":"rekognition:DescribeStreamProcessor"},
+          {"action":"rekognition:UpdateStreamProcessor","changed":"data_sharing_preference"},
+          {"action":"rekognition:UpdateStreamProcessor","changed":"settings"},
+          {"action":"rekognition:UpdateStreamProcessor","changed":"regions_of_interest"},
+          {"action":"rekognition:DescribeStreamProcessor","changed":"data_sharing_preference"},
+          {"action":"rekognition:DescribeStreamProcessor","changed":"settings"},
+          {"action":"rekognition:DescribeStreamProcessor","changed":"regions_of_interest"},
           {"action":"rekognition:TagResource","attribute":"tags"},
           {"action":"rekognition:UntagResource","attribute":"tags"}
         ]
@@ -22497,7 +22931,8 @@
           {"action":"resource-explorer-2:ListTagsForResource"}
         ],
         "update": [
-          {"action":"resource-explorer-2:UpdateView"},
+          {"action":"resource-explorer-2:UpdateView","changed":"filters"},
+          {"action":"resource-explorer-2:UpdateView","changed":"included_property"},
           {"action":"resource-explorer-2:AssociateDefaultView","changed":"default_view"},
           {"action":"resource-explorer-2:DisassociateDefaultView","changed":"default_view"},
           {"action":"resource-explorer-2:TagResource","attribute":"tags"},
@@ -23172,9 +23607,25 @@
           {"action":"route53domains:ListTagsForDomain"}
         ],
         "update": [
-          {"action":"route53domains:UpdateDomainContact"},
-          {"action":"route53domains:GetOperationDetail"},
-          {"action":"route53domains:UpdateDomainContactPrivacy"},
+          {"action":"route53domains:UpdateDomainContact","changed":"admin_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"billing_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"registrant_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"tech_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"admin_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"billing_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"registrant_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"tech_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"admin_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"billing_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"registrant_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"tech_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"name_server"},
+          {"action":"route53domains:GetOperationDetail","changed":"transfer_lock"},
+          {"action":"route53domains:GetOperationDetail","changed":"duration_in_years"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"admin_privacy"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"billing_privacy"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"registrant_privacy"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"tech_privacy"},
           {"action":"route53domains:EnableDomainAutoRenew","changed":"auto_renew"},
           {"action":"route53domains:DisableDomainAutoRenew","changed":"auto_renew"},
           {"action":"route53domains:UpdateDomainNameservers","changed":"name_server"},
@@ -23196,7 +23647,7 @@
           {"action":"route53domains:UpdateDomainContactPrivacy"},
           {"action":"route53domains:EnableDomainAutoRenew"},
           {"action":"route53domains:DisableDomainAutoRenew"},
-          {"action":"route53domains:UpdateDomainNameservers","attribute":"name_server"},
+          {"action":"route53domains:UpdateDomainNameservers","attribute":"name_server","value_guarded":true},
           {"action":"route53domains:EnableDomainTransferLock"},
           {"action":"route53domains:DisableDomainTransferLock"},
           {"action":"route53domains:ListTagsForDomain"},
@@ -23208,9 +23659,23 @@
           {"action":"route53domains:ListTagsForDomain"}
         ],
         "update": [
-          {"action":"route53domains:UpdateDomainContact"},
-          {"action":"route53domains:GetOperationDetail"},
-          {"action":"route53domains:UpdateDomainContactPrivacy"},
+          {"action":"route53domains:UpdateDomainContact","changed":"admin_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"billing_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"registrant_contact"},
+          {"action":"route53domains:UpdateDomainContact","changed":"tech_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"admin_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"billing_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"registrant_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"tech_contact"},
+          {"action":"route53domains:GetOperationDetail","changed":"admin_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"registrant_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"tech_privacy"},
+          {"action":"route53domains:GetOperationDetail","changed":"name_server"},
+          {"action":"route53domains:GetOperationDetail","changed":"transfer_lock"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"admin_privacy"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"billing_contact"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"registrant_privacy"},
+          {"action":"route53domains:UpdateDomainContactPrivacy","changed":"tech_privacy"},
           {"action":"route53domains:EnableDomainAutoRenew","changed":"auto_renew"},
           {"action":"route53domains:DisableDomainAutoRenew","changed":"auto_renew"},
           {"action":"route53domains:UpdateDomainNameservers","changed":"name_server"},
@@ -23462,8 +23927,8 @@
         "create": [
           {"action":"ec2:CreateRouteTable"},
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:EnableVgwRoutePropagation","attribute":"propagating_vgws"},
-          {"action":"ec2:CreateRoute","attribute":"route"},
+          {"action":"ec2:EnableVgwRoutePropagation","attribute":"propagating_vgws","value_guarded":true},
+          {"action":"ec2:CreateRoute","attribute":"route","value_guarded":true},
           {"action":"ec2:DescribeNetworkInterfaces"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DescribeTags"}
@@ -23611,7 +24076,9 @@
           {"action":"s3:DeleteBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketVersioning","changed":"versioning"},
-          {"action":"s3:PutBucketAcl"},
+          {"action":"s3:PutBucketAcl","changed":"acl"},
+          {"action":"s3:PutBucketAcl","changed":"grant"},
+          {"action":"s3:PutBucketAcl","attribute":"grant","value_guarded":true},
           {"action":"s3:PutBucketLogging","changed":"logging"},
           {"action":"s3:PutLifecycleConfiguration","changed":"lifecycle_rule"},
           {"action":"s3:PutAccelerateConfiguration","changed":"acceleration_status"},
@@ -23661,7 +24128,9 @@
           {"action":"s3:DeleteBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketVersioning","changed":"versioning"},
-          {"action":"s3:PutBucketAcl"},
+          {"action":"s3:PutBucketAcl","changed":"acl"},
+          {"action":"s3:PutBucketAcl","changed":"grant"},
+          {"action":"s3:PutBucketAcl","attribute":"grant","value_guarded":true},
           {"action":"s3:PutBucketLogging","changed":"logging"},
           {"action":"s3:PutLifecycleConfiguration","changed":"lifecycle_rule"},
           {"action":"s3:PutAccelerateConfiguration","changed":"acceleration_status"},
@@ -23878,7 +24347,7 @@
           {"action":"s3:ListBucketVersions","attribute":"version_id"},
           {"action":"s3:GetObject","attribute":"version_id"},
           {"action":"s3:PutObjectLegalHold","attribute":"version_id"},
-          {"action":"s3:DeleteObject","attribute":"version_id"}
+          {"action":"s3:DeleteObject"}
         ],
         "read": [
           {"action":"s3:GetObject"}
@@ -23886,7 +24355,8 @@
         "update": [
           {"action":"s3:PutObjectAcl","changed":"acl"},
           {"action":"s3:PutObjectLegalHold","changed":"object_lock_legal_hold_status"},
-          {"action":"s3:PutObjectRetention"},
+          {"action":"s3:PutObjectRetention","changed":"object_lock_mode"},
+          {"action":"s3:PutObjectRetention","changed":"object_lock_retain_until_date"},
           {"action":"s3:PutObject"},
           {"action":"s3:GetObject"}
         ]
@@ -24087,7 +24557,7 @@
           {"action":"s3:ListBucketVersions","attribute":"version_id"},
           {"action":"s3:GetObject","attribute":"version_id"},
           {"action":"s3:PutObjectLegalHold","attribute":"version_id"},
-          {"action":"s3:DeleteObject","attribute":"version_id"}
+          {"action":"s3:DeleteObject"}
         ],
         "read": [
           {"action":"s3:GetObject"}
@@ -24095,7 +24565,8 @@
         "update": [
           {"action":"s3:PutObjectAcl","changed":"acl"},
           {"action":"s3:PutObjectLegalHold","changed":"object_lock_legal_hold_status"},
-          {"action":"s3:PutObjectRetention"},
+          {"action":"s3:PutObjectRetention","changed":"object_lock_mode"},
+          {"action":"s3:PutObjectRetention","changed":"object_lock_retain_until_date"},
           {"action":"s3:PutObject"},
           {"action":"s3:GetObject"}
         ]
@@ -24111,7 +24582,7 @@
           {"action":"s3:ListBucketVersions","attribute":"version_id"},
           {"action":"s3:GetObject","attribute":"version_id"},
           {"action":"s3:PutObjectLegalHold","attribute":"version_id"},
-          {"action":"s3:DeleteObject","attribute":"version_id"}
+          {"action":"s3:DeleteObject"}
         ],
         "read": [
           {"action":"s3:GetObject"}
@@ -24416,7 +24887,8 @@
           {"action":"s3tables:GetTable"}
         ],
         "update": [
-          {"action":"s3tables:RenameTable"},
+          {"action":"s3tables:RenameTable","changed":"name"},
+          {"action":"s3tables:RenameTable","changed":"namespace"},
           {"action":"s3tables:PutTableMaintenanceConfiguration","changed":"maintenance_configuration"},
           {"action":"s3tables:GetTableMaintenanceConfiguration"},
           {"action":"s3tables:GetTable"}
@@ -24657,7 +25129,8 @@
           {"action":"sagemaker:ListTags"}
         ],
         "update": [
-          {"action":"sagemaker:UpdateEndpoint"},
+          {"action":"sagemaker:UpdateEndpoint","changed":"endpoint_config_name"},
+          {"action":"sagemaker:UpdateEndpoint","changed":"deployment_config"},
           {"action":"sagemaker:DescribeEndpoint"},
           {"action":"sagemaker:AddTags","attribute":"tags"},
           {"action":"sagemaker:DeleteTags","attribute":"tags"}
@@ -24922,7 +25395,7 @@
           {"action":"sagemaker:ListTags"}
         ],
         "update": [
-          {"action":"sagemaker:UpdateMonitoringSchedule"},
+          {"action":"sagemaker:UpdateMonitoringSchedule","changed":"monitoring_schedule_config"},
           {"action":"sagemaker:DescribeMonitoringSchedule"},
           {"action":"sagemaker:AddTags","attribute":"tags"},
           {"action":"sagemaker:DeleteTags","attribute":"tags"}
@@ -25272,7 +25745,7 @@
         ],
         "delete": [
           {"action":"secretsmanager:DeleteSecret"},
-          {"action":"secretsmanager:RemoveRegionsFromReplication","attribute":"replica"},
+          {"action":"secretsmanager:RemoveRegionsFromReplication","attribute":"replica","value_guarded":true},
           {"action":"secretsmanager:DescribeSecret"}
         ],
         "read": [
@@ -25324,7 +25797,8 @@
           {"action":"secretsmanager:DescribeSecret"}
         ],
         "update": [
-          {"action":"secretsmanager:RotateSecret"},
+          {"action":"secretsmanager:RotateSecret","changed":"rotation_lambda_arn"},
+          {"action":"secretsmanager:RotateSecret","changed":"rotation_rules"},
           {"action":"secretsmanager:DescribeSecret"}
         ]
       }
@@ -25366,9 +25840,9 @@
           {"action":"ec2:DescribeNetworkInterfaces"},
           {"action":"ec2:DetachNetworkInterface"},
           {"action":"ec2:DeleteNetworkInterface"},
-          {"action":"ec2:RevokeSecurityGroupIngress"},
-          {"action":"ec2:RevokeSecurityGroupEgress"},
-          {"action":"ec2:DescribeSecurityGroupRules"},
+          {"action":"ec2:RevokeSecurityGroupIngress","attribute":"revoke_rules_on_delete"},
+          {"action":"ec2:RevokeSecurityGroupEgress","attribute":"revoke_rules_on_delete"},
+          {"action":"ec2:DescribeSecurityGroupRules","attribute":"revoke_rules_on_delete"},
           {"action":"ec2:DescribeSecurityGroups"}
         ],
         "read": [
@@ -25462,7 +25936,13 @@
           {"action":"securityhub:ListTagsForResource"}
         ],
         "update": [
-          {"action":"securityhub:BatchUpdateAutomationRules"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"actions"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"criteria"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"description"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"is_terminal"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"rule_name"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"rule_order"},
+          {"action":"securityhub:BatchUpdateAutomationRules","changed":"rule_status"},
           {"action":"securityhub:TagResource","attribute":"tags"},
           {"action":"securityhub:UntagResource","attribute":"tags"}
         ]
@@ -25716,8 +26196,18 @@
           {"action":"securitylake:ListTagsForResource"}
         ],
         "update": [
-          {"action":"securitylake:UpdateSubscriber"},
-          {"action":"securitylake:GetSubscriber"},
+          {"action":"securitylake:UpdateSubscriber","changed":"access_type"},
+          {"action":"securitylake:UpdateSubscriber","changed":"subscriber_description"},
+          {"action":"securitylake:UpdateSubscriber","changed":"subscriber_name"},
+          {"action":"securitylake:UpdateSubscriber","changed":"subscriber_identity"},
+          {"action":"securitylake:UpdateSubscriber","changed":"source"},
+          {"action":"securitylake:UpdateSubscriber","changed":"tags"},
+          {"action":"securitylake:GetSubscriber","changed":"access_type"},
+          {"action":"securitylake:GetSubscriber","changed":"subscriber_description"},
+          {"action":"securitylake:GetSubscriber","changed":"subscriber_name"},
+          {"action":"securitylake:GetSubscriber","changed":"subscriber_identity"},
+          {"action":"securitylake:GetSubscriber","changed":"source"},
+          {"action":"securitylake:GetSubscriber","changed":"tags"},
           {"action":"securitylake:TagResource","attribute":"tags"},
           {"action":"securitylake:UntagResource","attribute":"tags"}
         ]
@@ -26102,7 +26592,7 @@
       "ops": {
         "create": [
           {"action":"servicecatalog:CreateTagOption"},
-          {"action":"servicecatalog:UpdateTagOption","attribute":"active"},
+          {"action":"servicecatalog:UpdateTagOption"},
           {"action":"servicecatalog:DescribeTagOption"}
         ],
         "delete": [
@@ -26169,7 +26659,8 @@
           {"action":"servicecatalog:ListTagsForResource"}
         ],
         "update": [
-          {"action":"servicecatalog:UpdateAttributeGroup"},
+          {"action":"servicecatalog:UpdateAttributeGroup","changed":"description"},
+          {"action":"servicecatalog:UpdateAttributeGroup","changed":"attributes"},
           {"action":"servicecatalog:TagResource","attribute":"tags"},
           {"action":"servicecatalog:UntagResource","attribute":"tags"}
         ]
@@ -26265,8 +26756,8 @@
         "create": [
           {"action":"ses:CreateConfigurationSet"},
           {"action":"ses:PutConfigurationSetDeliveryOptions","attribute":"delivery_options","value_guarded":true},
-          {"action":"ses:UpdateConfigurationSetReputationMetricsEnabled","attribute":"reputation_metrics_enabled"},
-          {"action":"ses:UpdateConfigurationSetSendingEnabled","attribute":"sending_enabled"},
+          {"action":"ses:UpdateConfigurationSetReputationMetricsEnabled"},
+          {"action":"ses:UpdateConfigurationSetSendingEnabled"},
           {"action":"ses:CreateConfigurationSetTrackingOptions","attribute":"tracking_options","value_guarded":true},
           {"action":"ses:DescribeConfigurationSet"}
         ],
@@ -26517,12 +27008,12 @@
           {"action":"ses:ListTagsForResource"}
         ],
         "update": [
-          {"action":"ses:PutConfigurationSetDeliveryOptions"},
-          {"action":"ses:PutConfigurationSetReputationOptions"},
-          {"action":"ses:PutConfigurationSetSendingOptions"},
-          {"action":"ses:PutConfigurationSetSuppressionOptions"},
-          {"action":"ses:PutConfigurationSetTrackingOptions"},
-          {"action":"ses:PutConfigurationSetVdmOptions"},
+          {"action":"ses:PutConfigurationSetDeliveryOptions","changed":"delivery_options"},
+          {"action":"ses:PutConfigurationSetReputationOptions","changed":"reputation_options"},
+          {"action":"ses:PutConfigurationSetSendingOptions","changed":"sending_options"},
+          {"action":"ses:PutConfigurationSetSuppressionOptions","changed":"suppression_options"},
+          {"action":"ses:PutConfigurationSetTrackingOptions","changed":"tracking_options"},
+          {"action":"ses:PutConfigurationSetVdmOptions","changed":"vdm_options"},
           {"action":"ses:GetConfigurationSet"},
           {"action":"ses:TagResource","attribute":"tags"},
           {"action":"ses:UntagResource","attribute":"tags"}
@@ -26542,7 +27033,7 @@
           {"action":"ses:GetConfigurationSetEventDestinations"}
         ],
         "update": [
-          {"action":"ses:UpdateConfigurationSetEventDestination"},
+          {"action":"ses:UpdateConfigurationSetEventDestination","changed":"event_destination"},
           {"action":"ses:GetConfigurationSetEventDestinations"}
         ]
       }
@@ -26622,8 +27113,8 @@
           {"action":"ses:ListTagsForResource"}
         ],
         "update": [
-          {"action":"ses:PutEmailIdentityConfigurationSetAttributes"},
-          {"action":"ses:PutEmailIdentityDkimSigningAttributes"},
+          {"action":"ses:PutEmailIdentityConfigurationSetAttributes","changed":"configuration_set_name"},
+          {"action":"ses:PutEmailIdentityDkimSigningAttributes","changed":"dkim_signing_attributes"},
           {"action":"ses:GetEmailIdentity"},
           {"action":"ses:TagResource","attribute":"tags"},
           {"action":"ses:UntagResource","attribute":"tags"}
@@ -27112,7 +27603,7 @@
         "create": [
           {"action":"ec2:RequestSpotInstances"},
           {"action":"ec2:DescribeLaunchTemplateVersions"},
-          {"action":"ec2:DescribeInstanceTypes","attribute":"credit_specification"},
+          {"action":"ec2:DescribeInstanceTypes","attribute":"credit_specification","value_guarded":true},
           {"action":"ec2:DescribeImages","attribute":"root_block_device"},
           {"action":"ec2:DescribeSpotInstanceRequests"},
           {"action":"ec2:DescribeInstances"},
@@ -27480,7 +27971,10 @@
           {"action":"ssm-contacts:ListTagsForResource"}
         ],
         "update": [
-          {"action":"ssm-contacts:UpdateRotation"},
+          {"action":"ssm-contacts:UpdateRotation","changed":"recurrence"},
+          {"action":"ssm-contacts:UpdateRotation","changed":"contact_ids"},
+          {"action":"ssm-contacts:UpdateRotation","changed":"start_time"},
+          {"action":"ssm-contacts:UpdateRotation","changed":"time_zone_id"},
           {"action":"ssm-contacts:TagResource","attribute":"tags"},
           {"action":"ssm-contacts:UntagResource","attribute":"tags"}
         ]
@@ -27550,7 +28044,8 @@
           {"action":"ssm-quicksetup:GetConfigurationManager"}
         ],
         "update": [
-          {"action":"ssm-quicksetup:UpdateConfigurationManager"},
+          {"action":"ssm-quicksetup:UpdateConfigurationManager","changed":"name"},
+          {"action":"ssm-quicksetup:UpdateConfigurationManager","changed":"description"},
           {"action":"ssm-quicksetup:UpdateConfigurationDefinition","changed":"configuration_definition"},
           {"action":"ssm-quicksetup:GetConfigurationManager"},
           {"action":"ssm-quicksetup:TagResource","attribute":"tags"},
@@ -27588,7 +28083,10 @@
           {"action":"sso:ListTagsForResource"}
         ],
         "update": [
-          {"action":"sso:UpdateApplication"},
+          {"action":"sso:UpdateApplication","changed":"name"},
+          {"action":"sso:UpdateApplication","changed":"description"},
+          {"action":"sso:UpdateApplication","changed":"portal_options"},
+          {"action":"sso:UpdateApplication","changed":"status"},
           {"action":"sso:UntagResource"},
           {"action":"sso:TagResource"}
         ]
@@ -27770,7 +28268,8 @@
           {"action":"sso:ListTagsForResource"}
         ],
         "update": [
-          {"action":"sso:UpdateTrustedTokenIssuer"},
+          {"action":"sso:UpdateTrustedTokenIssuer","changed":"name"},
+          {"action":"sso:UpdateTrustedTokenIssuer","changed":"trusted_token_issuer_configuration"},
           {"action":"sso:UntagResource"},
           {"action":"sso:TagResource"}
         ]
@@ -27869,8 +28368,10 @@
           {"action":"storagegateway:SetSMBGuestPassword","changed":"smb_guest_password"},
           {"action":"storagegateway:UpdateSMBSecurityStrategy","changed":"smb_security_strategy"},
           {"action":"storagegateway:UpdateSMBFileShareVisibility","changed":"smb_file_share_visibility"},
-          {"action":"storagegateway:UpdateBandwidthRateLimit"},
-          {"action":"storagegateway:DeleteBandwidthRateLimit"},
+          {"action":"storagegateway:UpdateBandwidthRateLimit","changed":"average_download_rate_limit_in_bits_per_sec"},
+          {"action":"storagegateway:UpdateBandwidthRateLimit","changed":"average_upload_rate_limit_in_bits_per_sec"},
+          {"action":"storagegateway:DeleteBandwidthRateLimit","changed":"average_download_rate_limit_in_bits_per_sec"},
+          {"action":"storagegateway:DeleteBandwidthRateLimit","changed":"average_upload_rate_limit_in_bits_per_sec"},
           {"action":"storagegateway:DescribeSMBSettings"},
           {"action":"storagegateway:DescribeBandwidthRateLimit"},
           {"action":"storagegateway:DescribeMaintenanceStartTime"},
@@ -27981,7 +28482,7 @@
         ],
         "read": [
           {"action":"storagegateway:DescribeUploadBuffer"},
-          {"action":"storagegateway:ListLocalDisks","attribute":"disk_path"}
+          {"action":"storagegateway:ListLocalDisks"}
         ]
       }
     },
@@ -28018,7 +28519,15 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:ModifySubnetAttribute"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"customer_owned_ipv4_pool"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"map_customer_owned_ip_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"assign_ipv6_address_on_creation"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_dns64"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_lni_at_device_index"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_resource_name_dns_aaaa_record_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"enable_resource_name_dns_a_record_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"map_public_ip_on_launch"},
+          {"action":"ec2:ModifySubnetAttribute","changed":"private_dns_hostname_type_on_launch"},
           {"action":"ec2:DescribeSubnets"},
           {"action":"ec2:DisassociateSubnetCidrBlock","changed":"ipv6_cidr_block"},
           {"action":"ec2:AssociateSubnetCidrBlock","changed":"ipv6_cidr_block"},
@@ -28132,8 +28641,10 @@
           {"action":"timestream-influxdb:ListTagsForResource"}
         ],
         "update": [
-          {"action":"timestream-influxdb:UpdateDbInstance"},
-          {"action":"timestream-influxdb:GetDbInstance"},
+          {"action":"timestream-influxdb:UpdateDbInstance","changed":"db_parameter_group_identifier"},
+          {"action":"timestream-influxdb:UpdateDbInstance","changed":"log_delivery_configuration"},
+          {"action":"timestream-influxdb:GetDbInstance","changed":"db_parameter_group_identifier"},
+          {"action":"timestream-influxdb:GetDbInstance","changed":"log_delivery_configuration"},
           {"action":"timestream-influxdb:TagResource","attribute":"tags"},
           {"action":"timestream-influxdb:UntagResource","attribute":"tags"}
         ]
@@ -28676,8 +29187,12 @@
           {"action":"verifiedpermissions:GetIdentitySource"}
         ],
         "update": [
-          {"action":"verifiedpermissions:UpdateIdentitySource"},
-          {"action":"verifiedpermissions:GetIdentitySource"}
+          {"action":"verifiedpermissions:UpdateIdentitySource","changed":"configuration"},
+          {"action":"verifiedpermissions:UpdateIdentitySource","changed":"policy_store_id"},
+          {"action":"verifiedpermissions:UpdateIdentitySource","changed":"principal_entity_type"},
+          {"action":"verifiedpermissions:GetIdentitySource","changed":"configuration"},
+          {"action":"verifiedpermissions:GetIdentitySource","changed":"policy_store_id"},
+          {"action":"verifiedpermissions:GetIdentitySource","changed":"principal_entity_type"}
         ]
       }
     },
@@ -28709,7 +29224,8 @@
           {"action":"verifiedpermissions:GetPolicyStore"}
         ],
         "update": [
-          {"action":"verifiedpermissions:UpdatePolicyStore"}
+          {"action":"verifiedpermissions:UpdatePolicyStore","changed":"description"},
+          {"action":"verifiedpermissions:UpdatePolicyStore","changed":"validation_settings"}
         ]
       }
     },
@@ -28725,7 +29241,8 @@
           {"action":"verifiedpermissions:GetPolicyTemplate"}
         ],
         "update": [
-          {"action":"verifiedpermissions:UpdatePolicyTemplate"}
+          {"action":"verifiedpermissions:UpdatePolicyTemplate","changed":"description"},
+          {"action":"verifiedpermissions:UpdatePolicyTemplate","changed":"statement"}
         ]
       }
     },
@@ -28796,8 +29313,14 @@
           {"action":"ec2:ModifyVpcAttribute","changed":"enable_network_address_usage_metrics"},
           {"action":"ec2:DescribeVpcAttribute"},
           {"action":"ec2:ModifyVpcTenancy","changed":"instance_tenancy"},
-          {"action":"ec2:DisassociateVpcCidrBlock"},
-          {"action":"ec2:AssociateVpcCidrBlock"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"assign_generated_ipv6_cidr_block"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_cidr_block_network_border_group"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_cidr_block"},
+          {"action":"ec2:DisassociateVpcCidrBlock","changed":"ipv6_ipam_pool_id"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"assign_generated_ipv6_cidr_block"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_cidr_block_network_border_group"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_cidr_block"},
+          {"action":"ec2:AssociateVpcCidrBlock","changed":"ipv6_ipam_pool_id"},
           {"action":"ec2:DescribeVpcs"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
@@ -28899,8 +29422,8 @@
       "ops": {
         "create": [
           {"action":"ec2:CreateVpcEndpoint"},
-          {"action":"ec2:AcceptVpcEndpointConnections"},
-          {"action":"ec2:DescribeVpcEndpointServiceConfigurations"},
+          {"action":"ec2:AcceptVpcEndpointConnections","attribute":"auto_accept"},
+          {"action":"ec2:DescribeVpcEndpointServiceConfigurations","attribute":"auto_accept"},
           {"action":"ec2:DescribeVpcEndpoints"},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
@@ -28920,8 +29443,8 @@
         ],
         "update": [
           {"action":"ec2:ModifyVpcEndpoint"},
-          {"action":"ec2:AcceptVpcEndpointConnections"},
-          {"action":"ec2:DescribeVpcEndpointServiceConfigurations"},
+          {"action":"ec2:AcceptVpcEndpointConnections","changed":"auto_accept"},
+          {"action":"ec2:DescribeVpcEndpointServiceConfigurations","changed":"auto_accept"},
           {"action":"ec2:DescribeVpcEndpoints"},
           {"action":"ec2:DescribePrefixLists"},
           {"action":"ec2:DescribeNetworkInterfaces"},
@@ -29013,12 +29536,12 @@
       "ops": {
         "create": [
           {"action":"ec2:DescribeVpcEndpoints"},
-          {"action":"ec2:DescribeSecurityGroups"},
+          {"action":"ec2:DescribeSecurityGroups","attribute":"replace_default_association"},
           {"action":"ec2:ModifyVpcEndpoint"}
         ],
         "delete": [
-          {"action":"ec2:DescribeVpcEndpoints"},
-          {"action":"ec2:DescribeSecurityGroups"},
+          {"action":"ec2:DescribeVpcEndpoints","attribute":"replace_default_association"},
+          {"action":"ec2:DescribeSecurityGroups","attribute":"replace_default_association"},
           {"action":"ec2:ModifyVpcEndpoint"}
         ],
         "read": [
@@ -29046,7 +29569,12 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:ModifyVpcEndpointServiceConfiguration"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"acceptance_required"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"gateway_load_balancer_arns"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"network_load_balancer_arns"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"private_dns_name"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"supported_ip_address_types"},
+          {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"supported_regions"},
           {"action":"ec2:ModifyVpcEndpointServicePermissions","changed":"allowed_principals"},
           {"action":"ec2:DescribeVpcEndpointServiceConfigurations"},
           {"action":"ec2:DescribeVpcEndpointServicePermissions"},
@@ -29327,7 +29855,8 @@
         "update": [
           {"action":"ec2:DescribeVpcPeeringConnections"},
           {"action":"ec2:AcceptVpcPeeringConnection","attribute":"auto_accept"},
-          {"action":"ec2:ModifyVpcPeeringConnectionOptions"},
+          {"action":"ec2:ModifyVpcPeeringConnectionOptions","changed":"accepter"},
+          {"action":"ec2:ModifyVpcPeeringConnectionOptions","changed":"requester"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
         ]
@@ -29350,7 +29879,8 @@
         "update": [
           {"action":"ec2:DescribeVpcPeeringConnections"},
           {"action":"ec2:AcceptVpcPeeringConnection","attribute":"auto_accept"},
-          {"action":"ec2:ModifyVpcPeeringConnectionOptions"},
+          {"action":"ec2:ModifyVpcPeeringConnectionOptions","changed":"accepter"},
+          {"action":"ec2:ModifyVpcPeeringConnectionOptions","changed":"requester"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
         ]
@@ -29386,7 +29916,14 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:ModifySecurityGroupRules"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv4"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv6"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"description"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"from_port"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"ip_protocol"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"prefix_list_id"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"referenced_security_group_id"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"to_port"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
         ]
@@ -29407,7 +29944,14 @@
           {"action":"ec2:DescribeTags"}
         ],
         "update": [
-          {"action":"ec2:ModifySecurityGroupRules"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv4"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv6"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"description"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"from_port"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"ip_protocol"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"prefix_list_id"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"referenced_security_group_id"},
+          {"action":"ec2:ModifySecurityGroupRules","changed":"to_port"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
         ]
@@ -29531,8 +30075,12 @@
           {"action":"vpc-lattice:ListTagsForResource"}
         ],
         "update": [
-          {"action":"vpc-lattice:UpdateResourceConfiguration"},
-          {"action":"vpc-lattice:GetResourceConfiguration"},
+          {"action":"vpc-lattice:UpdateResourceConfiguration","changed":"allow_association_to_shareable_service_network"},
+          {"action":"vpc-lattice:UpdateResourceConfiguration","changed":"port_ranges"},
+          {"action":"vpc-lattice:UpdateResourceConfiguration","changed":"resource_configuration_definition"},
+          {"action":"vpc-lattice:GetResourceConfiguration","changed":"allow_association_to_shareable_service_network"},
+          {"action":"vpc-lattice:GetResourceConfiguration","changed":"port_ranges"},
+          {"action":"vpc-lattice:GetResourceConfiguration","changed":"resource_configuration_definition"},
           {"action":"vpc-lattice:TagResource","attribute":"tags"},
           {"action":"vpc-lattice:UntagResource","attribute":"tags"}
         ]
@@ -29755,7 +30303,10 @@
         ],
         "update": [
           {"action":"ec2:ModifyVpnConnection"},
-          {"action":"ec2:ModifyVpnConnectionOptions"},
+          {"action":"ec2:ModifyVpnConnectionOptions","changed":"local_ipv4_network_cidr"},
+          {"action":"ec2:ModifyVpnConnectionOptions","changed":"local_ipv6_network_cidr"},
+          {"action":"ec2:ModifyVpnConnectionOptions","changed":"remote_ipv4_network_cidr"},
+          {"action":"ec2:ModifyVpnConnectionOptions","changed":"remote_ipv6_network_cidr"},
           {"action":"ec2:ModifyVpnTunnelOptions"},
           {"action":"ec2:DescribeVpnConnections"},
           {"action":"ec2:DescribeTransitGatewayAttachments"},
@@ -29865,7 +30416,7 @@
       "ops": {
         "create": [
           {"action":"waf:CreateIPSet"},
-          {"action":"waf:UpdateIPSet","attribute":"ip_set_descriptors"},
+          {"action":"waf:UpdateIPSet","attribute":"ip_set_descriptors","value_guarded":true},
           {"action":"waf:GetIPSet"}
         ],
         "delete": [
@@ -29899,7 +30450,8 @@
           {"action":"waf:ListTagsForResource"}
         ],
         "update": [
-          {"action":"waf:UpdateRateBasedRule"},
+          {"action":"waf:UpdateRateBasedRule","changed":"predicates"},
+          {"action":"waf:UpdateRateBasedRule","changed":"rate_limit"},
           {"action":"waf:GetRateBasedRule"},
           {"action":"waf:TagResource","attribute":"tags"},
           {"action":"waf:UntagResource","attribute":"tags"}
@@ -30074,7 +30626,7 @@
       "ops": {
         "create": [
           {"action":"waf:CreateXssMatchSet"},
-          {"action":"waf:UpdateXssMatchSet","attribute":"xss_match_tuples"},
+          {"action":"waf:UpdateXssMatchSet","attribute":"xss_match_tuples","value_guarded":true},
           {"action":"waf:GetXssMatchSet"}
         ],
         "delete": [
@@ -30168,7 +30720,8 @@
           {"action":"waf-regional:ListTagsForResource"}
         ],
         "update": [
-          {"action":"waf-regional:UpdateRateBasedRule"},
+          {"action":"waf-regional:UpdateRateBasedRule","changed":"predicate"},
+          {"action":"waf-regional:UpdateRateBasedRule","changed":"rate_limit"},
           {"action":"waf-regional:GetRateBasedRule"},
           {"action":"waf-regional:TagResource","attribute":"tags"},
           {"action":"waf-regional:UntagResource","attribute":"tags"}
@@ -30356,7 +30909,7 @@
       "ops": {
         "create": [
           {"action":"waf-regional:CreateXssMatchSet"},
-          {"action":"waf-regional:UpdateXssMatchSet","attribute":"xss_match_tuple"},
+          {"action":"waf-regional:UpdateXssMatchSet","attribute":"xss_match_tuple","value_guarded":true},
           {"action":"waf-regional:GetXssMatchSet"}
         ],
         "delete": [

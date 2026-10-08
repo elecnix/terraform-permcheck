@@ -1,9 +1,7 @@
 package provideraws
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
+	"reflect"
 	"testing"
 )
 
@@ -144,59 +142,46 @@ func refreshRoleInlinePolicies(ctx context.Context, conn *iam.Client, d *schema.
 	}
 }
 
-// TestExtractConditionGuard covers each guard form the parser reads, including
-// the d.HasChange forms and the methods that are not gates.
-func TestExtractConditionGuard(t *testing.T) {
+// TestBranchGuards covers each guard form the parser reads, the gate it puts
+// on the body and the gate it puts on the else branch, including the
+// d.HasChange forms and the methods that are not gates.
+func TestBranchGuards(t *testing.T) {
+	pres := func(a string) []condGuard { return []condGuard{{Attribute: a, Kind: ConditionPresence}} }
+	chg := func(a string) []condGuard { return []condGuard{{Attribute: a, Kind: ConditionChange}} }
 	tests := []struct {
-		src      string
-		wantAttr string
-		wantKind ConditionKind
+		src       string
+		then, els []condGuard
 	}{
-		{`if v, ok := d.GetOk("kms_key_arn"); ok { foo() }`, "kms_key_arn", ConditionPresence},
-		{`if d.Get("force_destroy").(bool) { foo() }`, "force_destroy", ConditionPresence},
-		{`if d.HasChange("permissions_boundary") { foo() }`, "permissions_boundary", ConditionChange},
-		// A negated guard runs its body when the guard is false, so it gates
-		// nothing the validator can evaluate.
-		{`if !d.HasChange("permissions_boundary") { foo() }`, "", ""},
-		{`if !d.Get("force_destroy").(bool) { foo() }`, "", ""},
-		{`if (d.HasChange("permissions_boundary")) { foo() }`, "permissions_boundary", ConditionChange},
-		// A change guard bound in the init statement gates only when the
-		// condition is the bare variable it binds. A negated or compound
-		// condition runs the body when the attribute did NOT change.
-		{`if changed := d.HasChange("x"); changed { foo() }`, "x", ConditionChange},
-		{`if changed := d.HasChange("x"); !changed { foo() }`, "", ""},
-		{`if changed := d.HasChange("x"); changed && other { foo() }`, "", ""},
-		{`if changed := d.HasChange("x"); other { foo() }`, "", ""},
-		// Only the single-attribute form is a gate: d.HasChanges spans several
-		// attributes, and recording just one of them would mis-gate the call.
-		{`if d.HasChanges("a", "b") { foo() }`, "", ""},
-		{`if err != nil { foo() }`, "", ""},
-		{`if d.HasChangesExcept("tags") { foo() }`, "", ""},
+		{`if v, ok := d.GetOk("kms_key_arn"); ok { foo() }`, pres("kms_key_arn"), nil},
+		{`if d.Get("force_destroy").(bool) { foo() }`, pres("force_destroy"), nil},
+		{`if d.HasChange("permissions_boundary") { foo() }`, chg("permissions_boundary"), nil},
+		// A negated guard runs its body when the guard is false, and its
+		// else branch when the guard holds.
+		{`if !d.HasChange("permissions_boundary") { foo() }`, nil, chg("permissions_boundary")},
+		{`if !d.Get("force_destroy").(bool) { foo() }`, nil, pres("force_destroy")},
+		{`if _, ok := d.GetOk("x"); !ok { foo() }`, nil, pres("x")},
+		{`if (d.HasChange("permissions_boundary")) { foo() }`, chg("permissions_boundary"), nil},
+		// A guard bound in the init statement gates the branch whose
+		// outcome implies it.
+		{`if changed := d.HasChange("x"); changed { foo() }`, chg("x"), nil},
+		{`if changed := d.HasChange("x"); !changed { foo() }`, nil, chg("x")},
+		{`if changed := d.HasChange("x"); changed && other { foo() }`, chg("x"), nil},
+		{`if changed := d.HasChange("x"); changed || other { foo() }`, nil, nil},
+		{`if changed := d.HasChange("x"); other { foo() }`, nil, nil},
+		{`if v, ok := d.GetOk("x"); v.(int) < 5 { foo() }`, nil, nil},
+		// d.HasChanges gates on a change to any of its attributes.
+		{`if d.HasChanges("a", "b") { foo() }`, append(chg("a"), chg("b")...), nil},
+		{`if d.HasChange("a") || d.HasChange("b") { foo() }`, append(chg("a"), chg("b")...), nil},
+		{`if err != nil { foo() }`, nil, nil},
+		{`if d.HasChangesExcept("tags") { foo() }`, nil, nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
-			src := "package x\nfunc f() {\n" + tt.src + "\n}"
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
-			if err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-
-			var gotAttr string
-			var gotKind ConditionKind
-			ast.Inspect(f, func(n ast.Node) bool {
-				if ifStmt, ok := n.(*ast.IfStmt); ok {
-					guard := extractConditionGuard(ifStmt)
-					gotAttr, gotKind = guard.Attribute, guard.Kind
-					return false
-				}
-				return true
-			})
-
-			if gotAttr != tt.wantAttr || gotKind != tt.wantKind {
-				t.Errorf("extractConditionGuard = (%q, %q), want (%q, %q)",
-					gotAttr, gotKind, tt.wantAttr, tt.wantKind)
+			ifStmt := firstIfStmt(t, "func f() {\n"+tt.src+"\n}")
+			then, els := branchGuards(ifStmt, initGuardVars(ifStmt.Init, nil), &walkContext{})
+			if !reflect.DeepEqual(then, tt.then) || !reflect.DeepEqual(els, tt.els) {
+				t.Errorf("branchGuards = (%+v, %+v), want (%+v, %+v)", then, els, tt.then, tt.els)
 			}
 		})
 	}

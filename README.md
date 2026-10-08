@@ -51,7 +51,8 @@ functions in a `schema.Resource` literal. An `@FrameworkResource`, such as
 and `Delete` as methods of the type its constructor builds. For those methods,
 a guard such as `!data.Policy.IsNull()` gates a call on the attribute that the
 field's `tfsdk` tag gives, and `!new.X.Equal(old.X)` gates it on a change.
-PermCheck reports a call under any other guard as required.
+The else branch of `data.Policy.IsNull()` takes the same gate. PermCheck
+reports a call under any other guard as required.
 
 Sometimes the source parse comes back incomplete. A create or delete function
 uses an SDK client, yet the parser finds no call that changes anything. A read
@@ -98,6 +99,14 @@ planned value and requires the permission only when the two differ. An
 attribute computed at apply time counts as changed, because the provider
 applies a diff for it. Static HCL mode has no prior state, so it reports those
 permissions; `--only-required` suppresses them.
+
+Each branch of an `if` takes the gate that its own outcome implies. The else
+branch of `if _, ok := d.GetOk("snapshot_identifier"); ok` runs when the
+attribute is not set, so it has no gate: a plain `aws_rds_cluster` still needs
+`rds:CreateDBCluster`. The else branch of a negated guard, such as
+`if !d.HasChange("x")`, runs only when `x` changes, so it takes that gate. A
+guard on several attributes, such as `d.HasChanges("a", "b")` or
+`nameOk || arnOk`, requires the permission when any one of them holds.
 
 A guard that compares the attribute's value rather than its presence — a set
 that must be non-empty, say — reads a value the provider's own default already

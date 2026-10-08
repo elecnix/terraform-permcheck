@@ -80,7 +80,10 @@ func resourceXCreate(ctx context.Context, d *schema.ResourceData, meta any) diag
 }
 
 // legacyGoldens was produced by running the same fixtures through the
-// pre-refactor parser on main, serialised with encoding/json.
+// pre-refactor parser on main, serialised with encoding/json. The else
+// branches of elseIfChain and serviceSwitch were corrected since: the legacy
+// walker gave an else branch the gate of its if, though it runs exactly when
+// that gate does not hold (#118).
 const legacyGoldens = `{
   "elseIfChain": {
     "create": [
@@ -92,12 +95,10 @@ const legacyGoldens = `{
       {
         "Action": "backup:StartBackupVaultCopyPoint",
         "Conditional": true,
-        "Condition": "primary"
+        "Condition": "secondary"
       },
       {
-        "Action": "backup:DescribeCopyPoint",
-        "Conditional": true,
-        "Condition": "primary"
+        "Action": "backup:DescribeCopyPoint"
       }
     ]
   },
@@ -156,9 +157,7 @@ const legacyGoldens = `{
         "Condition": "use_kms"
       },
       {
-        "Action": "backup:CreateBackupVault",
-        "Conditional": true,
-        "Condition": "use_kms"
+        "Action": "backup:CreateBackupVault"
       }
     ]
   }
