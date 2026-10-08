@@ -145,6 +145,41 @@ example, a policy that grants `lambda:*` on one function still passes for a
 different function, and the apply then fails with `AccessDenied`. A passing
 report is a lower bound for those cases.
 
+### Strict resource scope
+
+Pass `--strict-resources` to stop counting those unchecked grants as coverage.
+With it, PermCheck reports an action as unverified when both hold:
+
+- PermCheck can't derive the target ARN from the plan. The resource type has
+  no rule above, or its rule can't build the ARN because terraform computes a
+  value at apply time.
+- Every `Allow` statement that grants the action limits it to some resources.
+  A `Resource` list without `"*"` or `"arn:*"` limits it, and so does any
+  `NotResource` list.
+
+A grant on `"*"` still covers the action. So does a grant checked against a
+derived ARN. The same rule applies to `iam:PassRole` when the role ARN is
+unknown, and to cross-service callbacks, which PermCheck checks by action
+name only.
+
+Unverified findings count as gaps: they fail the run unless you pass
+`--exit-zero`, and config exclusions apply to them. Each output format tags
+them:
+
+- `text` lists them under their own heading, `Unverified IAM permissions`,
+  with the tag `[unverified: resource scope]` on each action.
+- `github-annotations` writes a `::warning` titled `Unverified IAM permission`
+  with the same tag.
+- `json` sets `"unverified": "resource_scope"` on each entry in `missing`.
+
+Static HCL mode reads `.tf` files and has no ARNs at all. With
+`--strict-resources`, every action that the policy grants only on some
+resources gets the unverified tag there.
+
+You can also turn the check on in the config file with
+`"strict_resources": true`. A `--strict-resources` or
+`--strict-resources=false` flag overrides the config.
+
 ### Policy evaluation
 
 PermCheck reads one policy document. `Statement` may be one object or an
@@ -216,6 +251,10 @@ directory, or pointed at with `--config`):
   exclusion to every operation.
 - **`reason`** (optional) — a note kept for the audit trail.
 
+The config file also accepts `"strict_resources": true` at the top level. It
+turns on `--strict-resources`, described in
+[Strict resource scope](#strict-resource-scope).
+
 `operations` lets you suppress a permission for one operation only, so a role
 that must never delete a resource still gets checked on create and update. An
 unknown operation name is a config error, so a typo fails the run instead of
@@ -260,13 +299,14 @@ terraform-permcheck validate \
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
+| `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | All permissions covered (or `--exit-zero` was set) |
-| 1 | Permission gaps found (details printed to stderr) |
+| 1 | Permission gaps found, unverified findings under `--strict-resources` included (details printed to stderr) |
 | 2 | Invalid input or configuration error |
 
 ### Provider source cache

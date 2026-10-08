@@ -42,6 +42,9 @@ type FormatJSONMissing struct {
 	ConditionAttribute string `json:"condition_attribute,omitempty"`
 	File               string `json:"file,omitempty"`
 	Line               int    `json:"line,omitempty"`
+	// Unverified is "resource_scope" when the policy grants the action only
+	// on some resources and the target ARN is unknown (--strict-resources).
+	Unverified string `json:"unverified,omitempty"`
 }
 
 // FormatJSON produces a machine-readable JSON representation of the
@@ -77,6 +80,9 @@ func FormatJSON(missing []MissingAction, excluded []ExcludedAction, checked int,
 				Class:              m.Class,
 				ConditionAttribute: m.ConditionAttribute,
 			}
+			if m.ResourceScopeUnverified {
+				item.Unverified = "resource_scope"
+			}
 			if locations != nil {
 				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
 				if loc, ok := locations[key]; ok {
@@ -108,7 +114,8 @@ var resourceIndexRE = regexp.MustCompile(`\[[^\]]*\]$`)
 // FormatGitHubAnnotations formats missing actions as GitHub Actions
 // ::warning:: workflow commands. Each distinct (Action, Class,
 // ConditionAttribute) group produces a single ::warning:: line listing the
-// affected resources. When locations is non-nil, the first resource in each
+// affected resources. A group unverified for resource scope gets the title
+// "Unverified IAM permission" and the [unverified: resource scope] tag. When locations is non-nil, the first resource in each
 // group that has a matching FileLocation entry (keyed by "type.name") gets
 // file= and line= parameters so GitHub surfaces the annotation inline in the
 // PR "Files changed" tab. Returns empty string when there are no missing
@@ -118,18 +125,7 @@ func FormatGitHubAnnotations(missing []MissingAction, locations map[string]FileL
 		return ""
 	}
 
-	// Group by (Action, Class, ConditionAttribute)
-	groups := make(map[missingGroupKey][]MissingAction)
-	order := make([]missingGroupKey, 0, len(missing))
-	seen := make(map[missingGroupKey]bool)
-	for _, m := range missing {
-		k := missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute}
-		groups[k] = append(groups[k], m)
-		if !seen[k] {
-			seen[k] = true
-			order = append(order, k)
-		}
-	}
+	groups, order := groupMissing(missing)
 
 	var b strings.Builder
 	for _, k := range order {
@@ -157,12 +153,17 @@ func FormatGitHubAnnotations(missing []MissingAction, locations map[string]FileL
 		if k.condition != "" {
 			msg += fmt.Sprintf(" [conditional: %s]", k.condition)
 		}
+		title := "Missing IAM permission"
+		if k.unverified {
+			msg += " " + unverifiedTag
+			title = "Unverified IAM permission"
+		}
 		msg += " needed by: " + strings.Join(msgParts, ", ")
 
 		if loc != nil {
-			b.WriteString(fmt.Sprintf("::warning file=%s,line=%d,title=Missing IAM permission::%s\n", loc.Path, loc.Line, msg))
+			b.WriteString(fmt.Sprintf("::warning file=%s,line=%d,title=%s::%s\n", loc.Path, loc.Line, title, msg))
 		} else {
-			b.WriteString(fmt.Sprintf("::warning title=Missing IAM permission::%s\n", msg))
+			b.WriteString(fmt.Sprintf("::warning title=%s::%s\n", title, msg))
 		}
 	}
 

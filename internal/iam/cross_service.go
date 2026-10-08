@@ -62,7 +62,11 @@ var crossServiceRules = map[string]crossServiceRule{
 // attribute values aren't available — every candidate callback is returned,
 // gated on the ARN attribute so the over-approximation can be suppressed with
 // --only-required.
-func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider) []MissingAction {
+//
+// The callback acts on the target resource, but coverage is checked on the
+// action alone. With strict set, a callback the policy grants only on some
+// resources is returned as unverified.
+func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider, strict bool) []MissingAction {
 	rule, ok := crossServiceRules[rc.Type]
 	if !ok {
 		return nil
@@ -75,8 +79,12 @@ func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider) []Miss
 		if targetService != "" && cb.targetService != targetService {
 			continue
 		}
+		unverified := false
 		if coversAction(policy, cb.action) {
-			continue
+			if !strict || !resourceScopeUnverified(policy, cb.action) {
+				continue
+			}
+			unverified = true
 		}
 		condAttr := ""
 		if targetService == "" {
@@ -92,6 +100,8 @@ func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider) []Miss
 			Service:            strings.Split(cb.action, ":")[0],
 			Class:              classTag(ClassManagement),
 			ConditionAttribute: condAttr,
+
+			ResourceScopeUnverified: unverified,
 		})
 	}
 	return missing
