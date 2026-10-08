@@ -1546,13 +1546,21 @@ func resourceDataGuards(expr ast.Expr) []condGuard {
 	return guards
 }
 
-// attributeName returns the attribute name an argument spells, or "".
+// attributeName returns the attribute name an argument spells, as a string
+// literal or as a constant of the provider's names package
+// (names.AttrKMSKeyID), or "".
 func attributeName(arg ast.Expr) string {
-	bl, ok := arg.(*ast.BasicLit)
-	if !ok || bl.Kind != token.STRING {
-		return ""
+	switch a := arg.(type) {
+	case *ast.BasicLit:
+		if a.Kind == token.STRING {
+			return strings.Trim(a.Value, "\"")
+		}
+	case *ast.SelectorExpr:
+		if pkg, ok := a.X.(*ast.Ident); ok && pkg.Name == "names" {
+			return namesAttrConsts[a.Sel.Name]
+		}
 	}
-	return strings.Trim(bl.Value, "\"")
+	return ""
 }
 
 // unwrapExpr strips parentheses from an expression, so a guard written as
@@ -2154,15 +2162,8 @@ func extractGetOkAttribute(expr ast.Node) string {
 		return ""
 	}
 
-	// First argument must be a string literal
 	if len(call.Args) < 1 {
 		return ""
 	}
-
-	bl, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || bl.Kind != token.STRING {
-		return ""
-	}
-
-	return strings.Trim(bl.Value, "\"")
+	return attributeName(call.Args[0])
 }

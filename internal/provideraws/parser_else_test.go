@@ -264,12 +264,37 @@ func TestElseBranch_EarlyReturn(t *testing.T) {
 // TestKinesisStreamUpdateGates is trimmed from
 // internal/service/kinesis/stream.go (provider v5.90.0). A change guard
 // inside a conjunction gates its body, and d.HasChanges gates its body on
-// a change to any of its attributes.
+// a change to any of its attributes. A names.Attr constant names the
+// attribute its value spells; an unknown one names none.
 func TestKinesisStreamUpdateGates(t *testing.T) {
 	src := `package kinesis
 
 func resourceStreamUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	conn := meta.(*conns.AWSClient).KinesisClient(ctx)
+
+	if d.HasChange(names.AttrRetentionPeriod) {
+		oraw, nraw := d.GetChange(names.AttrRetentionPeriod)
+		if n > o {
+			_, err := conn.IncreaseStreamRetentionPeriod(ctx, input)
+			if err != nil {
+				return sdkdiag.AppendErrorf(diags, "increasing: %s", err)
+			}
+		}
+	}
+
+	if v, ok := d.GetOk(names.AttrTags); ok && len(v.(map[string]any)) > 0 {
+		_, err := conn.AddTagsToStream(ctx, input)
+		if err != nil {
+			return sdkdiag.AppendErrorf(diags, "tagging: %s", err)
+		}
+	}
+
+	if d.HasChange(names.AttrNotAConstant) {
+		_, err := conn.DeleteStream(ctx, input)
+		if err != nil {
+			return sdkdiag.AppendErrorf(diags, "deleting: %s", err)
+		}
+	}
 
 	if streamMode := getStreamMode(d); streamMode == types.StreamModeProvisioned && d.HasChange("shard_count") {
 		_, err := conn.UpdateShardCount(ctx, input)
@@ -278,7 +303,7 @@ func resourceStreamUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		}
 	}
 
-	if d.HasChanges("encryption_type", "kms_key_id") {
+	if d.HasChanges("encryption_type", names.AttrKMSKeyID) {
 		switch newEncryptionType {
 		case types.EncryptionTypeKms:
 			_, err := conn.StartStreamEncryption(ctx, input)
@@ -295,6 +320,9 @@ func resourceStreamUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		t.Fatal(err)
 	}
 	checkGates(t, actions, "update", []gateCase{
+		{"kinesis:IncreaseStreamRetentionPeriod", []iam.Gate{changed("retention_period")}},
+		{"kinesis:AddTagsToStream", []iam.Gate{valued("tags")}},
+		{"kinesis:DeleteStream", always},
 		{"kinesis:UpdateShardCount", []iam.Gate{changed("shard_count")}},
 		{"kinesis:StartStreamEncryption", []iam.Gate{changed("encryption_type"), changed("kms_key_id")}},
 	})
