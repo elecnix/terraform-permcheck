@@ -133,66 +133,55 @@ func isARN(s string) bool {
 // coversResourceAction reports whether the policy covers action for the
 // resource change rc.
 //
-// When the target ARN is derivable from plan values AND the policy declares an
-// action match (exact action or service wildcard), the coverage check is
-// resource-scoped: each Allow statement that grants the action must have a
-// Resource pattern that can apply to the target. A grant scoped to a different
-// resource (e.g. PutSecretValue on secret example-a while the version targets
-// secret example-b) does not cover.
-//
-// When the target ARN can't be derived (unknown values, static HCL mode,
-// resource types without a rule) — or the policy isn't a *PolicyDocument —
-// coverage falls back to the legacy action-only matching (exact action or
-// service wildcard). This preserves today's behavior wherever the target is
-// unknown, per the resource-scope design: only provable non-coverage is
-// reported.
+// When the target ARN is derivable from plan values, the coverage check is
+// resource-scoped: see CoversTarget. When the target ARN can't be derived
+// (unknown values, static HCL mode, resource types without a rule) — or the
+// policy isn't a *PolicyDocument — coverage falls back to action-only
+// matching. This preserves today's behavior wherever the target is unknown,
+// per the resource-scope design: only provable non-coverage is reported.
 func coversResourceAction(policy AllowedProvider, action string, rc *plan.ResourceChange, all []*plan.ResourceChange) bool {
-	if !policy.Covers(action) {
-		service := strings.Split(action, ":")[0]
-		if !policy.Covers(service + ":*") {
-			return false
-		}
-	}
-
-	doc, ok := policy.(*PolicyDocument)
-	if !ok {
-		// Non-policy provider (test doubles, future formats): no resource
-		// constraints to check, action coverage is all there is.
-		return true
-	}
-
-	targets := resourceTargetARNs(rc, all)
-	if len(targets) == 0 {
-		// Target unknown — cannot prove the grant is scoped elsewhere.
-		return true
-	}
-	return doc.CoversTarget(action, targets)
+	return coversActionOnTargets(policy, action, resourceTargetARNs(rc, all))
 }
 
 // CoversTarget reports whether the policy grants action for a resource whose
-// ARN matches any of the target patterns. For every Allow statement that
-// grants the action, each of its Resource patterns is tested against each
-// target pattern via arnIntersect. A statement whose Resource provably cannot
-// apply to the target (e.g. a grant on a different secret) does not count as
-// covering it; any pattern pair whose overlap can't be decided counts as
-// coverage — we only fail on provable non-overlap.
+// ARN matches any of the target patterns.
+//
+// For each target, an Allow statement that names the action covers it unless
+// its Resource provably cannot apply to the target (e.g. a grant on a
+// different secret) or its NotResource provably contains the target. Any
+// pattern pair whose overlap can't be decided counts as coverage.
+//
+// A Deny statement that names the action overrides the Allow only when it
+// provably applies to the whole target pattern and has no Condition. A Deny
+// that only overlaps the target, or whose Condition the tool cannot evaluate,
+// does not count: we only fail on provable non-coverage.
 func (d *PolicyDocument) CoversTarget(action string, targets []string) bool {
-	for _, s := range d.Statements {
-		if s.Effect != "Allow" {
-			continue
-		}
-		if !coversAny(s.Action, action) {
-			continue
-		}
-		for _, res := range s.Resource {
-			for _, t := range targets {
-				if arnIntersect(res, t) {
-					return true
-				}
-			}
+	for _, t := range targets {
+		if d.coversOneTarget(action, t) {
+			return true
 		}
 	}
 	return false
+}
+
+func (d *PolicyDocument) coversOneTarget(action, target string) bool {
+	allowed := false
+	for _, s := range d.Statements {
+		if !s.matchesAction(action) {
+			continue
+		}
+		switch s.Effect {
+		case "Deny":
+			if !s.conditional() && s.appliesToAll(target) {
+				return false
+			}
+		case "Allow":
+			if s.mayApplyTo(target) {
+				allowed = true
+			}
+		}
+	}
+	return allowed
 }
 
 // arnIntersect reports whether two ARN patterns can match a common ARN.
