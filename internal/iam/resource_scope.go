@@ -140,10 +140,12 @@ func logGroupARNPatterns(name string) []string {
 }
 
 // secretARPattern builds the ARN pattern for a secretsmanager secret named
-// name. AWS appends a randomized 6-character suffix after the name, so the
-// pattern matches `name-*`.
+// name. AWS appends a hyphen and six random characters to the name, so the
+// pattern matches `name-??????`. A pattern of `name-*` would also match the
+// secrets named name-<anything>, so a grant on app-production-* would count
+// for the secret app.
 func secretARPattern(name string) string {
-	return "arn:*:secretsmanager:*:*:secret:" + name + "-*"
+	return "arn:*:secretsmanager:*:*:secret:" + name + "-??????"
 }
 
 // isARN reports whether the string is a well-formed AWS ARN.

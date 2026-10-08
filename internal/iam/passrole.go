@@ -74,10 +74,25 @@ func roleTargets(rc *plan.ResourceChange, attr string, all []*plan.ResourceChang
 	}
 	var targets [][]string
 	for _, c := range referencedChanges(rc, all, attr, "aws_iam_role") {
-		// The leading * lets the pattern match a role under a path.
-		if name := c.AttributeValues["name"]; name != "" {
-			targets = append(targets, []string{"arn:*:iam::*:role/*" + name})
+		if forms := roleARNPatterns(c); forms != nil {
+			targets = append(targets, forms)
 		}
 	}
 	return targets
+}
+
+// roleARNPatterns builds the ARN patterns of a planned role from its path and
+// name: role/<path><name>, where the path starts and ends with a slash. When
+// the path is unknown, the role may sit at the root or under any path. It
+// returns nil when the name is unknown.
+func roleARNPatterns(role *plan.ResourceChange) []string {
+	name := role.AttributeValues["name"]
+	if name == "" {
+		return nil
+	}
+	const prefix = "arn:*:iam::*:role"
+	if path := role.AttributeValues["path"]; path != "" {
+		return []string{prefix + path + name}
+	}
+	return []string{prefix + "/" + name, prefix + "/*/" + name}
 }

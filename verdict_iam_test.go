@@ -102,6 +102,17 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			present: []string{"aws_lambda_function.admin iam:PassRole"},
 			absent:  []string{"aws_lambda_function.basic iam:PassRole"},
 		},
+		{
+			// A grant on app-production-* does not reach the secret app,
+			// whose ARN ends in app- and six random characters.
+			name: "secret suffix", plan: "secret_plan.json", policy: "secret_policy.json",
+			present: []string{"aws_secretsmanager_secret.s secretsmanager:CreateSecret"},
+		},
+		{
+			// A PassRole grant on role/myapp does not reach the role app.
+			name: "role ARN from path and name", plan: "passrole_name_plan.json", policy: "passrole_name_policy.json",
+			present: []string{"aws_lambda_function.f iam:PassRole"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { runVerdictCase(t, c) })
