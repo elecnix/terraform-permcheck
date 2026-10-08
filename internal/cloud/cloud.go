@@ -20,6 +20,12 @@ type Schema struct {
 	// carries a default, so the call only runs when the author configured it.
 	ValueConditional map[string]map[string]bool
 
+	// BestEffort marks the actions whose failure the provider ignores
+	// (op → action → true): it discards the call's error, or makes the call
+	// only to clean up after an operation that already failed. A policy that
+	// denies such an action does not make the apply fail.
+	BestEffort map[string]map[string]bool
+
 	// Incomplete names the operations whose permissions the provider could
 	// not fully determine, such as a create in which the provider-source
 	// parser found no call that creates anything. ChainProvider merges in a
@@ -49,6 +55,12 @@ func (s *Schema) GetChangeGated() map[string]map[string]string {
 // value (implements iam.SchemaLike).
 func (s *Schema) GetValueConditional() map[string]map[string]bool {
 	return s.ValueConditional
+}
+
+// GetBestEffort returns the actions whose failure the provider ignores
+// (implements iam.SchemaLike).
+func (s *Schema) GetBestEffort() map[string]map[string]bool {
+	return s.BestEffort
 }
 
 // Provider resolves cloud resource types to their required IAM permissions.
@@ -134,6 +146,7 @@ func (s *Schema) clone() *Schema {
 	out.Conditional = cloneNested(s.Conditional)
 	out.ChangeGated = cloneNested(s.ChangeGated)
 	out.ValueConditional = cloneNested(s.ValueConditional)
+	out.BestEffort = cloneNested(s.BestEffort)
 	out.Incomplete = make(map[string]bool, len(s.Incomplete))
 	for op, v := range s.Incomplete {
 		out.Incomplete[op] = v
@@ -158,6 +171,7 @@ func (s *Schema) mergeOperation(op string, fallback *Schema) {
 		copyGate(&s.Conditional, fallback.Conditional, op, a)
 		copyGate(&s.ChangeGated, fallback.ChangeGated, op, a)
 		copyGate(&s.ValueConditional, fallback.ValueConditional, op, a)
+		copyGate(&s.BestEffort, fallback.BestEffort, op, a)
 	}
 	delete(s.Incomplete, op)
 }

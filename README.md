@@ -85,6 +85,15 @@ not write is one holding a default, and the call does not run. With no
 configuration to read — static HCL mode — both kinds of guard fall back to
 presence and the permission is reported.
 
+Some calls can fail without failing the apply. The provider discards their
+error (`out, _ := conn.GetX(...)`, `if v, err := f(); err == nil`), swallows it
+(`if err != nil { return sseList }`), or makes the call only to clean up after
+an earlier call failed (`if err != nil { deleteRole(...); return err }`). The
+`aws_dynamodb_table` read, for example, looks up the account's default
+DynamoDB KMS key and keeps its state as it is when the lookup fails. PermCheck
+reports these calls as `[optional]`, so the default filter drops them and
+`--no-filter` shows them.
+
 ### Cross-service callback permissions
 
 Some AWS APIs require an IAM action from a *different* service than the one the

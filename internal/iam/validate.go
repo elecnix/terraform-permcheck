@@ -231,6 +231,10 @@ type SchemaLike interface {
 	// compared by value, so its default keeps the guard satisfied on its own.
 	// Such an action is only required when the author configured the attribute.
 	GetValueConditional() map[string]map[string]bool
+	// GetBestEffort maps op → action → true when the provider ignores the
+	// action's failure. Such an action is never required: it is classed
+	// optional.
+	GetBestEffort() map[string]map[string]bool
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -283,6 +287,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		conditional := schema.GetConditional()[op]
 		changeGated := schema.GetChangeGated()[op]
 		valueConditional := schema.GetValueConditional()[op]
+		bestEffort := schema.GetBestEffort()[op]
 
 		for _, action := range required {
 			condAttr := conditional[action]
@@ -318,6 +323,11 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 
 			// Classify and optionally filter
 			class := classifyResourcePermission(rc.Type, action)
+			// A call whose failure the provider ignores cannot fail the
+			// apply, so it is optional whatever its action.
+			if bestEffort[action] && class == ClassManagement {
+				class = ClassOptional
+			}
 			if filter.ExcludeDataPlane && class == ClassDataPlane {
 				continue
 			}

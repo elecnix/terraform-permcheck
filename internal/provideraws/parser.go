@@ -45,7 +45,26 @@ type ExtractedAction struct {
 	// a defaulted scalar is usually non-zero, which would make the call
 	// required, so presence stays the gate there.
 	ValueGuarded bool
+
+	// BestEffort is true when the provider ignores the call's failure: it
+	// discards the error, or makes the call only on the path that handles an
+	// earlier failure. A denied best-effort call does not fail the apply.
+	BestEffort bool
 }
+
+// discardKind says how a call site drops the error its callee returns.
+type discardKind int
+
+const (
+	discardNone discardKind = iota
+	// discardAlways: the syntax shows the error is dropped, as in
+	// `if v, err := f(); err == nil { ... }`.
+	discardAlways
+	// discardIfError: the call drops its last result, as in `f(...)` as a
+	// statement or `x, _ := f(...)`. It drops an error only when the callee's
+	// last result is one.
+	discardIfError
+)
 
 // helperCall records a call to a function of the same package and the
 // conditional context at the call site (e.g., if d.GetOk("replica") {
@@ -55,6 +74,8 @@ type helperCall struct {
 	Name       string        // helper function name
 	CondReason string        // attribute from call-site d.GetOk/d.Get/d.HasChange guard, empty if unconditional
 	CondKind   ConditionKind // kind of the call-site guard, empty if unconditional
+	BestEffort bool          // the call site sits on a path that handles a failure
+	Discard    discardKind   // how the call site drops the callee's error
 }
 
 // ParseResourceFile parses a Go source file from the terraform-provider-aws
@@ -67,6 +88,9 @@ type helperCall struct {
 // - Calls to other functions of the file, followed transitively:
 // retryCreateRole(ctx, conn, ...) → conn.CreateRole, and Create returning
 // Read includes the Read permissions
+// - Calls whose failure the provider ignores, marked BestEffort: a discarded
+// or swallowed error, or a cleanup in the branch that returns an earlier
+// failure
 //
 // Returns all actions (both unconditional and conditional) as plain strings.
 func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
@@ -317,6 +341,10 @@ type pkgIndex struct {
 	memo       map[string][]ExtractedAction
 	inProgress map[string]bool
 
+	// errResult names the functions whose last result is an error, so a
+	// call site that drops that result drops the error.
+	errResult map[string]bool
+
 	// clients names the functions that obtain or receive an SDK client
 	// themselves; reach memoizes reachesClient.
 	clients map[string]bool
@@ -335,6 +363,7 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 		calls:      make(map[string][]helperCall),
 		memo:       make(map[string][]ExtractedAction),
 		inProgress: make(map[string]bool),
+		errResult:  make(map[string]bool),
 		clients:    make(map[string]bool),
 		reach:      make(map[string]bool),
 	}
@@ -359,6 +388,7 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 			decls[fd.Name.Name] = declared{fd, imports}
 			idx.funcs[fd.Name.Name] = true
 			idx.plain[fd.Name.Name] = fd.Recv == nil
+			idx.errResult[fd.Name.Name] = lastResultIsError(fd.Type.Results)
 		}
 	}
 	// exports.go publishes unexported helpers to other packages as
@@ -369,6 +399,7 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 				idx.funcs[alias] = true
 				idx.plain[alias] = true
 				idx.calls[alias] = []helperCall{{Name: target}}
+				idx.errResult[alias] = idx.errResult[target]
 			}
 		}
 	}
@@ -511,7 +542,14 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 				continue
 			}
 		}
+		// A failure the call site ignores makes every action reached only
+		// through it best-effort.
+		bestEffort := hc.BestEffort || hc.Discard == discardAlways ||
+			(hc.Discard == discardIfError && target.errResult[hc.Name])
 		for _, ea := range target.resolve(hc.Name) {
+			if bestEffort {
+				ea.BestEffort = true
+			}
 			if hc.CondReason != "" && ea.Condition == "" {
 				ea.Conditional = true
 				ea.Condition = hc.CondReason
@@ -542,6 +580,35 @@ type walkContext struct {
 	// valueGuard is the attribute from the innermost value-comparison guard,
 	// empty when the call is not under one.
 	valueGuard string
+
+	// bestEffort is true on a path that only runs after a call failed and
+	// that returns the failure, such as the cleanup in
+	// `if err != nil { deleteRole(...); return err }`.
+	bestEffort bool
+
+	// discarded is the call whose error the enclosing statement drops, and
+	// discard says how; nil when the statement drops none.
+	discarded *ast.CallExpr
+	discard   discardKind
+
+	// results are the result types of the function or closure being walked.
+	results *ast.FieldList
+}
+
+// withDiscard walks call as a call whose error its statement drops.
+func withDiscard(call *ast.CallExpr, kind discardKind, ctx *walkContext, obs walker) {
+	prevCall, prevKind := ctx.discarded, ctx.discard
+	ctx.discarded, ctx.discard = call, kind
+	walkBody(call, ctx, obs)
+	ctx.discarded, ctx.discard = prevCall, prevKind
+}
+
+// discardOf returns how the statement being walked drops call's error.
+func (c *walkContext) discardOf(call *ast.CallExpr) discardKind {
+	if call == c.discarded {
+		return c.discard
+	}
+	return discardNone
 }
 
 // bindConn records that variable name holds a client for service.
@@ -584,12 +651,16 @@ func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	if action == "" {
 		return false
 	}
+	// An SDK client method always returns an error last, so a statement
+	// that drops the last result drops the error.
+	discarded := ctx.discardOf(call) != discardNone && isClientMethodCall(call, ctx.conns)
 	o.actions = append(o.actions, ExtractedAction{
 		Action:        action,
 		Conditional:   ctx.condDepth > 0,
 		Condition:     ctx.condReason,
 		ConditionKind: ctx.condKind,
 		ValueGuarded:  ctx.valueGuard != "",
+		BestEffort:    ctx.bestEffort || discarded,
 	})
 	return true
 }
@@ -612,8 +683,14 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		saved := *ctx
 
 		// The init statement and the condition run whether or not the body
-		// does, so they are walked in the enclosing context.
-		walkBody(n.Init, ctx, obs)
+		// does, so they are walked in the enclosing context. A call in the
+		// init whose error the if-statement only uses to skip the body, or
+		// swallows, is dropped.
+		if call := initErrorDropped(n, ctx.results); call != nil {
+			walkAssign(n.Init.(*ast.AssignStmt), call, discardAlways, ctx, obs)
+		} else {
+			walkBody(n.Init, ctx, obs)
+		}
 		walkBody(n.Cond, ctx, obs)
 
 		// A guard here is one of three kinds: presence (d.GetOk/d.Get), change
@@ -640,8 +717,14 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 			}
 		}
 
-		// The body is walked in the guard's conditional context.
+		// The body is walked in the guard's conditional context. The body of
+		// a branch that handles a failed call and returns the failure runs
+		// only when the apply is already failing.
+		if isFailureBranch(n, ctx.results) {
+			ctx.bestEffort = true
+		}
 		walkBody(n.Body, ctx, obs)
+		ctx.bestEffort = saved.bestEffort
 
 		// The else branch (including an else-if chain) is walked in the same
 		// context, except after a d.HasChange guard: that branch runs when the
@@ -656,17 +739,33 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		*ctx = saved
 
 	case *ast.AssignStmt:
-		// Install a new connection scope, as in
-		// conn := meta.(*conns.AWSClient).BackupClient(ctx).
-		if svc, conn := findClientAssignment(n); svc != "" {
-			ctx.bindConn(conn, svc)
+		// `x, _ := f()` drops f's last result.
+		if call := blankLastResult(n); call != nil {
+			walkAssign(n, call, discardIfError, ctx, obs)
+		} else {
+			walkAssign(n, nil, discardNone, ctx, obs)
 		}
-		for _, expr := range n.Lhs {
+
+	case *ast.ExprStmt:
+		// A call made as a statement drops every result it returns.
+		if call, ok := unwrapExpr(n.X).(*ast.CallExpr); ok {
+			withDiscard(call, discardIfError, ctx, obs)
+			return
+		}
+		walkBody(n.X, ctx, obs)
+
+	case *ast.BlockStmt:
+		walkStmts(n.List, ctx, obs)
+
+	case *ast.CaseClause:
+		for _, expr := range n.List {
 			walkBody(expr, ctx, obs)
 		}
-		for _, expr := range n.Rhs {
-			walkBody(expr, ctx, obs)
-		}
+		walkStmts(n.Body, ctx, obs)
+
+	case *ast.CommClause:
+		walkBody(n.Comm, ctx, obs)
+		walkStmts(n.Body, ctx, obs)
 
 	case *ast.CallExpr:
 		if obs.onCall(n, ctx) {
@@ -714,6 +813,7 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		// variables it binds stay inside it.
 		saved := *ctx
 		bindConnParams(n.Type, ctx)
+		ctx.results = n.Type.Results
 		walkBody(n.Body, ctx, obs)
 		*ctx = saved
 
@@ -729,6 +829,306 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 			return false
 		})
 	}
+}
+
+// walkAssign walks an assignment, binding the client it assigns, if any.
+// When call is not nil, it is the right-hand call whose error the statement
+// drops, the way kind says.
+func walkAssign(n *ast.AssignStmt, call *ast.CallExpr, kind discardKind, ctx *walkContext, obs walker) {
+	// Install a new connection scope, as in
+	// conn := meta.(*conns.AWSClient).BackupClient(ctx).
+	if svc, conn := findClientAssignment(n); svc != "" {
+		ctx.bindConn(conn, svc)
+	}
+	for _, expr := range n.Lhs {
+		walkBody(expr, ctx, obs)
+	}
+	for _, expr := range n.Rhs {
+		if c, ok := unwrapExpr(expr).(*ast.CallExpr); ok && c == call {
+			withDiscard(c, kind, ctx, obs)
+			continue
+		}
+		walkBody(expr, ctx, obs)
+	}
+}
+
+// walkStmts walks a statement list. An assignment that binds a call's error
+// and is followed by a guard that swallows it, as in
+//
+//	dk, err := kms.FindDefaultKeyARNForService(...)
+//	if err != nil {
+//		return sseList
+//	}
+//
+// drops that error.
+func walkStmts(list []ast.Stmt, ctx *walkContext, obs walker) {
+	for i, stmt := range list {
+		assign, ok := stmt.(*ast.AssignStmt)
+		if ok && i+1 < len(list) {
+			if call, errName := errorBinding(assign); call != nil {
+				if next, ok := list[i+1].(*ast.IfStmt); ok && next.Init == nil && swallowsError(next, errName, ctx.results) {
+					walkAssign(assign, call, discardAlways, ctx, obs)
+					continue
+				}
+			}
+		}
+		walkBody(stmt, ctx, obs)
+	}
+}
+
+// errorBinding returns the call of an assignment such as `x, err := f()` and
+// the name of the error variable it binds last, or nil when the assignment
+// binds no error from a single call.
+func errorBinding(assign *ast.AssignStmt) (*ast.CallExpr, string) {
+	if len(assign.Rhs) != 1 || len(assign.Lhs) == 0 {
+		return nil, ""
+	}
+	call, ok := unwrapExpr(assign.Rhs[0]).(*ast.CallExpr)
+	if !ok {
+		return nil, ""
+	}
+	last, ok := assign.Lhs[len(assign.Lhs)-1].(*ast.Ident)
+	if !ok || !isErrorName(last.Name) {
+		return nil, ""
+	}
+	return call, last.Name
+}
+
+// isErrorName reports whether a variable name reads like an error: err,
+// derr, putErr.
+func isErrorName(name string) bool {
+	return strings.HasSuffix(strings.ToLower(name), "err")
+}
+
+// blankLastResult returns the call of an assignment that discards the call's
+// last result, as in `x, _ := f()` or `_ = f()`, or nil.
+func blankLastResult(assign *ast.AssignStmt) *ast.CallExpr {
+	if len(assign.Rhs) != 1 || len(assign.Lhs) == 0 {
+		return nil
+	}
+	call, ok := unwrapExpr(assign.Rhs[0]).(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+	if last, ok := assign.Lhs[len(assign.Lhs)-1].(*ast.Ident); !ok || last.Name != "_" {
+		return nil
+	}
+	return call
+}
+
+// initErrorDropped returns the call in an if-statement's init whose error the
+// statement drops, or nil. It drops the error when it only tests it to skip
+// the body, as in `if v, err := f(); err == nil { ... }` with no else branch,
+// or when the body swallows it.
+func initErrorDropped(n *ast.IfStmt, results *ast.FieldList) *ast.CallExpr {
+	assign, ok := n.Init.(*ast.AssignStmt)
+	if !ok || assign.Tok != token.DEFINE {
+		return nil
+	}
+	call, errName := errorBinding(assign)
+	if call == nil {
+		return nil
+	}
+	if n.Else == nil && condTestsNoError(n.Cond, errName) {
+		return call
+	}
+	if swallowsError(n, errName, results) {
+		return call
+	}
+	return nil
+}
+
+// condTestsNoError reports whether cond is `err == nil`, alone or as an
+// operand of &&.
+func condTestsNoError(cond ast.Expr, errName string) bool {
+	bin, ok := unwrapExpr(cond).(*ast.BinaryExpr)
+	if !ok {
+		return false
+	}
+	if bin.Op == token.LAND {
+		return condTestsNoError(bin.X, errName) || condTestsNoError(bin.Y, errName)
+	}
+	return bin.Op == token.EQL && comparesToNil(bin, errName)
+}
+
+// testsError returns the name of the error variable cond tests in the form
+// `err != nil`, or "".
+func testsError(cond ast.Expr) string {
+	bin, ok := unwrapExpr(cond).(*ast.BinaryExpr)
+	if !ok || bin.Op != token.NEQ {
+		return ""
+	}
+	for _, side := range []ast.Expr{bin.X, bin.Y} {
+		if id, ok := side.(*ast.Ident); ok && id.Name != "nil" && isErrorName(id.Name) && comparesToNil(bin, id.Name) {
+			return id.Name
+		}
+	}
+	return ""
+}
+
+// comparesToNil reports whether a comparison sets name against nil.
+func comparesToNil(bin *ast.BinaryExpr, name string) bool {
+	isIdent := func(e ast.Expr, n string) bool {
+		id, ok := e.(*ast.Ident)
+		return ok && id.Name == n
+	}
+	return (isIdent(bin.X, name) && isIdent(bin.Y, "nil")) || (isIdent(bin.X, "nil") && isIdent(bin.Y, name))
+}
+
+// swallowsError reports whether an if-statement `if err != nil { ... }`
+// handles the error by leaving without it: the body never names the error
+// and ends in a return, continue or break, and every return in it reports no
+// failure (see successReturn). The call that set the error then cannot fail
+// the apply.
+func swallowsError(n *ast.IfStmt, errName string, results *ast.FieldList) bool {
+	if n.Else != nil || errName == "" || testsError(n.Cond) != errName {
+		return false
+	}
+	if len(n.Body.List) == 0 || mentions(n.Body, errName) {
+		return false
+	}
+	switch last := n.Body.List[len(n.Body.List)-1].(type) {
+	case *ast.ReturnStmt:
+	case *ast.BranchStmt:
+		if last.Tok == token.GOTO || last.Tok == token.FALLTHROUGH {
+			return false
+		}
+	default:
+		return false
+	}
+	ok := true
+	inspectSkippingFuncLits(n.Body, func(node ast.Node) {
+		if ret, isRet := node.(*ast.ReturnStmt); isRet && !successReturn(ret, results) {
+			ok = false
+		}
+	})
+	return ok
+}
+
+// isFailureBranch reports whether an if-statement is a branch that handles a
+// failed call and returns the failure, as in
+//
+//	if err := addRoleInlinePolicies(...); err != nil {
+//		deleteRole(...)
+//		return sdkdiag.AppendErrorf(diags, "...: %s", err)
+//	}
+//
+// The body ends in a return that reports a failure, and it does not test the
+// error further: a body that tells errors apart, such as one that creates
+// what a find did not find, can lead to a successful apply.
+func isFailureBranch(n *ast.IfStmt, results *ast.FieldList) bool {
+	errName := testsError(n.Cond)
+	if errName == "" || len(n.Body.List) == 0 {
+		return false
+	}
+	ret, ok := n.Body.List[len(n.Body.List)-1].(*ast.ReturnStmt)
+	if !ok || successReturn(ret, results) {
+		return false
+	}
+	tests := false
+	inspectSkippingFuncLits(n.Body, func(node ast.Node) {
+		if inner, ok := node.(*ast.IfStmt); ok && (mentions(inner.Cond, errName) || mentions(inner.Init, errName)) {
+			tests = true
+		}
+	})
+	return !tests
+}
+
+// successReturn reports whether a return statement reports no failure: it
+// returns nil in every error position, and a plain variable (diags, not a
+// call that appends to it) in every diag.Diagnostics position. A bare return
+// counts only when the function has no results.
+func successReturn(ret *ast.ReturnStmt, results *ast.FieldList) bool {
+	types := resultTypes(results)
+	if len(ret.Results) == 0 {
+		return len(types) == 0
+	}
+	if len(ret.Results) != len(types) {
+		return false
+	}
+	for i, t := range types {
+		switch {
+		case isErrorType(t):
+			if id, ok := ret.Results[i].(*ast.Ident); !ok || id.Name != "nil" {
+				return false
+			}
+		case isDiagnosticsType(t):
+			if _, ok := ret.Results[i].(*ast.Ident); !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// resultTypes lists a function's result types, one per result.
+func resultTypes(results *ast.FieldList) []ast.Expr {
+	if results == nil {
+		return nil
+	}
+	var out []ast.Expr
+	for _, f := range results.List {
+		n := len(f.Names)
+		if n == 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			out = append(out, f.Type)
+		}
+	}
+	return out
+}
+
+// lastResultIsError reports whether a function's last result is an error.
+func lastResultIsError(results *ast.FieldList) bool {
+	types := resultTypes(results)
+	return len(types) > 0 && isErrorType(types[len(types)-1])
+}
+
+func isErrorType(t ast.Expr) bool {
+	id, ok := t.(*ast.Ident)
+	return ok && id.Name == "error"
+}
+
+func isDiagnosticsType(t ast.Expr) bool {
+	sel, ok := t.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Diagnostics"
+}
+
+// mentions reports whether node names the identifier name.
+func mentions(node ast.Node, name string) bool {
+	if node == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// inspectSkippingFuncLits calls f for every node under root, except the
+// bodies of closures, whose statements belong to another function.
+func inspectSkippingFuncLits(root ast.Node, f func(ast.Node)) {
+	ast.Inspect(root, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		if n != nil {
+			f(n)
+		}
+		return true
+	})
+}
+
+// isClientMethodCall reports whether a call is a method of an SDK client,
+// such as conn.DeleteRole(ctx, input), which returns an error last.
+func isClientMethodCall(call *ast.CallExpr, conns map[string]string) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && clientService(sel.X, conns) != ""
 }
 
 // condGuard is a gating attribute found on an if-statement, with the kind of
@@ -1322,6 +1722,15 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 				if out[i].Action != ea.Action {
 					continue
 				}
+				// A path whose failure counts decides the action: its gates
+				// replace those of best-effort paths, which a best-effort
+				// path never loosens.
+				if out[i].BestEffort != ea.BestEffort {
+					if out[i].BestEffort {
+						out[i] = ea
+					}
+					continue
+				}
 				// A path that is not value-guarded needs the attribute's
 				// configuration, so the default no longer covers the action.
 				if !ea.ValueGuarded {
@@ -1346,7 +1755,7 @@ func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) []ExtractedAction {
 	if fd.Body == nil {
 		return nil
 	}
-	ctx := &walkContext{}
+	ctx := &walkContext{results: fd.Type.Results}
 	bindConnParams(fd.Type, ctx)
 	obs := &sdkCallObserver{}
 	walkBody(fd.Body, ctx, obs)
@@ -1423,7 +1832,7 @@ func findHelperCalls(fd *ast.FuncDecl, idx *pkgIndex, imports map[string]string)
 	if fd.Body == nil {
 		return nil
 	}
-	ctx := &walkContext{}
+	ctx := &walkContext{results: fd.Type.Results}
 	bindConnParams(fd.Type, ctx)
 	obs := &helperCallObserver{idx: idx, imports: imports}
 	walkBody(fd.Body, ctx, obs)
@@ -1444,7 +1853,7 @@ type helperCallObserver struct {
 // further helper calls or closures that make some.
 func (o *helperCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	if pkg, name := o.callee(call, ctx); name != "" {
-		o.record(pkg, name, ctx)
+		o.record(pkg, name, ctx.discardOf(call), ctx)
 	}
 	return false
 }
@@ -1453,12 +1862,16 @@ func (o *helperCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 // routeFinder = findRouteByIPv4Destination: the code calls it later.
 func (o *helperCallObserver) onFuncRef(ident *ast.Ident, ctx *walkContext) {
 	if o.idx.hasPlain(ident.Name) {
-		o.record("", ident.Name, ctx)
+		o.record("", ident.Name, discardNone, ctx)
 	}
 }
 
-func (o *helperCallObserver) record(pkg, name string, ctx *walkContext) {
-	o.helpers = append(o.helpers, helperCall{Pkg: pkg, Name: name, CondReason: ctx.condReason, CondKind: ctx.condKind})
+func (o *helperCallObserver) record(pkg, name string, discard discardKind, ctx *walkContext) {
+	o.helpers = append(o.helpers, helperCall{
+		Pkg: pkg, Name: name,
+		CondReason: ctx.condReason, CondKind: ctx.condKind,
+		BestEffort: ctx.bestEffort, Discard: discard,
+	})
 }
 
 // callee returns the function a call invokes, with the service package it

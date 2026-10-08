@@ -284,6 +284,7 @@ func (r resourceFile) schema() *cloud.Schema {
 		Conditional:      make(map[string]map[string]string),
 		ChangeGated:      make(map[string]map[string]string),
 		ValueConditional: make(map[string]map[string]bool),
+		BestEffort:       make(map[string]map[string]bool),
 	}
 
 	for op, eas := range actions {
@@ -291,8 +292,12 @@ func (r resourceFile) schema() *cloud.Schema {
 		conds := make(map[string]string, len(eas))
 		changes := make(map[string]string, len(eas))
 		valueConds := make(map[string]bool, len(eas))
+		bestEffort := make(map[string]bool)
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
+			if ea.BestEffort {
+				bestEffort[ea.Action] = true
+			}
 			if !ea.Conditional || ea.Condition == "" {
 				continue
 			}
@@ -315,6 +320,9 @@ func (r resourceFile) schema() *cloud.Schema {
 		}
 		if len(valueConds) > 0 {
 			schema.ValueConditional[op] = valueConds
+		}
+		if len(bestEffort) > 0 {
+			schema.BestEffort[op] = bestEffort
 		}
 	}
 
@@ -362,6 +370,9 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 			schema.Permissions[op] = append(schema.Permissions[op], action)
 			existing[action] = true
 		}
+		// Transparent tagging checks this call's error, whatever the
+		// resource's own functions do with theirs.
+		delete(schema.BestEffort[op], action)
 	}
 }
 
@@ -384,6 +395,7 @@ func addTagActions(schema *cloud.Schema, op string, actions []string) {
 			existing[action] = true
 		}
 		schema.Conditional[op][action] = "tags"
+		delete(schema.BestEffort[op], action)
 	}
 }
 

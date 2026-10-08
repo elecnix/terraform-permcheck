@@ -996,10 +996,22 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 		{Action: "backup:GetBackupVault"},
 	}
 
-	got := actions["create"]
+	got := ignoreErrorHandling(actions["create"])
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("create actions mismatch\n got: %s\nwant: %s", formatActions(got), formatActions(want))
 	}
+}
+
+// ignoreErrorHandling clears BestEffort. The traversal tests write their calls
+// without error handling, so their calls would read as best-effort;
+// parser_besteffort_test.go covers that.
+func ignoreErrorHandling(actions []ExtractedAction) []ExtractedAction {
+	out := make([]ExtractedAction, len(actions))
+	for i, a := range actions {
+		a.BestEffort = false
+		out[i] = a
+	}
+	return out
 }
 
 func formatActions(actions []ExtractedAction) string {
@@ -1161,6 +1173,9 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 	}
 
 	got := findHelperCalls(fd, newPkgIndex([]*ast.File{f}), nil)
+	for i := range got {
+		got[i].BestEffort, got[i].Discard = false, discardNone
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("helper calls mismatch\n got: %+v\nwant: %+v", got, want)
 	}
@@ -1207,7 +1222,7 @@ func TestParseResourceFileStructured_PlainIfRestoresConnScope(t *testing.T) {
 		{Action: "backup:CreateBackupVault"},
 	}
 
-	got := actions["create"]
+	got := ignoreErrorHandling(actions["create"])
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("create actions mismatch\n got: %s\nwant: %s", formatActions(got), formatActions(want))
 	}
