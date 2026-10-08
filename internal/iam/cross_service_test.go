@@ -120,14 +120,37 @@ func TestCrossServiceMissing_CoveredByWildcard(t *testing.T) {
 	}
 }
 
-func TestCrossServiceMissing_KnownUnmappedTarget(t *testing.T) {
-	// A target service we don't have a callback mapping for → no callback.
+// TestCrossServiceMissing_LiteralTargets checks the callback each target
+// service needs, from the AWS WAF Developer Guide, "Permissions for
+// AssociateWebACL".
+func TestCrossServiceMissing_LiteralTargets(t *testing.T) {
+	cases := map[string]string{
+		"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_abc":                       "cognito-idp:AssociateWebACL",
+		"arn:aws:apprunner:us-east-1:123456789012:service/web/8fe1e10304f84fd2b0df550fe98a71fa":   "apprunner:AssociateWebAcl",
+		"arn:aws:ec2:us-east-1:123456789012:verified-access-instance/vai-0ce000c0b7643abea":       "ec2:AssociateVerifiedAccessInstanceWebAcl",
+		"arn:aws:appsync:us-east-1:123456789012:apis/abcdefghijklmnopqrstuvwxyz":                  "appsync:SetWebACL",
+		"arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-lb/50dc6c495c0c": "elasticloadbalancing:SetWebACL",
+	}
+	for arn, want := range cases {
+		rc := &plan.ResourceChange{
+			Type: "aws_wafv2_web_acl_association", Name: "this", Change: "create",
+			AttributeValues: map[string]string{"resource_arn": arn},
+		}
+		missing := impliedMissing(rc, grantNothing(), nil, false)
+		if len(missing) != 1 || missing[0].Action != want {
+			t.Errorf("%s: want only %s, got %+v", arn, want, missing)
+		}
+	}
+}
+
+func TestCrossServiceMissing_UnmappedTarget(t *testing.T) {
+	// A target service with no callback mapping → no callback.
 	rc := &plan.ResourceChange{
 		Type:   "aws_wafv2_web_acl_association",
 		Name:   "this",
 		Change: "create",
 		AttributeValues: map[string]string{
-			"resource_arn": "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_abc",
+			"resource_arn": "arn:aws:amplify:us-east-1:123456789012:apps/d1a2b3c4",
 		},
 	}
 	if missing := impliedMissing(rc, grantNothing(), nil, false); len(missing) != 0 {
@@ -217,7 +240,9 @@ func TestValidate_CrossServiceReferencedTarget(t *testing.T) {
 		{"ALB data source", []*plan.ResourceChange{association("data.aws_lb.web.arn", "data.aws_lb.web")}, []string{"elasticloadbalancing:SetWebACL"}},
 		{"REST API stage", []*plan.ResourceChange{association("aws_api_gateway_stage.prod.arn", "aws_api_gateway_stage.prod")}, []string{"apigateway:SetWebACL"}},
 		{"GraphQL API", []*plan.ResourceChange{association("aws_appsync_graphql_api.api.arn", "aws_appsync_graphql_api.api")}, []string{"appsync:SetWebACL"}},
-		{"Cognito user pool", []*plan.ResourceChange{association("aws_cognito_user_pool.pool.arn", "aws_cognito_user_pool.pool")}, nil},
+		{"Cognito user pool", []*plan.ResourceChange{association("aws_cognito_user_pool.pool.arn", "aws_cognito_user_pool.pool")}, []string{"cognito-idp:AssociateWebACL"}},
+		{"App Runner service", []*plan.ResourceChange{association("aws_apprunner_service.web.arn", "aws_apprunner_service.web")}, []string{"apprunner:AssociateWebAcl"}},
+		{"Verified Access instance", []*plan.ResourceChange{association("aws_verifiedaccess_instance.vai.arn", "aws_verifiedaccess_instance.vai")}, []string{"ec2:AssociateVerifiedAccessInstanceWebAcl"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

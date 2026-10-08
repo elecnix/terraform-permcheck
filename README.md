@@ -167,8 +167,10 @@ Terraform provider calls. `aws_wafv2_web_acl_association` calls
 `wafv2:AssociateWebACL`, but AWS WAFv2 then calls into the target service to
 attach the ACL — so associating a Web ACL with an **ALB** additionally requires
 `elasticloadbalancing:SetWebACL`, an **API Gateway stage** requires
-`apigateway:SetWebACL`, and an **AppSync API** requires `appsync:SetWebACL`.
-These callbacks are invisible to both the CloudFormation schema and the
+`apigateway:SetWebACL`, an **AppSync API** requires `appsync:SetWebACL`, a
+**Cognito user pool** requires `cognito-idp:AssociateWebACL`, an **App Runner
+service** requires `apprunner:AssociateWebAcl`, and a **Verified Access
+instance** requires `ec2:AssociateVerifiedAccessInstanceWebAcl`. These callbacks are invisible to both the CloudFormation schema and the
 provider source, so PermCheck adds them explicitly:
 
 - When the target's `resource_arn` is a known ARN, only the callback for that
@@ -178,8 +180,7 @@ provider source, so PermCheck adds them explicitly:
   referenced type. It accepts `aws_lb`, `aws_alb`, `aws_api_gateway_stage`,
   `aws_appsync_graphql_api`, `aws_cognito_user_pool`, `aws_apprunner_service`
   and `aws_verifiedaccess_instance`, as resources or data sources. It then
-  requires only the callback for that service. Cognito, App Runner and Verified
-  Access have no callback in PermCheck's table yet, so they require none.
+  requires only the callback for that service.
 - When the reference does not tell the type (a variable or a module output,
   say) or you're in static HCL mode, PermCheck can't tell which target
   applies. It over-approximates and reports every candidate callback tagged

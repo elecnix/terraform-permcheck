@@ -56,10 +56,14 @@ var resourceRules = map[string]resourceRule{
 			{targetService: "elasticloadbalancing", action: "elasticloadbalancing:SetWebACL"},
 			{targetService: "apigateway", action: "apigateway:SetWebACL"},
 			{targetService: "appsync", action: "appsync:SetWebACL"},
+			{targetService: "cognito-idp", action: "cognito-idp:AssociateWebACL"},
+			{targetService: "apprunner", action: "apprunner:AssociateWebAcl"},
+			{targetService: "ec2", action: "ec2:AssociateVerifiedAccessInstanceWebAcl"},
 		},
 		// The types resource_arn accepts, from the provider's documentation
-		// of aws_wafv2_web_acl_association. Cognito, App Runner and Verified
-		// Access have no callback above, so a reference to one selects none.
+		// of aws_wafv2_web_acl_association. The callbacks above are the ones
+		// the AWS WAF Developer Guide lists under "Permissions for
+		// AssociateWebACL".
 		targetTypes: map[string]targetType{
 			"aws_lb":                      {service: "elasticloadbalancing", arnPatterns: albARNPatterns},
 			"aws_alb":                     {service: "elasticloadbalancing", arnPatterns: albARNPatterns},

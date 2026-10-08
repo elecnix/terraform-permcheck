@@ -3,6 +3,7 @@ package iam
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -46,35 +47,53 @@ func producerNames(t *testing.T) (actions, services map[string]bool) {
 	return actions, services
 }
 
-// knowledgeNames returns every action name the knowledge rules spell out:
-// the classification rows and the cross-service callbacks.
-func knowledgeNames() []string {
-	var names []string
-	for _, r := range rules {
-		names = append(names, r.action)
-	}
-	for _, rule := range resourceRules {
-		if rule.callbacks == nil {
-			continue
-		}
-		for _, cb := range rule.callbacks.callbacks {
-			names = append(names, cb.action)
-		}
-	}
-	return names
-}
-
 // A rule can only fire on a name a producer emits. A row that names anything
 // else is a misspelling or dead, so it fails here instead of drifting.
 func TestRules_EveryNameIsEmitted(t *testing.T) {
 	emitted, services := producerNames(t)
-	for _, a := range knowledgeNames() {
+	for _, r := range rules {
+		a := r.action
 		if !services[actionService(a)] {
 			t.Errorf("rule %q is in a service the emitted-actions fixtures do not cover; add it to both and rebuild them", a)
 			continue
 		}
 		if !emitted[a] {
 			t.Errorf("rule %q is not an action CloudFormation or the parser emits", a)
+		}
+	}
+}
+
+// A callback is an action AWS checks, not one a producer emits, so its name
+// is checked against the AWS service reference. IAM matches action names
+// without regard to case.
+func TestCallbacks_EveryNameIsAnIAMAction(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/aws/service-reference-actions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Services map[string][]string `json:"services"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, rule := range resourceRules {
+		if rule.callbacks == nil {
+			continue
+		}
+		for _, cb := range rule.callbacks.callbacks {
+			svc, name, _ := strings.Cut(cb.action, ":")
+			names, ok := doc.Services[svc]
+			if !ok {
+				t.Errorf("callback %q is in a service the fixture does not list; add it", cb.action)
+				continue
+			}
+			if !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, name) }) {
+				t.Errorf("callback %q is not an IAM action of %s", cb.action, svc)
+			}
+			if cb.targetService != svc {
+				t.Errorf("callback %q is selected by %s ARNs", cb.action, cb.targetService)
+			}
 		}
 	}
 }
