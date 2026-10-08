@@ -3,7 +3,10 @@ package provideraws
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // bestEffortOf returns whether the parse found action in op and, if so,
@@ -261,8 +264,8 @@ func resourceWidgetCreate(ctx context.Context, d *schema.ResourceData, meta inte
 }
 
 // TestParse_RequiredPathWinsOverBestEffort checks that an action reached both
-// through a discarded call and through a checked one stays required, with the
-// gate of the required path.
+// through a discarded call and through a checked one keeps both paths: the
+// best-effort one with no gate, and the required one gated on note.
 func TestParse_RequiredPathWinsOverBestEffort(t *testing.T) {
 	src := `package widget
 
@@ -288,8 +291,9 @@ func resourceWidgetCreate(ctx context.Context, d *schema.ResourceData, meta inte
 		if ea.Action != "widget:PutWidgetNote" {
 			continue
 		}
-		if ea.BestEffort || ea.Condition != "note" {
-			t.Errorf("PutWidgetNote = %+v, want required and gated on note", ea)
+		want := []iam.Gate{{BestEffort: true}, {Attribute: "note"}}
+		if !reflect.DeepEqual(ea.Gates, want) {
+			t.Errorf("PutWidgetNote = %+v, want gates %+v", ea, want)
 		}
 		return
 	}

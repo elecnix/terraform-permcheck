@@ -2,7 +2,11 @@
 // provides implementations for AWS, GCP, and Azure.
 package cloud
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
+)
 
 // Schema maps a cloud resource type to the IAM permissions required
 // to create, read, update, delete, and list it.
@@ -27,6 +31,11 @@ type Schema struct {
 	// only to clean up after an operation that already failed. A policy that
 	// denies such an action does not make the apply fail.
 	BestEffort map[string]map[string]bool
+
+	// Gates lists every gated path of the actions the provider reaches on
+	// more than one (op → action → gates). Such an action is needed when any
+	// of its gates holds, and the maps above hold no gate for it.
+	Gates map[string]map[string][]iam.Gate
 
 	// Incomplete names the operations whose permissions the provider could
 	// not fully determine, such as a create in which the provider-source
@@ -57,6 +66,12 @@ func (s *Schema) GetChangeGated() map[string]map[string]string {
 // value (implements iam.SchemaLike).
 func (s *Schema) GetValueConditional() map[string]map[string]bool {
 	return s.ValueConditional
+}
+
+// GetGates returns the gates of the actions reached on several paths,
+// mapping op → action → gates.
+func (s *Schema) GetGates() map[string]map[string][]iam.Gate {
+	return s.Gates
 }
 
 // GetBestEffort returns the actions whose failure the provider ignores
@@ -171,6 +186,7 @@ func (s *Schema) clone() *Schema {
 	out.ChangeGated = cloneNested(s.ChangeGated)
 	out.ValueConditional = cloneNested(s.ValueConditional)
 	out.BestEffort = cloneNested(s.BestEffort)
+	out.Gates = cloneNested(s.Gates)
 	out.Incomplete = make(map[string]bool, len(s.Incomplete))
 	for op, v := range s.Incomplete {
 		out.Incomplete[op] = v
@@ -196,6 +212,7 @@ func (s *Schema) mergeOperation(op string, fallback *Schema) {
 		copyGate(&s.ChangeGated, fallback.ChangeGated, op, a)
 		copyGate(&s.ValueConditional, fallback.ValueConditional, op, a)
 		copyGate(&s.BestEffort, fallback.BestEffort, op, a)
+		copyGate(&s.Gates, fallback.Gates, op, a)
 	}
 	delete(s.Incomplete, op)
 }

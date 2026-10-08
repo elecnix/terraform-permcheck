@@ -162,8 +162,10 @@ func (s Statement) deniesEveryResource() bool {
 // mayApplyTo reports whether the statement can apply to a resource matching
 // the target pattern. It returns false only when the statement provably
 // excludes the target: no Resource pattern overlaps it, or a NotResource
-// pattern contains it.
-func (s Statement) mayApplyTo(target string) bool {
+// pattern contains it. forms lists every ARN form of the same target; a
+// Resource pattern is compared with target only when target is one of the
+// forms with the pattern's segment count (see targetsLike).
+func (s Statement) mayApplyTo(target string, forms []string) bool {
 	if len(s.NotResource) > 0 {
 		for _, r := range s.NotResource {
 			if globContains(r, target) {
@@ -173,7 +175,19 @@ func (s Statement) mayApplyTo(target string) bool {
 		return true
 	}
 	for _, r := range s.Resource {
+		if !containsString(targetsLike(r, forms), target) {
+			continue
+		}
 		if arnIntersect(r, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
 			return true
 		}
 	}

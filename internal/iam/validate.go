@@ -74,10 +74,6 @@ var s3OptionalPrefixes = []string{
 // classifyPermission categorizes a single IAM action string.
 func classifyPermission(action string) PermissionClass {
 	service := strings.Split(action, ":")[0]
-	verb := ""
-	if idx := strings.Index(action, ":"); idx >= 0 {
-		verb = action[idx+1:]
-	}
 
 	// Full-action patterns that are clearly data-plane
 	dataPlaneActions := map[string]bool{
@@ -101,6 +97,13 @@ func classifyPermission(action string) PermissionClass {
 		// SQS data-plane
 		"sqs:SendMessage": true, "sqs:ReceiveMessage": true,
 		"sqs:DeleteMessage": true, "sqs:ChangeMessageVisibility": true,
+		// CloudWatch Logs data-plane: writing, reading and querying log
+		// events. Creating a log stream is provisioning, since the provider
+		// calls it for aws_cloudwatch_log_stream.
+		"logs:PutLogEvents": true, "logs:GetLogEvents": true,
+		"logs:FilterLogEvents": true, "logs:GetLogRecord": true,
+		"logs:StartQuery": true, "logs:StopQuery": true,
+		"logs:GetQueryResults": true, "logs:StartLiveTail": true,
 	}
 
 	if dataPlaneActions[action] {
@@ -111,15 +114,9 @@ func classifyPermission(action string) PermissionClass {
 	dataPlaneServices := map[string]bool{
 		"s3tables":       true, // S3 Tables is a data-plane service
 		"backup-storage": true, // backup-storage is the AWS Backup data-plane
-		"logs":           true, // CloudWatch Logs data-plane (CreateLogStream, PutLogEvents)
 	}
 
 	if dataPlaneServices[service] {
-		// exceptions: logs management-plane operations
-		if strings.HasPrefix(verb, "CreateLogGroup") || strings.HasPrefix(verb, "DeleteLogGroup") ||
-			strings.HasPrefix(verb, "DescribeLogGroups") || strings.HasPrefix(verb, "PutRetentionPolicy") {
-			return ClassManagement
-		}
 		return ClassDataPlane
 	}
 
@@ -289,32 +286,46 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 		conditional := schema.GetConditional()[op]
 		changeGated := schema.GetChangeGated()[op]
 		valueConditional := schema.GetValueConditional()[op]
-		bestEffort := schema.GetBestEffort()[op]
+		bestEffortActions := schema.GetBestEffort()[op]
+		multiGates := schemaGates(schema, op)
 
 		for _, action := range required {
-			condAttr := conditional[action]
-			changeAttr := changeGated[action]
-			// An action is reported only when every gate it carries holds, so a
-			// failing presence gate or a failing change gate each drops it. The
-			// tag names both gating attributes, since either can be the reason.
-			gateAttr := gateAttribute(condAttr, changeAttr)
 			service := strings.Split(action, ":")[0]
+			var gateAttr string
+			var bestEffort bool
+			if gates, ok := multiGates[action]; ok {
+				// An action reached on several paths is needed when any of
+				// them runs.
+				var needed bool
+				needed, gateAttr, bestEffort = evaluateGates(gates, rc)
+				if !needed {
+					continue
+				}
+			} else {
+				condAttr := conditional[action]
+				changeAttr := changeGated[action]
+				// An action is reported only when every gate it carries holds, so a
+				// failing presence gate or a failing change gate each drops it. The
+				// tag names both gating attributes, since either can be the reason.
+				gateAttr = gateAttribute(condAttr, changeAttr)
+				bestEffort = bestEffortActions[action]
 
-			// Conditional (attribute-gated) permissions: when the plan carries
-			// attribute info and the gating attribute is NOT meaningfully set,
-			// skip the permission. When Attributes is nil (e.g. static HCL
-			// mode), presence is unknown and the permission is kept.
-			if condAttr != "" && !conditionMet(condAttr, valueConditional[action], rc) {
-				continue
-			}
+				// Conditional (attribute-gated) permissions: when the plan carries
+				// attribute info and the gating attribute is NOT meaningfully set,
+				// skip the permission. When Attributes is nil (e.g. static HCL
+				// mode), presence is unknown and the permission is kept.
+				if condAttr != "" && !conditionMet(condAttr, valueConditional[action], rc) {
+					continue
+				}
 
-			// Change-gated permissions: the provider makes these calls only
-			// when the attribute changed, so drop the permission when the plan
-			// shows no change. When ChangedAttributes is nil (static HCL mode,
-			// or a delete with no planned state), the change is unknown and the
-			// permission is kept.
-			if changeAttr != "" && rc.ChangedAttributes != nil && !rc.ChangedAttributes[changeAttr] {
-				continue
+				// Change-gated permissions: the provider makes these calls only
+				// when the attribute changed, so drop the permission when the plan
+				// shows no change. When ChangedAttributes is nil (static HCL mode,
+				// or a delete with no planned state), the change is unknown and the
+				// permission is kept.
+				if changeAttr != "" && rc.ChangedAttributes != nil && !rc.ChangedAttributes[changeAttr] {
+					continue
+				}
 			}
 
 			// Action coverage, resource-scoped when the target ARN is derivable
@@ -334,7 +345,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			class := classifyResourcePermission(rc.Type, action)
 			// A call whose failure the provider ignores cannot fail the
 			// apply, so it is optional whatever its action.
-			if bestEffort[action] && class == ClassManagement {
+			if bestEffort && class == ClassManagement {
 				class = ClassOptional
 			}
 			if filter.ExcludeDataPlane && class == ClassDataPlane {

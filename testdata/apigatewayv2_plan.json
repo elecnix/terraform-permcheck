@@ -1,0 +1,88 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "resource_changes": [
+    {
+      "address": "aws_apigatewayv2_domain_name.api",
+      "mode": "managed",
+      "type": "aws_apigatewayv2_domain_name",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "domain_name": "api.example.com",
+          "domain_name_configuration": [
+            {
+              "certificate_arn": "arn:aws:acm:us-east-1:111111111111:certificate/0d6f2c1e-6a63-4b4a-9c43-4f8a1f0e2b7d",
+              "endpoint_type": "REGIONAL",
+              "ownership_verification_certificate_arn": null,
+              "security_policy": "TLS_1_2"
+            }
+          ],
+          "mutual_tls_authentication": [],
+          "tags": {"Environment": "test"},
+          "tags_all": {"Environment": "test"},
+          "timeouts": null
+        },
+        "after_unknown": {
+          "api_mapping_selection_expression": true,
+          "arn": true,
+          "domain_name_configuration": [{"hosted_zone_id": true, "target_domain_name": true}],
+          "id": true,
+          "mutual_tls_authentication": [],
+          "tags": {},
+          "tags_all": {}
+        }
+      }
+    },
+    {
+      "address": "aws_apigatewayv2_api_mapping.api",
+      "mode": "managed",
+      "type": "aws_apigatewayv2_api_mapping",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "api_id": "a1b2c3d4e5",
+          "api_mapping_key": null,
+          "domain_name": "api.example.com",
+          "stage": "$default"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_apigatewayv2_domain_name.api",
+          "mode": "managed",
+          "type": "aws_apigatewayv2_domain_name",
+          "name": "api",
+          "expressions": {
+            "domain_name": {"constant_value": "api.example.com"},
+            "tags": {"constant_value": {"Environment": "test"}}
+          }
+        },
+        {
+          "address": "aws_apigatewayv2_api_mapping.api",
+          "mode": "managed",
+          "type": "aws_apigatewayv2_api_mapping",
+          "name": "api",
+          "expressions": {
+            "api_id": {"constant_value": "a1b2c3d4e5"},
+            "domain_name": {"references": ["aws_apigatewayv2_domain_name.api.id", "aws_apigatewayv2_domain_name.api"]},
+            "stage": {"constant_value": "$default"}
+          }
+        }
+      ]
+    }
+  }
+}

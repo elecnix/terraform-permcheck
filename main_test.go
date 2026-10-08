@@ -986,3 +986,62 @@ resource "aws_sqs_queue" "orders" {
 		t.Errorf("every finding should be unverified, got %s", stderr)
 	}
 }
+
+// TestValidate_APIGatewayV2ByHTTPVerb runs the plan from issue #56. API
+// Gateway v2 authorizes by HTTP verb under the apigateway prefix, so a policy
+// that grants the verbs covers a domain name and its API mapping.
+func TestValidate_APIGatewayV2ByHTTPVerb(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/apigatewayv2_plan.json",
+			"--policy-file", "testdata/apigatewayv2_policy.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Errorf("expected no gaps, got %v", err)
+		}
+	})
+	if strings.Contains(out, "apigatewayv2:") || strings.Contains(out, "CreateDomainName") {
+		t.Errorf("report names an action AWS does not evaluate:\n%s", out)
+	}
+}
+
+// TestValidate_CloudWatchLogsScopedGrants runs the plan from issue #54. The
+// policy omits logs:CreateLogStream and grants the log-group actions on two
+// other prefixes only, so both resources have a gap.
+func TestValidate_CloudWatchLogsScopedGrants(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/logs_plan.json",
+			"--policy-file", "testdata/logs_policy.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Errorf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	var result struct {
+		Missing []struct {
+			ResourceType string `json:"resource_type"`
+			Action       string `json:"missing_action"`
+		} `json:"missing"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON output: %v\ngot: %s", err, out)
+	}
+	found := map[string]bool{}
+	for _, m := range result.Missing {
+		found[m.ResourceType+" "+m.Action] = true
+	}
+	for _, want := range []string{
+		"aws_cloudwatch_log_group logs:CreateLogGroup",
+		"aws_cloudwatch_log_stream logs:CreateLogStream",
+	} {
+		if !found[want] {
+			t.Errorf("expected finding %q, got:\n%s", want, out)
+		}
+	}
+}

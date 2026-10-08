@@ -152,6 +152,8 @@ type fakeSchema struct {
 	valueCond map[string]map[string]bool
 	// bestEffort marks actions whose failure the provider ignores.
 	bestEffort map[string]map[string]bool
+	// gates lists the gated paths of actions reached by several of them.
+	gates map[string]map[string][]Gate
 }
 
 func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
@@ -161,6 +163,7 @@ func (f fakeSchema) GetValueConditional() map[string]map[string]bool {
 	return f.valueCond
 }
 func (f fakeSchema) GetBestEffort() map[string]map[string]bool { return f.bestEffort }
+func (f fakeSchema) GetGates() map[string]map[string][]Gate    { return f.gates }
 
 type fakeResolver struct{ s SchemaLike }
 
