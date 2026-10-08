@@ -293,7 +293,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
 	// schema/source resolution, so they're checked separately here.
 	for _, rc := range changes {
-		for _, m := range crossServiceMissing(rc, policy) {
+		for _, m := range append(crossServiceMissing(rc, policy), passRoleMissing(rc, policy, changes)...) {
 			if filter.ExcludeConditional && m.ConditionAttribute != "" {
 				continue
 			}
