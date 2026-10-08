@@ -73,6 +73,17 @@ func TestValidate_S3AbsorptionLeavesOtherResources(t *testing.T) {
 	}
 }
 
+// The parser emits PutBucketPolicy and the request payment calls for
+// aws_s3_bucket too. The sub-resource that makes the same call owns it.
+func TestValidate_S3PolicyAndRequestPaymentAbsorbed(t *testing.T) {
+	bucket, _ := bucketMissing(t,
+		[]string{"s3:CreateBucket", "s3:PutBucketPolicy", "s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment"},
+		"aws_s3_bucket_policy", "aws_s3_bucket_request_payment_configuration")
+	if strings.Join(bucket, ",") != "s3:CreateBucket" {
+		t.Errorf("bucket actions = %v, want only s3:CreateBucket", bucket)
+	}
+}
+
 // The encryption sub-resource absorbs the encryption calls in both spellings:
 // the schema's DeleteBucketEncryption and the IAM action it needs.
 func TestDecide_EncryptionSpellingsAbsorbed(t *testing.T) {

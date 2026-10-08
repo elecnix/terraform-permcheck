@@ -208,6 +208,26 @@ func TestS3OwnedRules_MatchASchemaName(t *testing.T) {
 	}
 }
 
+// A sub-resource that emits a bucket feature's action configures that
+// feature, so it owns the action: with the sub-resource in the plan,
+// aws_s3_bucket leaves the action to it.
+func TestS3OptionalRules_OwnedByTheSubresourceThatEmitsThem(t *testing.T) {
+	for tfType, perms := range parserS3BucketResources(t) {
+		if tfType == parserS3ParentFixtureID {
+			continue
+		}
+		for _, a := range sortedKeys(actionSet(perms)) {
+			r, ok := ruleIndex[a]
+			if !ok || r.class != ClassOptional {
+				continue
+			}
+			if r.ownedBy != tfType {
+				t.Errorf("%s emits %q, which is owned by %q", tfType, a, r.ownedBy)
+			}
+		}
+	}
+}
+
 // TestValidate_BareS3Bucket reproduces issue #75: a bucket with only a name,
 // resolved through the CloudFormation schema, against an empty policy.
 func TestValidate_BareS3Bucket(t *testing.T) {

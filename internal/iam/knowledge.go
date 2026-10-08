@@ -12,6 +12,9 @@ import "strings"
 //
 // Each action name appears in one row, so the rule that classifies an action
 // and the rule that hands it to a sub-resource cannot spell it two ways.
+// knowledge_test.go checks that every name is one a producer emits, using the
+// golden lists under testdata/. A row that names nothing a producer emits can
+// never fire.
 //
 // targetRules (resource_scope.go) stays apart. Its rows are functions of a
 // resource change, not facts about an action name.
@@ -52,6 +55,7 @@ const (
 	s3OwnershipControls  = "aws_s3_bucket_ownership_controls"
 	s3Policy             = "aws_s3_bucket_policy"
 	s3PublicAccessBlock  = "aws_s3_bucket_public_access_block"
+	s3RequestPayment     = "aws_s3_bucket_request_payment_configuration"
 	s3Replication        = "aws_s3_bucket_replication_configuration"
 	s3Versioning         = "aws_s3_bucket_versioning"
 	s3Website            = "aws_s3_bucket_website_configuration"
@@ -64,7 +68,9 @@ func optionalS3(action, ownedBy string) rule {
 }
 
 // rules lists every action the tool classifies other than [required]. An
-// action with no row is a management-plane action.
+// action with no row is a management-plane action. A row exists only for a
+// name a producer emits: the SQS messaging calls, Kinesis GetRecords and the
+// log-reading calls are data-plane too, but no resource reaches them.
 var rules = []rule{
 	// DynamoDB data-plane
 	{action: "dynamodb:PutItem", class: ClassDataPlane},
@@ -93,24 +99,12 @@ var rules = []rule{
 	{action: "kms:ReEncryptTo", class: ClassDataPlane},
 	// Kinesis data-plane
 	{action: "kinesis:PutRecords", class: ClassDataPlane},
-	{action: "kinesis:GetRecords", class: ClassDataPlane},
 	{action: "kinesis:DescribeStream", class: ClassDataPlane},
-	// SQS data-plane
-	{action: "sqs:SendMessage", class: ClassDataPlane},
-	{action: "sqs:ReceiveMessage", class: ClassDataPlane},
-	{action: "sqs:DeleteMessage", class: ClassDataPlane},
-	{action: "sqs:ChangeMessageVisibility", class: ClassDataPlane},
-	// CloudWatch Logs data-plane: writing, reading and querying log events.
+	// CloudWatch Logs data-plane: writing log events and querying them.
 	// Creating a log stream is provisioning, since the provider calls it for
 	// aws_cloudwatch_log_stream.
 	{action: "logs:PutLogEvents", class: ClassDataPlane},
-	{action: "logs:GetLogEvents", class: ClassDataPlane},
-	{action: "logs:FilterLogEvents", class: ClassDataPlane},
-	{action: "logs:GetLogRecord", class: ClassDataPlane},
 	{action: "logs:StartQuery", class: ClassDataPlane},
-	{action: "logs:StopQuery", class: ClassDataPlane},
-	{action: "logs:GetQueryResults", class: ClassDataPlane},
-	{action: "logs:StartLiveTail", class: ClassDataPlane},
 
 	// Backup vault features, only needed when the configuration sets the
 	// matching block (access_policy, notifications, lock_configuration).
@@ -218,11 +212,11 @@ var rules = []rule{
 	optionalS3("s3:UntagResource", ""),
 	optionalS3("s3:ListTagsForResource", ""),
 	// Bucket policy and requester pays
-	optionalS3("s3:PutBucketPolicy", ""),
+	optionalS3("s3:PutBucketPolicy", s3Policy),
 	optionalS3("s3:GetBucketPolicy", s3Policy),
 	optionalS3("s3:DeleteBucketPolicy", s3Policy),
-	optionalS3("s3:PutBucketRequestPayment", ""),
-	optionalS3("s3:GetBucketRequestPayment", ""),
+	optionalS3("s3:PutBucketRequestPayment", s3RequestPayment),
+	optionalS3("s3:GetBucketRequestPayment", s3RequestPayment),
 	// Attribute-based access control
 	optionalS3("s3:PutBucketAbac", ""),
 	optionalS3("s3:GetBucketAbac", ""),

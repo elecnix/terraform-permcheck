@@ -189,12 +189,8 @@ func TestActionClass(t *testing.T) {
 		{"kms:Encrypt", ClassDataPlane},
 		{"kms:Decrypt", ClassDataPlane},
 		{"kinesis:PutRecords", ClassDataPlane},
-		{"sqs:SendMessage", ClassDataPlane},
 		{"logs:PutLogEvents", ClassDataPlane},
-		{"logs:GetLogEvents", ClassDataPlane},
-		{"logs:FilterLogEvents", ClassDataPlane},
 		{"logs:StartQuery", ClassDataPlane},
-		{"logs:GetQueryResults", ClassDataPlane},
 		{"backup-storage:MountCapsule", ClassDataPlane},
 		{"s3tables:CreateTable", ClassDataPlane},
 

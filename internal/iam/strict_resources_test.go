@@ -127,12 +127,12 @@ func TestValidate_StrictDerivedTargetIsChecked(t *testing.T) {
 }
 
 func TestValidate_StrictKeepsOtherFilters(t *testing.T) {
-	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"sqs:SendMessage"}})}
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"kinesis:PutRecords"}})}
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
-		{"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:*:*:x"}]}`)
+		{"Effect":"Allow","Action":"kinesis:*","Resource":"arn:aws:kinesis:*:*:stream/x"}]}`)
 	filter := DefaultFilter()
 	filter.StrictResources = true
-	missing, err := Validate([]*plan.ResourceChange{{Type: "aws_sqs_queue", Name: "q", Change: "create"}}, policy, resolver, filter)
+	missing, err := Validate([]*plan.ResourceChange{{Type: "aws_kinesis_stream", Name: "s", Change: "create"}}, policy, resolver, filter)
 	if err != nil {
 		t.Fatal(err)
 	}
