@@ -1,7 +1,6 @@
 name: pr-body-format
 on:
   pull_request:
-    branches: [main]
     # `edited` re-runs the check once the author fixes the body.
     types: [opened, edited, reopened, synchronize]
 permissions:
