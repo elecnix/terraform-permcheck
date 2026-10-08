@@ -96,13 +96,3 @@ func TestApplyExclusions_UnresolvedType(t *testing.T) {
 		})
 	}
 }
-
-func TestParseConfig_AllowUnresolvedTypes(t *testing.T) {
-	cfg, err := parseConfig([]byte(`{"allow_unresolved_types": true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.AllowUnresolvedTypes {
-		t.Error("allow_unresolved_types not read")
-	}
-}

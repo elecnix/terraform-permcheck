@@ -1,9 +1,6 @@
 package iam
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -90,67 +87,5 @@ func TestApplyExclusions_NoExclusions(t *testing.T) {
 	kept, excluded := ApplyExclusions(missingFixture(), nil)
 	if len(kept) != 3 || len(excluded) != 0 {
 		t.Fatalf("kept=%d excluded=%d, want 3/0", len(kept), len(excluded))
-	}
-}
-
-// TestLoadConfig_Valid parses a well-formed config file.
-func TestLoadConfig_Valid(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "permcheck.json")
-	body := `{
-  "exclude": [
-    { "permission": "s3:DeleteBucketPublicAccessBlock", "reason": "audit role" },
-    { "permission": "secretsmanager:*", "resource": "aws_secretsmanager_*" }
-  ]
-}`
-	if err := os.WriteFile(p, []byte(body), 0644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := LoadConfig(p)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if len(cfg.Exclude) != 2 {
-		t.Fatalf("got %d exclusions, want 2", len(cfg.Exclude))
-	}
-	if cfg.Exclude[0].Reason != "audit role" || cfg.Exclude[1].Resource != "aws_secretsmanager_*" {
-		t.Errorf("unexpected parse: %+v", cfg.Exclude)
-	}
-}
-
-// TestLoadConfig_MissingPermission rejects an exclusion without a permission.
-func TestLoadConfig_MissingPermission(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "permcheck.json")
-	if err := os.WriteFile(p, []byte(`{"exclude":[{"reason":"no permission"}]}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := LoadConfig(p)
-	if err == nil || !strings.Contains(err.Error(), "permission is required") {
-		t.Fatalf("expected 'permission is required' error, got %v", err)
-	}
-}
-
-// TestLoadConfig_BadJSON reports a parse error.
-func TestLoadConfig_BadJSON(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "permcheck.json")
-	if err := os.WriteFile(p, []byte(`{not json`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := LoadConfig(p); err == nil {
-		t.Fatal("expected parse error, got nil")
-	}
-}
-
-// TestLoadConfig_BadPattern rejects an invalid glob pattern.
-func TestLoadConfig_BadPattern(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "permcheck.json")
-	if err := os.WriteFile(p, []byte(`{"exclude":[{"permission":"s3:[bad"}]}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := LoadConfig(p); err == nil {
-		t.Fatal("expected invalid pattern error, got nil")
 	}
 }

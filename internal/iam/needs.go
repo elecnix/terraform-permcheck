@@ -29,13 +29,13 @@ type Need struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// validateNeeds checks the needs list of a config file.
+// ValidateNeeds checks the needs list of a config file.
 //
 // Two needs that run together must have different sids, or the report shows
 // two findings with the same source. A need without a principal runs with
 // every principal, so its sid must be unique in the whole list. Needs under
 // two different principals never run together, so they may share a sid.
-func validateNeeds(needs []Need) error {
+func ValidateNeeds(needs []Need) error {
 	seen := map[string]bool{}     // principal and sid
 	unnamed := map[string]bool{}  // sids of needs without a principal
 	anyNamed := map[string]bool{} // sids of needs with a principal

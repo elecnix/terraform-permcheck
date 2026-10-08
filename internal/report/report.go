@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
+	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
@@ -36,7 +37,7 @@ func ParseFormat(s string) (Format, error) {
 // finding is a missing action with its file location resolved.
 type finding struct {
 	iam.MissingAction
-	loc *iam.FileLocation // nil when the location is unknown
+	loc *hcl.Location // nil when the location is unknown
 }
 
 // findingKey groups the findings that differ only in what needs them.
@@ -115,7 +116,7 @@ type Report struct {
 // New builds the report of res. locations gives the file and line of each
 // resource block; it may be nil. Excluded findings appear in the report only
 // when showExcluded is set.
-func New(res check.Result, locations iam.Locations, showExcluded bool) *Report {
+func New(res check.Result, locations Locations, showExcluded bool) *Report {
 	r := &Report{checked: res.Checked, label: res.Label, needs: res.Needs, unresolvedAllowed: res.UnresolvedAllowed, hasGaps: res.HasGaps()}
 	locate := func(m iam.MissingAction) finding {
 		f := finding{MissingAction: m}

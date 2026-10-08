@@ -88,7 +88,7 @@ func TestGroupBy_KeepsFirstSeenOrder(t *testing.T) {
 // TestNew_ResolvesLocationsOnce checks that a finding gets its location from
 // its index-free key, and a need finding gets none.
 func TestNew_ResolvesLocationsOnce(t *testing.T) {
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.a": {Path: "a.tf", Line: 1},
 		"aws_s3_bucket.b": {Path: "b.tf", Line: 2},
 	}

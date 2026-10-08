@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -131,3 +132,15 @@ func instanceOf(c *plan.ResourceChange) (name, key string) {
 	name = stripResourceIndex(instance)
 	return name, instance[len(name):]
 }
+
+// stripResourceIndex removes a count or for_each index suffix from a
+// terraform resource name.
+//
+//	cloudtrail[0]       → cloudtrail
+//	config["us-east-1"]  → config
+func stripResourceIndex(name string) string {
+	return resourceIndexRE.ReplaceAllString(name, "")
+}
+
+// resourceIndexRE matches a trailing bracket-index suffix like [0] or ["key"].
+var resourceIndexRE = regexp.MustCompile(`\[[^\]]*\]$`)

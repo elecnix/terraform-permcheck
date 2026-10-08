@@ -12,15 +12,15 @@ import (
 // The helpers below render one part of a report, so each test can look at
 // the part it is about.
 
-func formatMissing(missing []iam.MissingAction, locations iam.Locations) string {
+func formatMissing(missing []iam.MissingAction, locations Locations) string {
 	return New(check.Result{Missing: missing}, locations, false).text()
 }
 
-func formatGitHubAnnotations(missing []iam.MissingAction, locations iam.Locations) string {
+func formatGitHubAnnotations(missing []iam.MissingAction, locations Locations) string {
 	return New(check.Result{Missing: missing}, locations, false).annotations()
 }
 
-func formatJSON(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, label string, locations iam.Locations) string {
+func formatJSON(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, label string, locations Locations) string {
 	res := check.Result{Missing: missing, Excluded: excluded, Checked: checked, Label: label}
 	return New(res, locations, excluded != nil).json()
 }
@@ -240,7 +240,7 @@ func TestFormatGitHubAnnotations_WithFileLocation(t *testing.T) {
 		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "cloudtrail", Change: "create", Action: "s3:PutPublicAccessBlock", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail":                     {Path: "modules/datadog-cloudtrail/main.tf", Line: 10},
 		"aws_s3_bucket_public_access_block.cloudtrail": {Path: "modules/datadog-cloudtrail/main.tf", Line: 82},
 	}
@@ -265,7 +265,7 @@ func TestFormatGitHubAnnotations_PartialFileLocation(t *testing.T) {
 		{ResourceType: "aws_s3_bucket", ResourceName: "unknown_bucket", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 5},
 	}
 
@@ -294,7 +294,7 @@ func TestFormatGitHubAnnotations_NoLocations(t *testing.T) {
 	}
 
 	// Empty map → same behavior
-	got = formatGitHubAnnotations(missing, iam.Locations{})
+	got = formatGitHubAnnotations(missing, Locations{})
 
 	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
 		t.Error("expected ::warning without file= when locations is empty")
@@ -311,7 +311,7 @@ func TestFormatGitHubAnnotations_StripIndexForLookup(t *testing.T) {
 		{ResourceType: "aws_s3_bucket", ResourceName: `config["us-east-1"]`, Change: "create", Action: "s3:PutBucketPolicy", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 		"aws_s3_bucket.config":     {Path: "config.tf", Line: 42},
 	}
@@ -332,7 +332,7 @@ func TestFormatMissing_WithFileLocation(t *testing.T) {
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 		// logs has NO location
 	}
@@ -358,7 +358,7 @@ func TestFormatMissing_StripIndexForLookup(t *testing.T) {
 		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 	}
 

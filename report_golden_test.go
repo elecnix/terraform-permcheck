@@ -22,7 +22,7 @@ var updateGolden = flag.Bool("update", false, "rewrite testdata/report/*.golden"
 type goldenCase struct {
 	name         string
 	res          check.Result
-	locations    iam.Locations
+	locations    report.Locations
 	showExcluded bool
 }
 
@@ -44,7 +44,7 @@ func goldenCases() []goldenCase {
 	newB := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: `b["k"]`, Change: "update", Unresolved: true}
 	otherNew := iam.MissingAction{ResourceType: "aws_other_new", ResourceName: "x", Change: "delete", Unresolved: true}
 
-	locations := iam.Locations{
+	locations := report.Locations{
 		"aws_s3_bucket.a":    {Path: "s3.tf", Line: 3},
 		"aws_s3_bucket.b":    {Path: "s3.tf", Line: 12},
 		"aws_backup_vault.v": {Path: "modules/backup/main.tf", Line: 40},
