@@ -1,8 +1,6 @@
 package iam
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -207,65 +205,6 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 		if len(m) != 1 || m[0].ResourceScopeUnverified {
 			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
 		}
-	}
-}
-
-func TestFormatMissing_UnverifiedSection(t *testing.T) {
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
-	}
-	out := FormatMissing(missing, nil)
-	if !strings.Contains(out, "Missing IAM permissions (1):\n  s3:CreateBucket [required]\n") {
-		t.Errorf("missing section wrong:\n%s", out)
-	}
-	if !strings.Contains(out, "Unverified IAM permissions (1)") ||
-		!strings.Contains(out, "  lambda:CreateFunction [required] [unverified: resource scope]\n    → aws_lambda_function.fn (create)") {
-		t.Errorf("unverified section wrong:\n%s", out)
-	}
-	if got := UnverifiedCount(missing); got != 1 {
-		t.Errorf("UnverifiedCount = %d, want 1", got)
-	}
-	if got := DistinctCount(missing); got != 2 {
-		t.Errorf("DistinctCount = %d, want 2", got)
-	}
-
-	only := FormatMissing(missing[1:], nil)
-	if strings.Contains(only, "Missing IAM permissions") {
-		t.Errorf("no missing section expected when every finding is unverified:\n%s", only)
-	}
-}
-
-func TestFormatGitHubAnnotations_Unverified(t *testing.T) {
-	out := FormatGitHubAnnotations([]MissingAction{
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
-	}, nil)
-	want := "::warning title=Unverified IAM permission::lambda:CreateFunction [unverified: resource scope] needed by: aws_lambda_function.fn (create)\n"
-	if out != want {
-		t.Errorf("got  %q\nwant %q", out, want)
-	}
-}
-
-func TestFormatJSON_Unverified(t *testing.T) {
-	out := FormatJSON([]MissingAction{
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
-		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-	}, nil, 2, "resource changes", nil)
-	var res struct {
-		Status  string                   `json:"status"`
-		Missing []map[string]interface{} `json:"missing"`
-	}
-	if err := json.Unmarshal([]byte(out), &res); err != nil {
-		t.Fatal(err)
-	}
-	if res.Status != "gaps_found" {
-		t.Errorf("status = %q, want gaps_found", res.Status)
-	}
-	if res.Missing[0]["unverified"] != "resource_scope" {
-		t.Errorf("unverified = %v, want resource_scope", res.Missing[0]["unverified"])
-	}
-	if _, ok := res.Missing[1]["unverified"]; ok {
-		t.Errorf("a plain gap must omit unverified, got %v", res.Missing[1])
 	}
 }
 

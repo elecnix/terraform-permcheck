@@ -117,12 +117,12 @@ resource "aws_s3_bucket" "unique" {
 	}
 
 	// Build the expected map independently: first resource block wins.
-	want := make(map[string]iam.FileLocation)
+	want := make(iam.Locations)
 	for _, b := range blocks {
 		if b.Mode != "resource" {
 			continue
 		}
-		key := b.Type + "." + b.Name
+		key := iam.ResourceKey(b.Type + "." + b.Name)
 		if _, exists := want[key]; exists {
 			continue
 		}
@@ -180,7 +180,7 @@ func TestResourceLocations_Projection(t *testing.T) {
 
 	locations := resourceLocations(absDir, blocks)
 
-	want := map[string]iam.FileLocation{
+	want := iam.Locations{
 		"aws_s3_bucket.dup":    {Path: "a.tf", Line: 3},
 		"aws_s3_bucket.nested": {Path: filepath.Join("modules", "x", "x.tf"), Line: 1},
 	}

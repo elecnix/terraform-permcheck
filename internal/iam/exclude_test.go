@@ -154,33 +154,3 @@ func TestLoadConfig_BadPattern(t *testing.T) {
 		t.Fatal("expected invalid pattern error, got nil")
 	}
 }
-
-// TestFormatExcluded groups by (action, reason) and includes the reason line.
-func TestFormatExcluded(t *testing.T) {
-	excluded := []ExcludedAction{
-		{MissingAction: MissingAction{ResourceType: "aws_cloudtrail", ResourceName: "audit", Change: "create", Action: "s3:DeleteBucketPublicAccessBlock"}, Reason: "audit role"},
-	}
-	got := FormatExcluded(excluded)
-	for _, want := range []string{"Excluded (per config) (1):", "s3:DeleteBucketPublicAccessBlock", "reason: audit role", "→ aws_cloudtrail.audit (create)"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("FormatExcluded missing %q\ngot:\n%s", want, got)
-		}
-	}
-	if FormatExcluded(nil) != "" {
-		t.Error("FormatExcluded(nil) should be empty")
-	}
-}
-
-// TestFormatExcludedAnnotations emits a ::notice:: per group.
-func TestFormatExcludedAnnotations(t *testing.T) {
-	excluded := []ExcludedAction{
-		{MissingAction: MissingAction{ResourceType: "aws_cloudtrail", ResourceName: "audit", Change: "create", Action: "s3:DeleteBucketPublicAccessBlock"}, Reason: "audit role"},
-	}
-	got := FormatExcludedAnnotations(excluded)
-	if !strings.Contains(got, "::notice title=Excluded IAM permission::") {
-		t.Errorf("missing ::notice:: line\ngot: %s", got)
-	}
-	if !strings.Contains(got, "audit role") {
-		t.Errorf("missing reason\ngot: %s", got)
-	}
-}

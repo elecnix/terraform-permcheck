@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/report"
 )
 
 // captureStdout runs fn while capturing everything written to os.Stdout.
@@ -779,7 +779,7 @@ func TestValidate_StrictResourcesReportsUnverified(t *testing.T) {
 		t.Fatalf("expected errGapsFound, got %v", runErr)
 	}
 
-	var result iam.FormatJSONResult
+	var result report.JSONResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
@@ -961,11 +961,11 @@ func TestValidate_NeedsReportMissing(t *testing.T) {
 	if !errors.Is(runErr, errGapsFound) {
 		t.Fatalf("expected errGapsFound, got %v", runErr)
 	}
-	var result iam.FormatJSONResult
+	var result report.JSONResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
-	want := iam.FormatJSONMissing{
+	want := report.JSONMissing{
 		Need:          "EcrImageVerification",
 		NeedResource:  "arn:aws:ecr:us-east-1:111111111111:repository/app",
 		MissingAction: "ecr:DescribeImages",

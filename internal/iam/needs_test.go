@@ -97,9 +97,6 @@ func TestCheckNeeds_FindingShape(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if s := got[0].Source(); s != `needs "Push"` {
-		t.Errorf("Source() = %q", s)
-	}
 }
 
 func TestSelectNeeds(t *testing.T) {
@@ -179,33 +176,5 @@ func TestExclusions_MatchNeeds(t *testing.T) {
 	kept, _ = ApplyExclusions(missing[:1], []Exclusion{{Permission: "ecr:PutImage", Operations: []string{"create"}}})
 	if len(kept) != 1 {
 		t.Errorf("an operations exclusion must not match a need, kept %+v", kept)
-	}
-}
-
-// TestFormat_NeedSource verifies every format names the need as the source.
-func TestFormat_NeedSource(t *testing.T) {
-	missing := []MissingAction{{Action: "ecr:DescribeImages", Service: "ecr", Class: "[required]", Need: "EcrImageVerification", NeedResource: repoA}}
-
-	if got := FormatMissing(missing, nil); !strings.Contains(got, `→ needs "EcrImageVerification" on `+repoA) {
-		t.Errorf("FormatMissing:\n%s", got)
-	}
-	if got := FormatGitHubAnnotations(missing, nil); !strings.Contains(got, `ecr:DescribeImages needed by: needs "EcrImageVerification" on `+repoA) {
-		t.Errorf("FormatGitHubAnnotations:\n%s", got)
-	}
-	got := FormatJSON(missing, nil, 0, "resource changes", nil)
-	for _, want := range []string{`"need": "EcrImageVerification"`, `"need_resource": "` + repoA + `"`} {
-		if !strings.Contains(got, want) {
-			t.Errorf("FormatJSON missing %s:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, `"resource_type"`) {
-		t.Errorf("FormatJSON should omit the empty resource fields of a need:\n%s", got)
-	}
-	excluded := []ExcludedAction{{MissingAction: missing[0], Reason: "later"}}
-	if got := FormatExcluded(excluded); !strings.Contains(got, `→ needs "EcrImageVerification"`) {
-		t.Errorf("FormatExcluded:\n%s", got)
-	}
-	if got := FormatExcludedAnnotations(excluded); !strings.Contains(got, `for: needs "EcrImageVerification"`) {
-		t.Errorf("FormatExcludedAnnotations:\n%s", got)
 	}
 }

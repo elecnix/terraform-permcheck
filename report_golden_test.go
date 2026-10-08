@@ -10,6 +10,7 @@ import (
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/report"
 )
 
 // updateGolden rewrites testdata/report/*.golden from the current output.
@@ -20,7 +21,7 @@ var updateGolden = flag.Bool("update", false, "rewrite testdata/report/*.golden"
 type goldenCase struct {
 	name         string
 	res          check.Result
-	locations    map[string]iam.FileLocation
+	locations    iam.Locations
 	showExcluded bool
 }
 
@@ -38,7 +39,7 @@ func goldenCases() []goldenCase {
 	needAny := iam.MissingAction{Need: "Logs", Action: "logs:CreateLogGroup", Class: "[required]"}
 	needUnverified := iam.MissingAction{Need: "Logs", Action: "logs:PutLogEvents", Class: "[required]", ResourceScopeUnverified: true}
 
-	locations := map[string]iam.FileLocation{
+	locations := iam.Locations{
 		"aws_s3_bucket.a":    {Path: "s3.tf", Line: 3},
 		"aws_s3_bucket.b":    {Path: "s3.tf", Line: 12},
 		"aws_backup_vault.v": {Path: "modules/backup/main.tf", Line: 40},
@@ -142,12 +143,12 @@ func goldenCases() []goldenCase {
 // Run with -update to rewrite the golden files after an intended change.
 func TestReportGolden(t *testing.T) {
 	for _, c := range goldenCases() {
-		for _, format := range []string{"text", "github-annotations", "json"} {
+		for _, format := range []report.Format{report.Text, report.GitHubAnnotations, report.JSON} {
 			c, format := c, format
-			t.Run(c.name+"/"+format, func(t *testing.T) {
+			t.Run(c.name+"/"+string(format), func(t *testing.T) {
 				stdout, stderr := renderReport(t, c, format)
 				got := "--- stdout ---\n" + stdout + "--- stderr ---\n" + stderr
-				path := filepath.Join("testdata", "report", c.name+"."+format+".golden")
+				path := filepath.Join("testdata", "report", c.name+"."+string(format)+".golden")
 				if *updateGolden {
 					if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 						t.Fatal(err)
@@ -171,7 +172,7 @@ func TestReportGolden(t *testing.T) {
 
 // renderReport prints the case's report and returns what went to stdout and
 // to stderr.
-func renderReport(t *testing.T, c goldenCase, format string) (stdout, stderr string) {
+func renderReport(t *testing.T, c goldenCase, format report.Format) (stdout, stderr string) {
 	t.Helper()
 	return captureStreams(t, func() {
 		printReport(c.res, format, c.locations, c.showExcluded)

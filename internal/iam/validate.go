@@ -1,9 +1,6 @@
 package iam
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
@@ -201,124 +198,6 @@ func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool 
 		return true
 	}
 	return rc.Attributes[attr]
-}
-
-// missingGroupKey is a grouping key for deduplicating missing actions.
-type missingGroupKey struct {
-	action     string
-	class      string
-	condition  string
-	unverified bool
-}
-
-// groupKey returns the key that groups m with identical findings on other
-// resources.
-func groupKey(m MissingAction) missingGroupKey {
-	return missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute, unverified: m.ResourceScopeUnverified}
-}
-
-// unverifiedTag marks a finding whose coverage depends on a resource scope the
-// tool cannot check (--strict-resources).
-const unverifiedTag = "[unverified: resource scope]"
-
-// groupMissing groups missing actions by groupKey, preserving first-seen order.
-func groupMissing(missing []MissingAction) (map[missingGroupKey][]MissingAction, []missingGroupKey) {
-	groups := make(map[missingGroupKey][]MissingAction)
-	order := make([]missingGroupKey, 0, len(missing))
-	for _, m := range missing {
-		k := groupKey(m)
-		if _, ok := groups[k]; !ok {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], m)
-	}
-	return groups, order
-}
-
-// FormatMissing formats a list of missing actions as a human-readable message.
-// Permissions are grouped by (Action, Class, ConditionAttribute) so duplicates
-// across resources are collapsed into a single entry, followed by the list of
-// affected resources. Findings unverified for resource scope get a section of
-// their own after the missing ones. When locations is non-nil and a resource
-// has a matching FileLocation entry (keyed by "type.name"), the file path and
-// line number are appended to the resource line.
-func FormatMissing(missing []MissingAction, locations map[string]FileLocation) string {
-	if len(missing) == 0 {
-		return ""
-	}
-
-	groups, order := groupMissing(missing)
-	var plain, unverified []missingGroupKey
-	for _, k := range order {
-		if k.unverified {
-			unverified = append(unverified, k)
-		} else {
-			plain = append(plain, k)
-		}
-	}
-
-	var b strings.Builder
-	if len(plain) > 0 {
-		b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(plain)))
-		writeMissingGroups(&b, plain, groups, locations)
-	}
-	if len(unverified) > 0 {
-		if len(plain) > 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString(fmt.Sprintf("Unverified IAM permissions (%d), granted only on resources whose ARN the plan does not show:\n", len(unverified)))
-		writeMissingGroups(&b, unverified, groups, locations)
-	}
-	return b.String()
-}
-
-// writeMissingGroups writes one action line per group key, each followed by
-// its affected resources.
-func writeMissingGroups(b *strings.Builder, keys []missingGroupKey, groups map[missingGroupKey][]MissingAction, locations map[string]FileLocation) {
-	for _, k := range keys {
-		// Action line with optional class and condition tags
-		line := k.action
-		if k.condition != "" {
-			line += fmt.Sprintf(" [conditional: %s]", k.condition)
-		} else if k.class != "" {
-			line += " " + k.class
-		}
-		if k.unverified {
-			line += " " + unverifiedTag
-		}
-		b.WriteString(fmt.Sprintf("  %s\n", line))
-		// Affected resources
-		for _, m := range groups[k] {
-			resourceLine := "    → " + m.Source()
-			if locations != nil && m.Need == "" {
-				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
-				if loc, ok := locations[key]; ok {
-					resourceLine += fmt.Sprintf(" [%s:%d]", loc.Path, loc.Line)
-				}
-			}
-			b.WriteString(resourceLine + "\n")
-		}
-	}
-}
-
-// DistinctCount returns the number of distinct (Action, Class, ConditionAttribute)
-// groups in the list, unverified ones included.
-func DistinctCount(missing []MissingAction) int {
-	_, order := groupMissing(missing)
-	return len(order)
-}
-
-// UnverifiedCount returns the number of distinct groups that are unverified
-// for resource scope.
-func UnverifiedCount(missing []MissingAction) int {
-	_, order := groupMissing(missing)
-	n := 0
-	for _, k := range order {
-		if k.unverified {
-			n++
-		}
-	}
-	return n
 }
 
 // classTag returns a human-readable classification tag for a PermissionClass.
