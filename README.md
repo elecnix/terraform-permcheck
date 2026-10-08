@@ -217,6 +217,16 @@ terraform-permcheck validate \
 | 1 | Permission gaps found (details printed to stderr) |
 | 2 | Invalid input or configuration error |
 
+### Provider source cache
+
+For AWS, terraform-permcheck reads the `terraform-provider-aws` source at a pinned tag. The first run makes a shallow clone of that tag from GitHub. Later runs reuse the clone and do not fetch again.
+
+The clone goes in a directory named after the tag, under `terraform-permcheck/provider-aws` in your user cache directory. On Linux that is `$XDG_CACHE_HOME`, or `~/.cache` when it is unset. On macOS it is `~/Library/Caches`. Set `PERMCHECK_PROVIDER_CACHE_DIR` to use another base directory. The clone still goes in a subdirectory named after the tag.
+
+Concurrent runs can share one cache. Each run locks a file next to the clone before it reads or writes the clone, so runs take turns. If a clone is incomplete or at the wrong commit, the run replaces it.
+
+Earlier versions cloned straight into `~/.cache/terraform-permcheck/provider-aws`. To free that space, delete the directory. The next run clones the tag again.
+
 ### Terraform provider (planned)
 
 ```hcl

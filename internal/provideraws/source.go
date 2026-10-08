@@ -24,15 +24,6 @@ var sdkResourceAnnotationRE = regexp.MustCompile(`@SDKResource\("(aws_[^"]+)"`)
 // This is the framework-refactored codebase (v5+).
 const DefaultProviderRef = "v5.90.0"
 
-// defaultCacheDir is where the provider source is cloned.
-func defaultCacheDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".cache", "terraform-permcheck", "provider-aws")
-}
-
 // SourceProvider resolves AWS resource types by parsing the terraform-provider-aws
 // Go source code to extract the exact SDK API calls made by each resource.
 //
@@ -43,15 +34,18 @@ type SourceProvider struct {
 	repoPath  string
 	schemas   map[string]*cloud.Schema // tfType -> schema
 	parsed    bool
-	skipClone bool // true when repoPath already has provider source
+	skipClone bool   // true when repoPath already has provider source
+	remoteURL string // where ensureRepo fetches DefaultProviderRef from
 }
 
 // NewSourceProvider creates a new SourceProvider that clones the terraform-provider-aws
-// repository and extracts permissions from the source code.
+// repository at DefaultProviderRef into the cache (see defaultCacheDir) and
+// extracts permissions from the source code.
 func NewSourceProvider() *SourceProvider {
 	return &SourceProvider{
-		repoPath: defaultCacheDir(),
-		schemas:  make(map[string]*cloud.Schema),
+		repoPath:  defaultCacheDir(),
+		schemas:   make(map[string]*cloud.Schema),
+		remoteURL: upstreamURL,
 	}
 }
 
@@ -142,61 +136,6 @@ func runGit(dir string, buf *bytes.Buffer, args ...string) error {
 	}
 	cmd.Stderr = buf
 	return cmd.Run()
-}
-
-// ensureRepo clones or verifies the terraform-provider-aws checkout.
-func (p *SourceProvider) ensureRepo() error {
-	if p.skipClone {
-		return nil
-	}
-	dir := p.repoPath
-	gitDir := filepath.Join(dir, ".git")
-
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		// Clone. Create the target directory first — git init with
-		// cmd.Dir requires the working directory to already exist,
-		// unlike git clone which creates it.
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-
-		// Use git init + fetch + checkout instead of git clone so we
-		// can buffer each command's stderr and only show it on
-		// failure. git clone --branch <annotated-tag> leaks detached
-		// HEAD advice and tag-not-a-commit warnings that neither
-		// --quiet nor -c advice.detachedHead=false suppresses.
-		var err error
-		const upstreamURL = "https://github.com/hashicorp/terraform-provider-aws.git"
-		if err = runGit(dir, nil, "-c", "init.defaultBranch=main", "init"); err != nil {
-			return err
-		}
-		if err = runGit(dir, nil, "remote", "add", "origin", upstreamURL); err != nil {
-			return err
-		}
-		if err = runGit(dir, nil, "fetch", "--depth", "1", "--quiet",
-			"origin", DefaultProviderRef); err != nil {
-			return err
-		}
-		if err = runGit(dir, nil, "-c", "advice.detachedHead=false",
-			"checkout", "--quiet", "FETCH_HEAD"); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Verify at right ref
-	cmd := exec.Command("git", "-C", dir, "rev-parse", DefaultProviderRef)
-	out, err := cmd.Output()
-	if err == nil && strings.TrimSpace(string(out)) != "" {
-		return nil // already at the right branch/tag
-	}
-
-	// Fetch and checkout: use the same buffered-git approach as the
-	// clone path — silent on success, loud on failure.
-	if err := runGit(dir, nil, "fetch", "--depth", "1", "--quiet", "origin", DefaultProviderRef); err != nil {
-		return fmt.Errorf("fetch %s: %w", DefaultProviderRef, err)
-	}
-	return runGit(dir, nil, "-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD")
 }
 
 // parseAll discovers all AWS resource Go files and extracts permissions.
