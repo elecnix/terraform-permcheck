@@ -18,6 +18,62 @@ const (
 	ClassOptional                    // actions for optional sub-resources (access policy, notifications, etc.)
 )
 
+// s3OptionalPrefixes lists the S3 bucket features that aws_s3_bucket only
+// configures when the matching attribute is set (website, cors, replication,
+// logging, tags, and so on). Each row is a prefix of an action name.
+//
+// Two name spaces reach classifyPermission, and they spell some actions
+// differently. The CloudFormation schema for AWS::S3::Bucket resolves
+// aws_s3_bucket when the provider checkout is unavailable. The provider-source
+// parser resolves the aws_s3_bucket_* sub-resources from their SDK calls. Where
+// the two disagree, both spellings are listed. Tests check every row against
+// golden copies of both under testdata/.
+var s3OptionalPrefixes = []string{
+	// Website, CORS, logging
+	"s3:PutBucketWebsite", "s3:GetBucketWebsite", "s3:DeleteBucketWebsite",
+	"s3:PutBucketCORS", "s3:GetBucketCORS", "s3:PutBucketCors", "s3:GetBucketCors", "s3:DeleteBucketCors",
+	"s3:PutBucketLogging", "s3:GetBucketLogging",
+	// Replication
+	"s3:PutBucketReplication", "s3:GetBucketReplication", "s3:DeleteBucketReplication",
+	"s3:PutReplicationConfiguration", "s3:GetReplicationConfiguration",
+	// Transfer acceleration
+	"s3:PutAccelerateConfiguration", "s3:GetAccelerateConfiguration",
+	"s3:PutBucketAccelerateConfiguration", "s3:GetBucketAccelerateConfiguration",
+	// Analytics, inventory, metrics, intelligent tiering
+	"s3:PutAnalyticsConfiguration", "s3:GetAnalyticsConfiguration",
+	"s3:GetBucketAnalyticsConfiguration", "s3:DeleteBucketAnalyticsConfiguration",
+	"s3:PutInventoryConfiguration", "s3:GetInventoryConfiguration",
+	"s3:GetBucketInventoryConfiguration", "s3:DeleteBucketInventoryConfiguration",
+	"s3:PutMetricsConfiguration", "s3:GetMetricsConfiguration",
+	"s3:GetBucketMetricsConfiguration", "s3:DeleteBucketMetricsConfiguration",
+	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
+	"s3:GetBucketIntelligentTieringConfiguration", "s3:DeleteBucketIntelligentTieringConfiguration",
+	// Object lock
+	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
+	"s3:PutObjectLockConfiguration",
+	// Server-side encryption
+	"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
+	"s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration",
+	// Lifecycle
+	"s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration", "s3:DeleteBucketLifecycle",
+	// Notifications, versioning, ownership controls, public access block
+	"s3:PutBucketNotification", "s3:GetBucketNotification",
+	"s3:PutBucketVersioning", "s3:GetBucketVersioning",
+	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls",
+	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock", "s3:DeleteBucketPublicAccessBlock",
+	// Tags
+	"s3:PutBucketTagging", "s3:GetBucketTagging",
+	"s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource",
+	// Bucket policy and requester pays
+	"s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
+	"s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment",
+	// Attribute-based access control
+	"s3:PutBucketAbac", "s3:GetBucketAbac",
+	// Metadata tables (Update covers the journal, inventory and annotation tables)
+	"s3:CreateBucketMetadataTableConfiguration", "s3:GetBucketMetadataTableConfiguration",
+	"s3:DeleteBucketMetadataTableConfiguration", "s3:UpdateBucketMetadata",
+}
+
 // classifyPermission categorizes a single IAM action string.
 func classifyPermission(action string) PermissionClass {
 	service := strings.Split(action, ":")[0]
@@ -85,24 +141,6 @@ func classifyPermission(action string) PermissionClass {
 		return ClassOptional
 	}
 
-	// S3 sub-resource configurators — only needed when the terraform config sets
-	// the corresponding attribute (website, cors, replication, logging, etc.)
-	s3OptionalPrefixes := []string{
-		"s3:PutBucketWebsite", "s3:PutBucketCORS", "s3:PutBucketReplication",
-		"s3:PutBucketLogging", "s3:PutAccelerateConfiguration",
-		"s3:PutAnalyticsConfiguration", "s3:PutInventoryConfiguration",
-		"s3:PutMetricsConfiguration", "s3:PutBucketObjectLockConfiguration",
-		"s3:PutIntelligentTieringConfiguration", "s3:PutBucketAbac",
-		"s3:PutObjectLockConfiguration", "s3:PutReplicationConfiguration",
-		"s3:GetBucketMetadataTableConfiguration", "s3:CreateBucketMetadataTableConfiguration",
-		"s3:GetBucketAccelerateConfiguration", "s3:GetBucketAnalyticsConfiguration",
-		"s3:GetBucketCORS", "s3:GetBucketInventoryConfiguration",
-		"s3:GetBucketLogging", "s3:GetBucketMetricsConfiguration",
-		"s3:GetBucketNotification", "s3:GetBucketObjectLockConfiguration",
-		"s3:GetBucketReplication", "s3:GetBucketWebsite",
-		"s3:GetObjectLockConfiguration", "s3:GetBucketPolicy",
-		"s3:GetBucketTagging", "s3:GetBucketVersioning",
-	}
 	for _, p := range s3OptionalPrefixes {
 		if strings.HasPrefix(action, p) {
 			return ClassOptional
@@ -138,6 +176,18 @@ func classifyPermission(action string) PermissionClass {
 	}
 
 	return ClassManagement
+}
+
+// classifyResourcePermission classifies an action for one resource type. An
+// S3 bucket feature is optional on aws_s3_bucket, which only configures it when
+// the matching attribute is set. A dedicated aws_s3_bucket_* resource exists to
+// configure that feature, so there the same action is required.
+func classifyResourcePermission(tfType, action string) PermissionClass {
+	class := classifyPermission(action)
+	if class == ClassOptional && strings.HasPrefix(tfType, "aws_s3_bucket_") && strings.HasPrefix(action, "s3:") {
+		return ClassManagement
+	}
+	return class
 }
 
 // MissingAction is a single required permission found to be absent from the policy.
@@ -262,7 +312,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			}
 
 			// Classify and optionally filter
-			class := classifyPermission(action)
+			class := classifyResourcePermission(rc.Type, action)
 			if filter.ExcludeDataPlane && class == ClassDataPlane {
 				continue
 			}

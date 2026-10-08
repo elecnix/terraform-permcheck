@@ -9,45 +9,103 @@ import "github.com/elecnix/terraform-permcheck/internal/plan"
 //
 // This avoids duplicate warnings when both aws_s3_bucket and e.g.
 // aws_s3_bucket_server_side_encryption_configuration appear in the same plan.
+//
+// Each row lists the parent's CloudFormation spelling of the action and, where
+// it differs, the provider-source parser's spelling of the same call, so
+// absorption works whichever resolver produced the parent's actions.
 var s3SubresourcePermissions = map[string][]string{
 	"aws_s3_bucket_server_side_encryption_configuration": {
 		"s3:PutEncryptionConfiguration",
+		"s3:GetEncryptionConfiguration",
+		"s3:DeleteBucketEncryption",
+		"s3:DeleteEncryptionConfiguration",
 	},
 	"aws_s3_bucket_versioning": {
 		"s3:PutBucketVersioning",
+		"s3:GetBucketVersioning",
 	},
 	"aws_s3_bucket_logging": {
 		"s3:PutBucketLogging",
+		"s3:GetBucketLogging",
 	},
 	"aws_s3_bucket_website_configuration": {
 		"s3:PutBucketWebsite",
+		"s3:GetBucketWebsite",
+		"s3:DeleteBucketWebsite",
 	},
 	"aws_s3_bucket_cors_configuration": {
 		"s3:PutBucketCORS",
+		"s3:GetBucketCORS",
+		"s3:DeleteBucketCors",
+		"s3:PutBucketCors",
+		"s3:GetBucketCors",
 	},
 	"aws_s3_bucket_acl": {
 		"s3:PutBucketAcl",
 	},
 	"aws_s3_bucket_policy": {
-		"s3:PutBucketPolicy",
 		"s3:GetBucketPolicy",
+		"s3:DeleteBucketPolicy",
 	},
 	"aws_s3_bucket_accelerate_configuration": {
 		"s3:PutAccelerateConfiguration",
+		"s3:GetAccelerateConfiguration",
+		"s3:PutBucketAccelerateConfiguration",
+		"s3:GetBucketAccelerateConfiguration",
 	},
 	"aws_s3_bucket_object_lock_configuration": {
 		"s3:PutBucketObjectLockConfiguration",
+		"s3:GetBucketObjectLockConfiguration",
+		"s3:PutObjectLockConfiguration",
 	},
 	"aws_s3_bucket_replication_configuration": {
 		"s3:PutBucketReplication",
+		"s3:PutReplicationConfiguration",
+		"s3:GetReplicationConfiguration",
+		"s3:DeleteBucketReplication",
+		"s3:GetBucketReplication",
 	},
 	"aws_s3_bucket_lifecycle_configuration": {
-		"s3:PutBucketLifecycleConfiguration",
-		"s3:GetBucketLifecycleConfiguration",
+		"s3:PutLifecycleConfiguration",
+		"s3:GetLifecycleConfiguration",
+		"s3:DeleteBucketLifecycle",
 	},
 	"aws_s3_bucket_public_access_block": {
 		"s3:PutBucketPublicAccessBlock",
 		"s3:GetBucketPublicAccessBlock",
+		"s3:DeleteBucketPublicAccessBlock",
+	},
+	"aws_s3_bucket_ownership_controls": {
+		"s3:PutBucketOwnershipControls",
+		"s3:GetBucketOwnershipControls",
+	},
+	"aws_s3_bucket_notification": {
+		"s3:PutBucketNotification",
+		"s3:GetBucketNotification",
+	},
+	"aws_s3_bucket_analytics_configuration": {
+		"s3:PutAnalyticsConfiguration",
+		"s3:GetAnalyticsConfiguration",
+		"s3:DeleteBucketAnalyticsConfiguration",
+		"s3:GetBucketAnalyticsConfiguration",
+	},
+	"aws_s3_bucket_inventory": {
+		"s3:PutInventoryConfiguration",
+		"s3:GetInventoryConfiguration",
+		"s3:GetBucketInventoryConfiguration",
+		"s3:DeleteBucketInventoryConfiguration",
+	},
+	"aws_s3_bucket_metric": {
+		"s3:PutMetricsConfiguration",
+		"s3:GetMetricsConfiguration",
+		"s3:DeleteBucketMetricsConfiguration",
+		"s3:GetBucketMetricsConfiguration",
+	},
+	"aws_s3_bucket_intelligent_tiering_configuration": {
+		"s3:PutIntelligentTieringConfiguration",
+		"s3:GetIntelligentTieringConfiguration",
+		"s3:GetBucketIntelligentTieringConfiguration",
+		"s3:DeleteBucketIntelligentTieringConfiguration",
 	},
 }
 
