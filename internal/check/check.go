@@ -15,6 +15,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
@@ -236,7 +237,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
-	policy, err := iam.ParsePolicy(raw)
+	doc, err := policy.Parse(raw)
 	if err != nil {
 		return Result{}, fmt.Errorf("parse policy: %w", err)
 	}
@@ -256,7 +257,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 		}
 	}
 
-	missing, err := iam.Validate(changes, policy, resolver, opts.Filter.config())
+	missing, err := iam.Validate(changes, doc, resolver, opts.Filter.config())
 	if err != nil {
 		return Result{}, err
 	}
@@ -279,7 +280,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 			res.Checked = countResources(resolved)
 		}
 	}
-	missing = append(missing, iam.CheckNeeds(needs, policy, opts.Filter.StrictResources)...)
+	missing = append(missing, iam.CheckNeeds(needs, doc, opts.Filter.StrictResources)...)
 	kept, excluded := iam.ApplyExclusions(missing, opts.Exclusions)
 	res.Excluded = excluded
 	for _, m := range kept {

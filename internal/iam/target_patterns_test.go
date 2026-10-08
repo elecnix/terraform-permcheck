@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // TestSecretPattern_SuffixIsSixCharacters checks that a secret's pattern
@@ -27,9 +28,9 @@ func TestSecretPattern_SuffixIsSixCharacters(t *testing.T) {
 		{"arn:aws:secretsmanager:us-east-1:111111111111:secret:*", true},
 	}
 	for _, c := range cases {
-		policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 			{"Effect":"Allow","Action":"secretsmanager:CreateSecret","Resource":"`+c.grant+`"}]}`)
-		if got := policy.worstVerdict("secretsmanager:CreateSecret", targets, false) == Covered; got != c.want {
+		if got := doc.WorstVerdict("secretsmanager:CreateSecret", targets, false) == policy.Covered; got != c.want {
 			t.Errorf("grant %s covers secret app = %v, want %v", c.grant, got, c.want)
 		}
 	}

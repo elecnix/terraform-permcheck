@@ -61,7 +61,7 @@ func hiddenOps(schemas map[string]fakeSchema, op string) []string {
 		dedicated := isDedicated(s.schema())
 		all := true
 		for _, r := range reqs {
-			if decide(typ, r.Action, r.BestEffort, dedicated, nil).class == classManagement {
+			if decide(typ, r.Action, r.BestEffort, dedicated, nil).class == ClassManagement {
 				all = false
 				break
 			}
@@ -127,9 +127,9 @@ func TestValidate_DedicatedResourceCoreActionRequired(t *testing.T) {
 	}
 	var got []string
 	for _, m := range missing {
-		got = append(got, m.ResourceType+" "+m.Action+" "+m.Class)
+		got = append(got, m.ResourceType+" "+m.Action+" "+m.Class.String())
 	}
-	want := []string{"aws_s3_object s3:PutObject [required]", "aws_s3_object s3:GetObject [required]"}
+	want := []string{"aws_s3_object s3:PutObject management", "aws_s3_object s3:GetObject management"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("missing = %v, want %v", got, want)
 	}

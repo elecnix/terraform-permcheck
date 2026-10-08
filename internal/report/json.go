@@ -47,10 +47,10 @@ type JSONExcluded struct {
 	Change         string `json:"change,omitempty"`
 	Need           string `json:"need,omitempty"`
 	NeedResource   string `json:"need_resource,omitempty"`
-	ExcludedAction string `json:"excluded_action"`
+	ExcludedAction string `json:"excluded_action,omitempty"`
 	Reason         string `json:"reason,omitempty"`
 	// Unresolved is true for an excluded resource type no schema source
-	// knows. Its excluded_action is empty.
+	// knows. It has no excluded_action.
 	Unresolved bool `json:"unresolved,omitempty"`
 }
 
@@ -114,7 +114,7 @@ func (r *Report) json() string {
 	}
 	result.UnresolvedAllowed = r.allowedUnresolved()
 
-	if r.gaps() {
+	if r.hasGaps {
 		result.Status = "gaps_found"
 		result.Missing = make([]JSONMissing, 0, len(r.findings))
 	}
@@ -128,7 +128,7 @@ func (r *Report) json() string {
 				Need:               f.Need,
 				NeedResource:       f.NeedResource,
 				MissingAction:      f.Action,
-				Class:              f.Class,
+				Class:              classTag(f.Class),
 				ConditionAttribute: f.ConditionAttribute,
 			}
 			if f.ResourceScopeUnverified {

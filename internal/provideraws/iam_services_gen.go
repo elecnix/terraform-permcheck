@@ -7,6 +7,10 @@
 
 package provideraws
 
+// iamServicesProviderRef is the terraform-provider-aws tag the tables
+// were generated from.
+const iamServicesProviderRef = "v5.90.0"
+
 // sdkPackageIAMPrefixes maps AWS SDK service package names, and the aliases
 // the provider imports them under, to IAM service prefixes.
 var sdkPackageIAMPrefixes = map[string]string{

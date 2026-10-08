@@ -12,15 +12,15 @@ import (
 // The helpers below render one part of a report, so each test can look at
 // the part it is about.
 
-func formatMissing(missing []iam.MissingAction, locations iam.Locations) string {
+func formatMissing(missing []iam.MissingAction, locations Locations) string {
 	return New(check.Result{Missing: missing}, locations, false).text()
 }
 
-func formatGitHubAnnotations(missing []iam.MissingAction, locations iam.Locations) string {
+func formatGitHubAnnotations(missing []iam.MissingAction, locations Locations) string {
 	return New(check.Result{Missing: missing}, locations, false).annotations()
 }
 
-func formatJSON(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, label string, locations iam.Locations) string {
+func formatJSON(missing []iam.MissingAction, excluded []iam.ExcludedAction, checked int, label string, locations Locations) string {
 	res := check.Result{Missing: missing, Excluded: excluded, Checked: checked, Label: label}
 	return New(res, locations, excluded != nil).json()
 }
@@ -45,11 +45,11 @@ const repoA = "arn:aws:ecr:us-east-1:111111111111:repository/app-a"
 
 func TestFormatMissing_Grouped(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
-		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: iam.ClassManagement},
+		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: iam.ClassManagement},
 	}
 
 	got := formatMissing(missing, nil)
@@ -95,7 +95,7 @@ func TestFormatMissing_Grouped(t *testing.T) {
 
 func TestFormatMissing_SingleResource(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_iam_role", ResourceName: "deploy", Change: "delete", Action: "iam:RemoveRoleFromInstanceProfile", Class: "[required]"},
+		{ResourceType: "aws_iam_role", ResourceName: "deploy", Change: "delete", Action: "iam:RemoveRoleFromInstanceProfile", Class: iam.ClassManagement},
 	}
 
 	got := formatMissing(missing, nil)
@@ -125,11 +125,11 @@ func TestFormatMissing_Empty(t *testing.T) {
 
 func TestDistinctCount(t *testing.T) {
 	missing := []iam.MissingAction{
-		{Action: "s3:HeadBucket", Class: "[required]"},
-		{Action: "s3:HeadBucket", Class: "[required]"},
-		{Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
-		{Action: "cloudwatchlogs:TagResource", Class: "[required]"},
-		{Action: "backup:CreateBackupVault", Class: "[optional]"},
+		{Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{Action: "s3:DeletePublicAccessBlock", Class: iam.ClassManagement},
+		{Action: "cloudwatchlogs:TagResource", Class: iam.ClassManagement},
+		{Action: "backup:CreateBackupVault", Class: iam.ClassOptional},
 	}
 
 	got := distinctCount(missing)
@@ -139,8 +139,8 @@ func TestDistinctCount(t *testing.T) {
 
 	// Different class = different group
 	missing2 := []iam.MissingAction{
-		{Action: "s3:HeadBucket", Class: "[required]"},
-		{Action: "s3:HeadBucket", Class: "[optional]"},
+		{Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{Action: "s3:HeadBucket", Class: iam.ClassOptional},
 	}
 	if distinctCount(missing2) != 2 {
 		t.Error("same action with different classes should be distinct")
@@ -154,11 +154,11 @@ func TestDistinctCount(t *testing.T) {
 
 func TestFormatGitHubAnnotations_Grouped(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: "[required]"},
-		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "data", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "logs_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "data_block", Change: "delete", Action: "s3:DeletePublicAccessBlock", Class: iam.ClassManagement},
+		{ResourceType: "aws_cloudwatch_log_group", ResourceName: "api", Change: "delete", Action: "cloudwatchlogs:TagResource", Class: iam.ClassManagement},
 	}
 
 	got := formatGitHubAnnotations(missing, nil)
@@ -202,7 +202,7 @@ func TestFormatGitHubAnnotations_Empty(t *testing.T) {
 
 func TestFormatGitHubAnnotations_Conditional(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "kms_key_arn"},
 	}
 
 	got := formatGitHubAnnotations(missing, nil)
@@ -222,8 +222,8 @@ func TestFormatGitHubAnnotations_Conditional(t *testing.T) {
 func TestFormatMissing_ConditionalAttribute(t *testing.T) {
 	// Conditional permissions should show [conditional: <attr>]
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"},
-		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateKey", Class: "[required]", ConditionAttribute: ""},
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "kms_key_arn"},
+		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "kms:CreateKey", Class: iam.ClassManagement, ConditionAttribute: ""},
 	}
 	got := formatMissing(missing, nil)
 	if !strings.Contains(got, "kms:CreateGrant [conditional: kms_key_arn]") {
@@ -236,11 +236,11 @@ func TestFormatMissing_ConditionalAttribute(t *testing.T) {
 
 func TestFormatGitHubAnnotations_WithFileLocation(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "cloudtrail", Change: "create", Action: "s3:PutPublicAccessBlock", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket_public_access_block", ResourceName: "cloudtrail", Change: "create", Action: "s3:PutPublicAccessBlock", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail":                     {Path: "modules/datadog-cloudtrail/main.tf", Line: 10},
 		"aws_s3_bucket_public_access_block.cloudtrail": {Path: "modules/datadog-cloudtrail/main.tf", Line: 82},
 	}
@@ -261,11 +261,11 @@ func TestFormatGitHubAnnotations_WithFileLocation(t *testing.T) {
 func TestFormatGitHubAnnotations_PartialFileLocation(t *testing.T) {
 	// Some resources have locations, some don't.
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "unknown_bucket", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "unknown_bucket", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 5},
 	}
 
@@ -280,7 +280,7 @@ func TestFormatGitHubAnnotations_PartialFileLocation(t *testing.T) {
 
 func TestFormatGitHubAnnotations_NoLocations(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
 	}
 
 	// nil map → behavior unchanged
@@ -294,7 +294,7 @@ func TestFormatGitHubAnnotations_NoLocations(t *testing.T) {
 	}
 
 	// Empty map → same behavior
-	got = formatGitHubAnnotations(missing, iam.Locations{})
+	got = formatGitHubAnnotations(missing, Locations{})
 
 	if !strings.Contains(got, "::warning title=Missing IAM permission::") {
 		t.Error("expected ::warning without file= when locations is empty")
@@ -307,11 +307,11 @@ func TestFormatGitHubAnnotations_NoLocations(t *testing.T) {
 func TestFormatGitHubAnnotations_StripIndexForLookup(t *testing.T) {
 	// Resource names with count/for_each indices should be stripped before lookup.
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: `config["us-east-1"]`, Change: "create", Action: "s3:PutBucketPolicy", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: `config["us-east-1"]`, Change: "create", Action: "s3:PutBucketPolicy", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 		"aws_s3_bucket.config":     {Path: "config.tf", Line: 42},
 	}
@@ -328,11 +328,11 @@ func TestFormatGitHubAnnotations_StripIndexForLookup(t *testing.T) {
 
 func TestFormatMissing_WithFileLocation(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "delete", Action: "s3:HeadBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 		// logs has NO location
 	}
@@ -355,10 +355,10 @@ func TestFormatMissing_WithFileLocation(t *testing.T) {
 
 func TestFormatMissing_StripIndexForLookup(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "cloudtrail[0]", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
 	}
 
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.cloudtrail": {Path: "main.tf", Line: 10},
 	}
 
@@ -377,7 +377,7 @@ func TestFormatMissing_WithClassification(t *testing.T) {
 			Change:       "create",
 			Action:       "backup:CreateBackupVault",
 			Service:      "backup",
-			Class:        "[required]",
+			Class:        iam.ClassManagement,
 		},
 		{
 			ResourceType: "aws_backup_vault",
@@ -385,7 +385,7 @@ func TestFormatMissing_WithClassification(t *testing.T) {
 			Change:       "create",
 			Action:       "backup:PutBackupVaultAccessPolicy",
 			Service:      "backup",
-			Class:        "[optional]",
+			Class:        iam.ClassOptional,
 		},
 		{
 			ResourceType: "aws_backup_vault",
@@ -393,7 +393,7 @@ func TestFormatMissing_WithClassification(t *testing.T) {
 			Change:       "create",
 			Action:       "kms:CreateGrant",
 			Service:      "kms",
-			Class:        "[required]",
+			Class:        iam.ClassManagement,
 		},
 	}
 
@@ -435,7 +435,7 @@ func TestFormatMissing_NoClass(t *testing.T) {
 			Change:       "create",
 			Action:       "backup:CreateBackupVault",
 			Service:      "backup",
-			Class:        "",
+			Class:        iam.ClassUnknown,
 		},
 	}
 
@@ -452,8 +452,8 @@ func TestFormatMissing_NoClass(t *testing.T) {
 
 func TestFormatMissing_UnverifiedSection(t *testing.T) {
 	missing := []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
+		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: iam.ClassManagement, ResourceScopeUnverified: true},
 	}
 	out := formatMissing(missing, nil)
 	if !strings.Contains(out, "Missing IAM permissions (1):\n  s3:CreateBucket [required]\n") {
@@ -478,7 +478,7 @@ func TestFormatMissing_UnverifiedSection(t *testing.T) {
 
 func TestFormatGitHubAnnotations_Unverified(t *testing.T) {
 	out := formatGitHubAnnotations([]iam.MissingAction{
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
+		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: iam.ClassManagement, ResourceScopeUnverified: true},
 	}, nil)
 	want := "::warning title=Unverified IAM permission::lambda:CreateFunction [unverified: resource scope] needed by: aws_lambda_function.fn (create)\n"
 	if out != want {
@@ -488,8 +488,8 @@ func TestFormatGitHubAnnotations_Unverified(t *testing.T) {
 
 func TestFormatJSON_Unverified(t *testing.T) {
 	out := formatJSON([]iam.MissingAction{
-		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: "[required]", ResourceScopeUnverified: true},
-		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
+		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: iam.ClassManagement, ResourceScopeUnverified: true},
+		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
 	}, nil, 2, "resource changes", nil)
 	var res struct {
 		Status  string                   `json:"status"`
@@ -552,7 +552,7 @@ func TestFormatExcluded_Operations(t *testing.T) {
 
 // TestFormat_NeedSource verifies every format names the need as the source.
 func TestFormat_NeedSource(t *testing.T) {
-	missing := []iam.MissingAction{{Action: "ecr:DescribeImages", Service: "ecr", Class: "[required]", Need: "EcrImageVerification", NeedResource: repoA}}
+	missing := []iam.MissingAction{{Action: "ecr:DescribeImages", Service: "ecr", Class: iam.ClassManagement, Need: "EcrImageVerification", NeedResource: repoA}}
 
 	if got := formatMissing(missing, nil); !strings.Contains(got, `→ needs "EcrImageVerification" on `+repoA) {
 		t.Errorf("FormatMissing:\n%s", got)
@@ -575,5 +575,22 @@ func TestFormat_NeedSource(t *testing.T) {
 	}
 	if got := formatExcludedAnnotations(excluded); !strings.Contains(got, `for: needs "EcrImageVerification"`) {
 		t.Errorf("FormatExcludedAnnotations:\n%s", got)
+	}
+}
+
+func TestClassTag(t *testing.T) {
+	tests := []struct {
+		class iam.Class
+		tag   string
+	}{
+		{iam.ClassManagement, "[required]"},
+		{iam.ClassOptional, "[optional]"},
+		{iam.ClassDataPlane, "[data-plane]"},
+		{iam.ClassUnknown, ""},
+	}
+	for _, tt := range tests {
+		if got := classTag(tt.class); got != tt.tag {
+			t.Errorf("classTag(%v) = %q, want %q", tt.class, got, tt.tag)
+		}
 	}
 }

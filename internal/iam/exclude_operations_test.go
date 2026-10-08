@@ -1,10 +1,6 @@
 package iam
 
 import (
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 )
 
@@ -12,8 +8,8 @@ import (
 // permission, which is what an operations list has to separate.
 func deleteAndCreateFixture() []MissingAction {
 	return []MissingAction{
-		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "create", Action: "s3:PutBucketEncryption", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "delete", Action: "s3:PutBucketEncryption", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "create", Action: "s3:PutBucketEncryption", Class: ClassManagement},
+		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "delete", Action: "s3:PutBucketEncryption", Class: ClassManagement},
 	}
 }
 
@@ -105,62 +101,5 @@ func TestApplyExclusions_OperationsAndResource(t *testing.T) {
 	}
 	if len(kept) != 1 || kept[0].ResourceType != "aws_cloudtrail" {
 		t.Fatalf("kept = %+v, want only the trail", kept)
-	}
-}
-
-// TestParseConfig_Operations parses the optional list.
-func TestParseConfig_Operations(t *testing.T) {
-	cfg, err := parseConfig([]byte(`{"exclude":[
-		{"permission":"s3:DeleteBucketEncryption","operations":["delete"],"reason":"locked bucket"},
-		{"permission":"s3:*"}
-	]}`))
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if len(cfg.Exclude[0].Operations) != 1 || cfg.Exclude[0].Operations[0] != "delete" {
-		t.Errorf("operations = %+v, want [delete]", cfg.Exclude[0].Operations)
-	}
-	if cfg.Exclude[1].Operations != nil {
-		t.Errorf("absent operations = %+v, want nil", cfg.Exclude[1].Operations)
-	}
-}
-
-// TestParseConfig_OperationsNormalized pins that the trimmed, lowercased
-// operation names land in the returned config, so a caller reading
-// Config.Exclude[i].Operations never sees "Delete" or " delete ".
-func TestParseConfig_OperationsNormalized(t *testing.T) {
-	cfg, err := parseConfig([]byte(`{"exclude":[{"permission":"s3:*","operations":["Delete"," UPDATE "]}]}`))
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	want := []string{"delete", "update"}
-	if !slices.Equal(cfg.Exclude[0].Operations, want) {
-		t.Fatalf("operations = %q, want %q", cfg.Exclude[0].Operations, want)
-	}
-}
-
-// TestParseConfig_UnknownOperation rejects a name the plan never emits.
-func TestParseConfig_UnknownOperation(t *testing.T) {
-	_, err := parseConfig([]byte(`{"exclude":[{"permission":"s3:*","operations":["destroy"]}]}`))
-	if err == nil || !strings.Contains(err.Error(), "unknown operation") {
-		t.Fatalf("expected 'unknown operation' error, got %v", err)
-	}
-}
-
-// TestLoadConfig_OperationsFile reads an operations list from disk.
-func TestLoadConfig_OperationsFile(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "permcheck.json")
-	body := `{"exclude":[{"permission":"s3:DeleteBucketEncryption","resource":"aws_s3_bucket_server_side_encryption_configuration.*","operations":["delete"],"reason":"role intentionally cannot delete"}]}`
-	if err := os.WriteFile(p, []byte(body), 0644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := LoadConfig(p)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	e := cfg.Exclude[0]
-	if len(e.Operations) != 1 || e.Operations[0] != "delete" {
-		t.Fatalf("operations = %+v, want [delete]", e.Operations)
 	}
 }

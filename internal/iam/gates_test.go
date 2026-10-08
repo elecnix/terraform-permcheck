@@ -61,7 +61,7 @@ func TestValidate_AnyGateUngatedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(missing) != 1 || missing[0].ConditionAttribute != "" || missing[0].Class != "[required]" {
+	if len(missing) != 1 || missing[0].ConditionAttribute != "" || missing[0].Class != ClassManagement {
 		t.Errorf("expected one ungated [required] finding, got %+v", missing)
 	}
 }
@@ -77,11 +77,11 @@ func TestValidate_AnyGateRequiredPathDecidesTag(t *testing.T) {
 	}}
 	for _, c := range []struct {
 		attrs     map[string]bool
-		wantClass string
+		wantClass Class
 		wantAttr  string
 	}{
-		{map[string]bool{"note": true}, "[required]", "note"},
-		{map[string]bool{}, "[optional]", ""},
+		{map[string]bool{"note": true}, ClassManagement, "note"},
+		{map[string]bool{}, ClassOptional, ""},
 	} {
 		changes := []*plan.ResourceChange{{Type: "aws_widget", Name: "w", Change: "create", Attributes: c.attrs}}
 		missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
@@ -105,10 +105,10 @@ func TestValidate_AnyGateChangeAndBestEffort(t *testing.T) {
 	cases := []struct {
 		name    string
 		changed map[string]bool
-		want    string // Class, or "-" for no finding
+		want    Class
 	}{
-		{"policy changed", map[string]bool{"policy": true}, "[required]"},
-		{"only the best-effort path holds", map[string]bool{"policy": false}, "[optional]"},
+		{"policy changed", map[string]bool{"policy": true}, ClassManagement},
+		{"only the best-effort path holds", map[string]bool{"policy": false}, ClassOptional},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/hcl"
 )
 
 // annotations renders the findings as GitHub Actions ::warning:: workflow
@@ -52,7 +52,7 @@ func (r *Report) annotations() string {
 
 // writeWarning writes one ::warning:: command, with file= and line= when the
 // location is known.
-func writeWarning(b *strings.Builder, loc *iam.FileLocation, title, msg string) {
+func writeWarning(b *strings.Builder, loc *hcl.Location, title, msg string) {
 	if loc != nil {
 		fmt.Fprintf(b, "::warning file=%s,line=%d,title=%s::%s\n", loc.Path, loc.Line, title, msg)
 	} else {
@@ -61,7 +61,7 @@ func writeWarning(b *strings.Builder, loc *iam.FileLocation, title, msg string) 
 }
 
 // firstLocated returns the location of the first finding that has one.
-func firstLocated(findings []finding) *iam.FileLocation {
+func firstLocated(findings []finding) *hcl.Location {
 	for _, f := range findings {
 		if f.loc != nil {
 			return f.loc

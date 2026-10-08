@@ -46,8 +46,8 @@ func writeGroups(b *strings.Builder, groups []group[findingKey, finding]) {
 		line := g.key.action
 		if g.key.condition != "" {
 			line += fmt.Sprintf(" [conditional: %s]", g.key.condition)
-		} else if g.key.class != "" {
-			line += " " + g.key.class
+		} else if tag := classTag(g.key.class); tag != "" {
+			line += " " + tag
 		}
 		if g.key.unverified {
 			line += " " + unverifiedTag

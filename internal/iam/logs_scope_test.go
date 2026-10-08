@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // logsResolver serves the permissions the provider source yields for the
@@ -82,7 +83,7 @@ func TestValidate_LogGroupGrantScopedElsewhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy, err := ParsePolicy(raw)
+	policy, err := policy.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +111,7 @@ func TestValidate_LogGroupGrantMatchingPrefix(t *testing.T) {
 		"arn:aws:logs:us-east-1:111111111111:*",
 	} {
 		t.Run(resource, func(t *testing.T) {
-			policy, err := ParsePolicy([]byte(`{
+			policy, err := policy.Parse([]byte(`{
 				"Version": "2012-10-17",
 				"Statement": [{
 					"Effect": "Allow",
@@ -137,7 +138,7 @@ func TestValidate_LogGroupGrantMatchingPrefix(t *testing.T) {
 // form against a different prefix. Its segment count differs from the plain
 // log-group ARN, so it is compared against the `:*` target.
 func TestValidate_LogGroupGrantOtherPrefixWithStarSuffix(t *testing.T) {
-	policy, err := ParsePolicy([]byte(`{
+	policy, err := policy.Parse([]byte(`{
 		"Version": "2012-10-17",
 		"Statement": [{
 			"Effect": "Allow",

@@ -1,11 +1,11 @@
-package iam
+package policy
 
 import "strings"
 
 // Coverage.
 //
 // Every check of the form "does the policy grant this action for this
-// resource change?" goes through Coverage: each requirement Validate checks,
+// resource?" goes through Coverage: each requirement the iam package checks,
 // schema and implied alike, and each declared need. A requirement carries the
 // target ARN patterns its action acts on, or none when the plan does not show
 // them. Coverage then applies one rule set, so the checks cannot drift apart.
@@ -41,7 +41,7 @@ func (v Verdict) String() string {
 // any of the target ARN patterns. An empty targets list means the target is
 // unknown. Then the action alone decides, except that with strict set, a grant
 // limited to some resources is Unverified instead of Covered.
-func (d *PolicyDocument) Coverage(action string, targets []string, strict bool) Verdict {
+func (d *Document) Coverage(action string, targets []string, strict bool) Verdict {
 	if len(targets) > 0 {
 		if d.CoversTarget(action, targets) {
 			return Covered
@@ -75,7 +75,7 @@ func (d *PolicyDocument) Coverage(action string, targets []string, strict bool) 
 // one of those forms is compared with the forms of that length only. Compared
 // with a form of another length, the overlap is undecidable and would always
 // count as coverage.
-func (d *PolicyDocument) CoversTarget(action string, targets []string) bool {
+func (d *Document) CoversTarget(action string, targets []string) bool {
 	for _, t := range targets {
 		if d.coversOneTarget(action, t, targets) {
 			return true
@@ -84,7 +84,7 @@ func (d *PolicyDocument) CoversTarget(action string, targets []string) bool {
 	return false
 }
 
-func (d *PolicyDocument) coversOneTarget(action, target string, forms []string) bool {
+func (d *Document) coversOneTarget(action, target string, forms []string) bool {
 	allowed := false
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
@@ -118,4 +118,24 @@ func targetsLike(pattern string, targets []string) []string {
 		return targets
 	}
 	return like
+}
+
+// WorstVerdict checks action against each target and returns the worst
+// verdict. Each target is the list of ARN forms of one resource the change
+// acts on, and every one of them must be covered. With no targets, the
+// action alone decides.
+func (d *Document) WorstVerdict(action string, targets [][]string, strict bool) Verdict {
+	if len(targets) == 0 {
+		return d.Coverage(action, nil, strict)
+	}
+	worst := Covered
+	for _, forms := range targets {
+		switch d.Coverage(action, forms, strict) {
+		case Missing:
+			return Missing
+		case Unverified:
+			worst = Unverified
+		}
+	}
+	return worst
 }

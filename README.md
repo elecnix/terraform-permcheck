@@ -71,7 +71,7 @@ Each output format reports unresolved types:
 - `github-annotations` writes one `::warning` per type, titled `Unresolved resource type`, with the file and line of its first resource when `--terraform-root` gives locations.
 - `json` lists them in a top-level `unresolved_types` array. Each entry has `resource_type`, `allowed`, and `resources`, with `resource_name`, `change`, and the file and line when known. The `missing` array keeps its old content.
 
-To accept the gap for every unresolved type, pass `--allow-unresolved-types` or set `"allow_unresolved_types": true` in the config file. A flag, `true` or `false`, overrides the config. To accept it for one type, add an exclusion with `"permission": "*"` and a `resource` pattern that matches the type, such as `{"permission": "*", "resource": "aws_example_widget", "reason": "checked by hand"}`. A narrower permission pattern, such as `s3:*`, doesn't match an unresolved type. In both cases PermCheck still reports the type, and the summary line ends with `N resource types unresolved (allowed)` in place of the all-clear line. In `json`, `unresolved_allowed` gives that count.
+To accept the gap for every unresolved type, pass `--allow-unresolved-types` or set `"allow_unresolved_types": true` in the config file. A flag, `true` or `false`, overrides the config. To accept it for one type, add an exclusion with `"permission": "*"` and a `resource` pattern that matches the type, such as `{"permission": "*", "resource": "aws_example_widget", "reason": "checked by hand"}`. A narrower permission pattern, such as `s3:*`, doesn't match an unresolved type. In both cases PermCheck still reports the type in place of the all-clear line. The summary line ends with `N resource types unresolved (allowed)` for the flag, and with `N resource types unresolved (excluded)` for an exclusion. In `json`, `unresolved_allowed` gives the sum of both counts.
 
 A lookup that fails for another reason, such as a network error, a timeout, or an HTTP 5xx or 429 from the registry, stops the run with exit code 2. PermCheck can't tell whether such a type exists, so it neither checks it nor reports it as unresolved. Run the check again once the registry answers. The registry answers 403 or 404 for a type it doesn't hold, and PermCheck reads both as unresolved.
 
@@ -167,8 +167,10 @@ Terraform provider calls. `aws_wafv2_web_acl_association` calls
 `wafv2:AssociateWebACL`, but AWS WAFv2 then calls into the target service to
 attach the ACL — so associating a Web ACL with an **ALB** additionally requires
 `elasticloadbalancing:SetWebACL`, an **API Gateway stage** requires
-`apigateway:SetWebACL`, and an **AppSync API** requires `appsync:SetWebACL`.
-These callbacks are invisible to both the CloudFormation schema and the
+`apigateway:SetWebACL`, an **AppSync API** requires `appsync:SetWebACL`, a
+**Cognito user pool** requires `cognito-idp:AssociateWebACL`, an **App Runner
+service** requires `apprunner:AssociateWebAcl`, and a **Verified Access
+instance** requires `ec2:AssociateVerifiedAccessInstanceWebAcl`. These callbacks are invisible to both the CloudFormation schema and the
 provider source, so PermCheck adds them explicitly:
 
 - When the target's `resource_arn` is a known ARN, only the callback for that
@@ -178,8 +180,7 @@ provider source, so PermCheck adds them explicitly:
   referenced type. It accepts `aws_lb`, `aws_alb`, `aws_api_gateway_stage`,
   `aws_appsync_graphql_api`, `aws_cognito_user_pool`, `aws_apprunner_service`
   and `aws_verifiedaccess_instance`, as resources or data sources. It then
-  requires only the callback for that service. Cognito, App Runner and Verified
-  Access have no callback in PermCheck's table yet, so they require none.
+  requires only the callback for that service.
 - When the reference does not tell the type (a variable or a module output,
   say) or you're in static HCL mode, PermCheck can't tell which target
   applies. It over-approximates and reports every candidate callback tagged
@@ -210,7 +211,9 @@ rather than only the action name:
   `aws_ecs_task_definition`, `aws_cloudwatch_event_target`,
   `aws_apigatewayv2_integration`). The role comes from a literal ARN in the
   `role` or `role_arn` attribute, or from a reference to an `aws_iam_role`
-  with a known `name`.
+  with a known `name`. When the plan shows that the attribute is set but not
+  which role it holds, a policy with no `iam:PassRole` grant at all is
+  reported missing.
 - PermCheck checks cross-service callbacks, such as
   `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
   `aws_wafv2_web_acl_association`. The target is a literal ARN, or the
@@ -562,6 +565,11 @@ With `--format github-annotations`, each missing permission group produces a
 `::warning::` workflow command that GitHub Actions surfaces as a ⚠️ annotation
 in the PR diff. `--exit-zero` ensures the step itself succeeds so the check
 passes green while surfacing warnings.
+
+With `--terraform-root`, an annotation also carries the file and line of the
+resource block. In plan mode, only resources of the root module get one: the
+parser does not resolve module calls, so it cannot tell which block a module
+resource comes from.
 
 ## License
 

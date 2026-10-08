@@ -1,7 +1,7 @@
 --- stdout ---
 ::warning file=s3.tf,line=3,title=Missing IAM permission::s3:PutBucketTagging needed by: aws_s3_bucket.a[0] (create)
 
-3 resource changes, 1 declared need checked, 1 distinct missing permissions found.
+3 resource changes, 1 declared need checked, 1 distinct missing permission found.
 ::notice title=Excluded IAM permission::s3:DeleteBucket excluded (per config): bucket is retained for: aws_s3_bucket.a[0] (delete), aws_s3_bucket.b["x"] (delete)
 ::notice title=Excluded IAM permission::kms:TagResource excluded (per config) for: aws_kms_key.main (create)
 ::notice title=Excluded IAM permission::logs:DeleteLogGroup excluded (per config): logs are kept for: needs "Logs"

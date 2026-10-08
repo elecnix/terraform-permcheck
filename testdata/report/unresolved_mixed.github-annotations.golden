@@ -4,5 +4,5 @@
 ::warning file=new.tf,line=9,title=Unresolved resource type::aws_new_thing has no permission data, so its permissions were not checked. Resources: aws_new_thing.a (create), aws_new_thing.b["k"] (update)
 ::warning title=Unresolved resource type::aws_other_new has no permission data, so its permissions were not checked. Resources: aws_other_new.x (delete)
 
-5 resource changes checked, 1 distinct missing permissions found, 1 unverified (resource scope), 2 resource types unresolved.
+5 resource changes checked, 1 distinct missing permission found, 1 unverified (resource scope), 2 resource types unresolved.
 --- stderr ---

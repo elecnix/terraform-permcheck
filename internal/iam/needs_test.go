@@ -93,7 +93,7 @@ func TestCheckNeeds(t *testing.T) {
 
 func TestCheckNeeds_FindingShape(t *testing.T) {
 	got := CheckNeeds([]Need{{Sid: "Push", Actions: []string{"ecr:PutImage"}}}, mustPolicy(t, `{"Statement":[]}`), false)
-	want := []MissingAction{{Action: "ecr:PutImage", Service: "ecr", Class: "[required]", Need: "Push"}}
+	want := []MissingAction{{Action: "ecr:PutImage", Service: "ecr", Class: ClassManagement, Need: "Push"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
@@ -123,40 +123,6 @@ func TestSelectNeeds(t *testing.T) {
 	}
 	if _, err := SelectNeeds(needs, "deploi"); err == nil || !strings.Contains(err.Error(), `"deploi"`) {
 		t.Errorf("unknown principal: want an error naming it, got %v", err)
-	}
-}
-
-func TestParseConfig_Needs(t *testing.T) {
-	c, err := parseConfig([]byte(`{"needs":[{"sid":"Auth","principal":"ci","actions":["ecr:GetAuthorizationToken"],"resources":["*"],"reason":"docker login"}]}`))
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	want := []Need{{Sid: "Auth", Principal: "ci", Actions: []string{"ecr:GetAuthorizationToken"}, Resources: []string{"*"}, Reason: "docker login"}}
-	if !reflect.DeepEqual(c.Needs, want) {
-		t.Errorf("Needs = %+v, want %+v", c.Needs, want)
-	}
-
-	for _, tt := range []struct{ raw, want string }{
-		{`{"needs":[{"actions":["s3:GetObject"]}]}`, "sid is required"},
-		{`{"needs":[{"sid":"A"}]}`, "actions is required"},
-		{`{"needs":[{"sid":"A","actions":["GetObject"]}]}`, "single service:Action"},
-		{`{"needs":[{"sid":"A","actions":["s3:Get*"]}]}`, "single service:Action"},
-		{`{"needs":[{"sid":"A","actions":["s3:GetObject"],"resources":["my-bucket"]}]}`, "must be \"*\" or an ARN"},
-		{`{"needs":[{"sid":"A","actions":["s3:GetObject"]},{"sid":"A","actions":["s3:PutObject"]}]}`, "duplicate sid"},
-		// A need without a principal runs with every principal, so its sid
-		// clashes with the same sid under a named principal, in either order.
-		{`{"needs":[{"sid":"A","actions":["s3:GetObject"]},{"sid":"A","principal":"ci","actions":["s3:PutObject"]}]}`, "duplicate sid"},
-		{`{"needs":[{"sid":"A","principal":"ci","actions":["s3:GetObject"]},{"sid":"A","actions":["s3:PutObject"]}]}`, "duplicate sid"},
-	} {
-		if _, err := parseConfig([]byte(tt.raw)); err == nil || !strings.Contains(err.Error(), tt.want) {
-			t.Errorf("parseConfig(%s): want error containing %q, got %v", tt.raw, tt.want, err)
-		}
-	}
-
-	// Needs under two different principals never run together, so they may
-	// share a sid.
-	if _, err := parseConfig([]byte(`{"needs":[{"sid":"A","principal":"ci","actions":["s3:GetObject"]},{"sid":"A","principal":"app","actions":["s3:PutObject"]}]}`)); err != nil {
-		t.Errorf("parseConfig: one sid under two principals: %v", err)
 	}
 }
 

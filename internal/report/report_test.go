@@ -14,11 +14,11 @@ import (
 // finding, with two findings that share a group.
 func countFixture() []iam.MissingAction {
 	return []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "b[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: "[optional]"},
-		{ResourceType: "aws_kms_key", ResourceName: "k", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "policy"},
-		{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: "[required]", ResourceScopeUnverified: true},
+		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "b[0]", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassOptional},
+		{ResourceType: "aws_kms_key", ResourceName: "k", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "policy"},
+		{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true},
 	}
 }
 
@@ -88,7 +88,7 @@ func TestGroupBy_KeepsFirstSeenOrder(t *testing.T) {
 // TestNew_ResolvesLocationsOnce checks that a finding gets its location from
 // its index-free key, and a need finding gets none.
 func TestNew_ResolvesLocationsOnce(t *testing.T) {
-	locations := iam.Locations{
+	locations := Locations{
 		"aws_s3_bucket.a": {Path: "a.tf", Line: 1},
 		"aws_s3_bucket.b": {Path: "b.tf", Line: 2},
 	}
@@ -151,7 +151,7 @@ func TestReport_UnresolvedNeverAllClear(t *testing.T) {
 	}{
 		{"failing", check.Result{Unresolved: []iam.MissingAction{u}}, true, "1 resource type unresolved."},
 		{"allowed", check.Result{Unresolved: []iam.MissingAction{u}, UnresolvedAllowed: true}, false, "1 resource type unresolved (allowed)."},
-		{"excluded", check.Result{Excluded: []iam.ExcludedAction{{MissingAction: u}}}, false, "1 resource type unresolved (allowed)."},
+		{"excluded", check.Result{Excluded: []iam.ExcludedAction{{MissingAction: u}}}, false, "1 resource type unresolved (excluded)."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -37,6 +37,11 @@ func (p *Provider) Resolve(tfType string) (*iam.Schema, error) {
 	return s, nil
 }
 
+// Table returns the decoded table. It is shared: callers must not change it.
+func (p *Provider) Table() (*Table, error) {
+	return p.decoded()
+}
+
 func (p *Provider) decoded() (*Table, error) {
 	p.once.Do(func() {
 		data, err := p.load()

@@ -1,9 +1,7 @@
 package iam
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -40,21 +38,6 @@ type Exclusion struct {
 // knownOperations lists the terraform operations a MissingAction can carry.
 var knownOperations = map[string]bool{"create": true, "update": true, "delete": true, "read": true}
 
-// Config is the permcheck config file schema (permcheck.json).
-type Config struct {
-	Exclude []Exclusion `json:"exclude"`
-	// StrictResources turns on --strict-resources. The flag, when given,
-	// overrides it.
-	StrictResources bool `json:"strict_resources,omitempty"`
-	// Needs declares permissions a principal needs beyond what the terraform
-	// resources imply. They are checked against the same policy.
-	Needs []Need `json:"needs,omitempty"`
-	// AllowUnresolvedTypes turns on --allow-unresolved-types: a resource
-	// type no schema source knows is reported but does not fail the run.
-	// The flag, when given, overrides it.
-	AllowUnresolvedTypes bool `json:"allow_unresolved_types,omitempty"`
-}
-
 // ExcludedAction is a MissingAction that a config exclusion suppressed, tagged
 // with the reason from the matching exclusion.
 type ExcludedAction struct {
@@ -62,46 +45,31 @@ type ExcludedAction struct {
 	Reason string
 }
 
-// LoadConfig reads and validates a permcheck config file at filePath.
-func LoadConfig(filePath string) (*Config, error) {
-	raw, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-	return parseConfig(raw)
-}
-
-// parseConfig unmarshals and validates config JSON.
-func parseConfig(raw []byte) (*Config, error) {
-	var c Config
-	if err := json.Unmarshal(raw, &c); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-	for i := range c.Exclude {
-		e := &c.Exclude[i]
+// ValidateExclusions checks the exclude list of a config file. It writes
+// each operation back in the lower case the matcher compares.
+func ValidateExclusions(exclusions []Exclusion) error {
+	for i := range exclusions {
+		e := &exclusions[i]
 		if strings.TrimSpace(e.Permission) == "" {
-			return nil, fmt.Errorf("exclude[%d]: permission is required", i)
+			return fmt.Errorf("exclude[%d]: permission is required", i)
 		}
 		if _, err := path.Match(e.Permission, ""); err != nil {
-			return nil, fmt.Errorf("exclude[%d]: invalid permission pattern %q: %w", i, e.Permission, err)
+			return fmt.Errorf("exclude[%d]: invalid permission pattern %q: %w", i, e.Permission, err)
 		}
 		if e.Resource != "" {
 			if _, err := path.Match(e.Resource, ""); err != nil {
-				return nil, fmt.Errorf("exclude[%d]: invalid resource pattern %q: %w", i, e.Resource, err)
+				return fmt.Errorf("exclude[%d]: invalid resource pattern %q: %w", i, e.Resource, err)
 			}
 		}
 		for j, raw := range e.Operations {
 			op := strings.ToLower(strings.TrimSpace(raw))
 			if !knownOperations[op] {
-				return nil, fmt.Errorf("exclude[%d]: unknown operation %q in operations (want create, update, delete, or read)", i, raw)
+				return fmt.Errorf("exclude[%d]: unknown operation %q in operations (want create, update, delete, or read)", i, raw)
 			}
 			e.Operations[j] = op
 		}
 	}
-	if err := validateNeeds(c.Needs); err != nil {
-		return nil, err
-	}
-	return &c, nil
+	return nil
 }
 
 // ApplyExclusions partitions missing actions into those kept (no exclusion

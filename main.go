@@ -12,9 +12,11 @@
 //	terraform-permcheck validate --plan-file plan.json --policy-from-state-output deploy_policy_json --state-file state.json --cloud aws
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 //
-// Regenerate the embedded permissions table after bumping DefaultProviderRef:
+// Regenerate the embedded permissions table and the IAM service tables after
+// bumping DefaultProviderRef:
 //
 //	go run . generate-permissions --out internal/permdata/permissions.json
+//	go run internal/provideraws/gen_iam_services.go -provider <checkout>
 //
 // GitHub Actions annotations (warn, don't fail):
 //
@@ -35,23 +37,20 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
+	"github.com/elecnix/terraform-permcheck/internal/config"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
-	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
-	"github.com/elecnix/terraform-permcheck/internal/report"
-
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
+	"github.com/elecnix/terraform-permcheck/internal/report"
 )
 
 // errGapsFound is returned by validateCmd when permission gaps are detected
@@ -158,60 +157,48 @@ func validateCmd(args []string) error {
 		Resolver: check.ResolverFor(source),
 	}
 
-	// Build resource-to-file location map when --terraform-root is set.
-	// In plan mode, this provides file= and line= parameters for annotations.
-	// In static HCL mode, this is also used (though the parser already has
-	// file info).
-	var locations iam.Locations
+	// Static HCL mode reads resources from .tf files when no plan is given.
+	static := *planFile == "" && !stdinHasData()
+
+	// Build resource-to-file location map when --terraform-root is set, for
+	// the file= and line= parameters of annotations. A plan names resources
+	// by address, and the parser knows the address of root-module blocks
+	// only, so plan mode maps those. Static mode checks every block it
+	// parsed, so it maps every block.
+	var locations report.Locations
 	if *terraformRoot != "" {
+		mapResources := hcl.MapRootResources
+		if static {
+			mapResources = hcl.MapResources
+		}
 		var locErr error
-		locations, locErr = hcl.MapResources(*terraformRoot)
+		locations, locErr = mapResources(*terraformRoot)
 		if locErr != nil {
 			// Non-fatal: continue without file locations.
 			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
 		}
 	}
 
-	// Determine whether we have a plan source.
-	hasPlanInput := *planFile != "" || stdinHasData()
-
-	if !hasPlanInput {
-		// Static HCL mode: read resources from .tf files.
-		if *terraformRoot == "" {
-			return fmt.Errorf("no plan input: provide --plan-file, pipe plan JSON to stdin, or use --terraform-root for static HCL mode")
-		}
-		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
-			return fmt.Errorf("--policy-from-plan/output not applicable in static HCL mode (no plan available)")
-		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, opts, outFormat, *exitZero, locations, *showExcluded)
+	if static && *terraformRoot == "" {
+		return fmt.Errorf("no plan input: provide --plan-file, pipe plan JSON to stdin, or use --terraform-root for static HCL mode")
+	}
+	policySource := check.PolicySource{
+		File:        *policyFile,
+		PlanOutput:  *policyFromPlanOutput,
+		StateOutput: *policyFromStateOutput,
+		StateFile:   *stateFile,
+	}
+	if err := policySource.Validate(static); err != nil {
+		return err
+	}
+	prefix, err := check.CloudPrefix(*cloudName)
+	if err != nil {
+		return err
+	}
+	if static {
+		return validateStaticHCL(*terraformRoot, policySource, opts, outFormat, *exitZero, locations, *showExcluded)
 	}
 
-	// Plan mode: read plan from stdin or file.
-	// Exactly one policy source must be provided.
-	policySources := 0
-	if *policyFile != "" {
-		policySources++
-	}
-	if *policyFromPlanOutput != "" {
-		policySources++
-	}
-	if *policyFromStateOutput != "" {
-		policySources++
-	}
-	if policySources == 0 {
-		return fmt.Errorf("one of --policy-file, --policy-from-plan-output, or --policy-from-state-output is required")
-	}
-	if policySources > 1 {
-		return fmt.Errorf("only one of --policy-file, --policy-from-plan-output, or --policy-from-state-output may be specified")
-	}
-	if *cloudName == "" {
-		return fmt.Errorf("--cloud is required (supported: aws)")
-	}
-	if *cloudName != "aws" {
-		return fmt.Errorf("unsupported cloud %q (supported: aws)", *cloudName)
-	}
-
-	// Read plan
 	var planRaw []byte
 	if *planFile != "" {
 		planRaw, err = os.ReadFile(*planFile)
@@ -221,45 +208,11 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read plan: %w", err)
 	}
-
-	// Read policy from the appropriate source.
-	var policyRaw []byte
-	if *policyFile != "" {
-		policyRaw, err = os.ReadFile(*policyFile)
-		if err != nil {
-			return fmt.Errorf("read policy: %w", err)
-		}
-	} else if *policyFromPlanOutput != "" {
-		rawValue, err := plan.ParseOutput(planRaw, *policyFromPlanOutput)
-		if err != nil {
-			return fmt.Errorf("read policy from plan output: %w", err)
-		}
-		policyRaw, err = unwrapJSONString(rawValue)
-		if err != nil {
-			return fmt.Errorf("read policy from plan output %q: %w", *policyFromPlanOutput, err)
-		}
-	} else if *policyFromStateOutput != "" {
-		var stateRaw []byte
-		if *stateFile != "" {
-			stateRaw, err = os.ReadFile(*stateFile)
-		} else {
-			stateRaw, err = readStdin()
-		}
-		if err != nil {
-			return fmt.Errorf("read state: %w", err)
-		}
-		rawValue, err := plan.ParseStateOutput(stateRaw, *policyFromStateOutput)
-		if err != nil {
-			return fmt.Errorf("read policy from state output: %w", err)
-		}
-		policyRaw, err = unwrapJSONString(rawValue)
-		if err != nil {
-			return fmt.Errorf("read policy from state output %q: %w", *policyFromStateOutput, err)
-		}
+	policyRaw, err := policySource.Load(planRaw, readStdin)
+	if err != nil {
+		return err
 	}
-
-	// Parse plan
-	changes, err := plan.Parse(planRaw, strings.ToLower(*cloudName)+"_")
+	changes, err := plan.Parse(planRaw, prefix)
 	if err != nil {
 		return fmt.Errorf("parse plan: %w", err)
 	}
@@ -300,15 +253,15 @@ const defaultConfigFile = "permcheck.json"
 // loadConfig resolves the permcheck config. When configPath is set it is
 // loaded explicitly (a load failure is fatal). Otherwise ./permcheck.json is
 // used if present; an absent default config yields an empty config.
-func loadConfig(configPath string) (*iam.Config, error) {
+func loadConfig(configPath string) (*config.Config, error) {
 	path := configPath
 	if path == "" {
 		if _, err := os.Stat(defaultConfigFile); err != nil {
-			return &iam.Config{}, nil // no default config present
+			return &config.Config{}, nil // no default config present
 		}
 		path = defaultConfigFile
 	}
-	cfg, err := iam.LoadConfig(path)
+	cfg, err := config.Load(path)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", path, err)
 	}
@@ -320,7 +273,7 @@ func loadConfig(configPath string) (*iam.Config, error) {
 // a missing or unverified permission, or a resource type no schema source
 // knows unless unresolved types are allowed. Excluded findings never fail
 // the run.
-func reportResult(res check.Result, format report.Format, exitZero, showExcluded bool, locations iam.Locations) error {
+func reportResult(res check.Result, format report.Format, exitZero, showExcluded bool, locations report.Locations) error {
 	printReport(res, format, locations, showExcluded)
 	if res.HasGaps() && !exitZero {
 		return errGapsFound
@@ -330,20 +283,8 @@ func reportResult(res check.Result, format report.Format, exitZero, showExcluded
 
 // printReport writes the report of res in the given format. The report
 // package decides the content and which stream each part goes to.
-func printReport(res check.Result, format report.Format, locations iam.Locations, showExcluded bool) {
+func printReport(res check.Result, format report.Format, locations report.Locations, showExcluded bool) {
 	report.New(res, locations, showExcluded).Write(format, os.Stdout, os.Stderr)
-}
-
-// unwrapJSONString converts a json.RawMessage to a []byte suitable for
-// policy parsing. If the raw value is a JSON string (e.g. `"..."`), it
-// unquotes and returns the inner string. Otherwise it returns the raw
-// message as-is (e.g. for nested JSON objects).
-func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return []byte(s), nil
-	}
-	return raw, nil
 }
 
 // validateStaticHCL runs validation against terraform configuration files
@@ -351,28 +292,14 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, opts check.Options, format report.Format, exitZero bool, locations iam.Locations, showExcluded bool) error {
-	if cloudName == "" {
-		return fmt.Errorf("--cloud is required (supported: aws)")
-	}
-	if cloudName != "aws" {
-		return fmt.Errorf("unsupported cloud %q (supported: aws)", cloudName)
-	}
-
-	// Parse .tf files
+func validateStaticHCL(terraformRoot string, policySource check.PolicySource, opts check.Options, format report.Format, exitZero bool, locations report.Locations, showExcluded bool) error {
 	blocks, err := hcl.ParseDir(terraformRoot)
 	if err != nil {
 		return fmt.Errorf("parse terraform configurations: %w", err)
 	}
 
 	// The policy file is read only when there is something to check.
-	readPolicy := func() ([]byte, error) {
-		raw, err := os.ReadFile(policyFile)
-		if err != nil {
-			return nil, fmt.Errorf("read policy: %w", err)
-		}
-		return raw, nil
-	}
+	readPolicy := func() ([]byte, error) { return policySource.Load(nil, nil) }
 	res, err := check.Run(check.FromHCL(blocks), readPolicy, opts)
 	if err != nil {
 		return err

@@ -1,20 +1,45 @@
+// Package iam works out the IAM permissions a terraform plan needs and checks
+// them against a policy (see the policy package).
 package iam
 
 import (
 	"errors"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
-// permissionClass categorizes an IAM permission as management-plane or data-plane.
-type permissionClass int
+// Class categorizes an IAM permission as management-plane or data-plane.
+// The report renders it as a tag, such as [required].
+type Class int
 
 const (
-	classUnknown    permissionClass = iota
-	classManagement                 // provisioning/configuration actions (needed by deploy role)
-	classDataPlane                  // data access actions (belongs to application roles)
-	classOptional                   // actions for optional sub-resources (access policy, notifications, etc.)
+	// ClassUnknown is the zero Class, of a finding with no action: an
+	// unresolved resource type.
+	ClassUnknown Class = iota
+	// ClassManagement is a provisioning or configuration action, which the
+	// deploy role needs.
+	ClassManagement
+	// ClassDataPlane is a data access action, which belongs to application
+	// roles.
+	ClassDataPlane
+	// ClassOptional is an action for an optional sub-resource, such as an
+	// access policy or notifications.
+	ClassOptional
 )
+
+func (c Class) String() string {
+	switch c {
+	case ClassManagement:
+		return "management"
+	case ClassDataPlane:
+		return "data-plane"
+	case ClassOptional:
+		return "optional"
+	default:
+		return "unknown"
+	}
+}
 
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
@@ -26,7 +51,7 @@ type MissingAction struct {
 	Change        string // "create", "update", or "delete"
 	Action        string // required IAM action, e.g. "kms:CreateGrant"
 	Service       string // extracted service prefix, e.g. "kms"
-	Class         string // classification tag: "[required]", "[optional]", "[data-plane]", or ""
+	Class         Class  // permission class of Action
 	// ResourceScopeUnverified marks an action the policy grants only on some
 	// resources while the target ARN is unknown (--strict-resources). The
 	// grant may or may not apply, so the finding is unverified, not missing.
@@ -97,7 +122,7 @@ func DefaultFilter() FilterConfig {
 // Each change's requirements are the schema's requirements for its operation
 // plus the ones AWS implies (see impliedRequirements). checkChange decides
 // each of them the same way.
-func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
+func Validate(changes []*plan.ResourceChange, doc *policy.Document, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
 	// Every change, no-op included, can be the target of a reference.
@@ -123,7 +148,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 			reqs = operationRequirements(schema, rc.Change)
 		}
 		paths := append(withTargets(reqs, resourceTargets(rc, set)), impliedRequirements(rc, set)...)
-		missing = append(missing, checkChange(rc, paths, policy, isDedicated(schema), inPlan, filter)...)
+		missing = append(missing, checkChange(rc, paths, doc, isDedicated(schema), inPlan, filter)...)
 	}
 
 	return missing, nil
@@ -142,7 +167,7 @@ func operationRequirements(schema *Schema, op string) []Requirement {
 // checkChange returns a finding for each action of reqs that resource change
 // rc needs and the policy does not grant, after the filter. dedicated and
 // inPlan feed decide.
-func checkChange(rc *plan.ResourceChange, reqs []targeted, policy *PolicyDocument, dedicated bool, inPlan map[string]bool, filter FilterConfig) []MissingAction {
+func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document, dedicated bool, inPlan map[string]bool, filter FilterConfig) []MissingAction {
 	var missing []MissingAction
 	for _, paths := range pathsByAction(reqs) {
 		action := paths.action
@@ -164,17 +189,17 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, policy *PolicyDocumen
 
 		// Action coverage, resource-scoped when the target ARN is derivable
 		// from the plan.
-		verdict := paths.verdict(rc, policy, filter.StrictResources)
-		if verdict == Covered {
+		verdict := paths.verdict(rc, doc, filter.StrictResources)
+		if verdict == policy.Covered {
 			continue
 		}
 
 		// Filter by class
 		class := d.class
-		if filter.ExcludeDataPlane && class == classDataPlane {
+		if filter.ExcludeDataPlane && class == ClassDataPlane {
 			continue
 		}
-		if filter.ExcludeOptional && class == classOptional {
+		if filter.ExcludeOptional && class == ClassOptional {
 			continue
 		}
 		if filter.ExcludeConditional && gateAttr != "" {
@@ -190,12 +215,12 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, policy *PolicyDocumen
 
 // newFinding returns the finding that the policy does not grant action, of
 // class class. A verdict of Unverified marks it unverified.
-func newFinding(action string, class permissionClass, verdict Verdict) MissingAction {
+func newFinding(action string, class Class, verdict policy.Verdict) MissingAction {
 	return MissingAction{
 		Action:                  action,
 		Service:                 actionService(action),
-		Class:                   classTag(class),
-		ResourceScopeUnverified: verdict == Unverified,
+		Class:                   class,
+		ResourceScopeUnverified: verdict == policy.Unverified,
 	}
 }
 
@@ -254,18 +279,4 @@ func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool 
 		return true
 	}
 	return rc.Attributes[top]
-}
-
-// classTag returns a human-readable classification tag for a permissionClass.
-func classTag(c permissionClass) string {
-	switch c {
-	case classOptional:
-		return "[optional]"
-	case classDataPlane:
-		return "[data-plane]"
-	case classManagement:
-		return "[required]"
-	default:
-		return "[unknown]"
-	}
 }

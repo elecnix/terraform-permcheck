@@ -125,8 +125,8 @@ func subresourceTypes() []string {
 // accident.
 func TestS3Rules_MatchExactNames(t *testing.T) {
 	for _, a := range []string{"s3:GetBucketPolicyStatus", "s3:PutBucketTaggingSomethingElse"} {
-		if got := actionClass(a); got != classManagement {
-			t.Errorf("actionClass(%q) = %d, want classManagement", a, got)
+		if got := actionClass(a); got != ClassManagement {
+			t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
 		}
 	}
 }
@@ -136,13 +136,13 @@ func TestS3Rules_MatchExactNames(t *testing.T) {
 func TestSchemaEmittedS3Actions_AreClassified(t *testing.T) {
 	for _, a := range sortedKeys(emittedS3Actions(t)) {
 		if s3RequiredActions[a] {
-			if got := actionClass(a); got != classManagement {
-				t.Errorf("actionClass(%q) = %d, want classManagement", a, got)
+			if got := actionClass(a); got != ClassManagement {
+				t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
 			}
 			continue
 		}
-		if got := actionClass(a); got != classOptional && got != classDataPlane {
-			t.Errorf("actionClass(%q) = %d, want classOptional or classDataPlane", a, got)
+		if got := actionClass(a); got != ClassOptional && got != ClassDataPlane {
+			t.Errorf("actionClass(%q) = %d, want ClassOptional or ClassDataPlane", a, got)
 		}
 	}
 }
@@ -163,9 +163,8 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 				continue
 			}
 			got := decide(tfType, a, false, false, nil).class
-			if got != classManagement {
-				t.Errorf("decide(%q, %q).class = %s, want classManagement",
-					tfType, a, classTag(got))
+			if got != ClassManagement {
+				t.Errorf("decide(%q, %q).class = %q, want %q", tfType, a, got, ClassManagement)
 			}
 		}
 	}
@@ -197,7 +196,7 @@ func TestS3OptionalRules_OwnedByTheSubresourceThatEmitsThem(t *testing.T) {
 		}
 		for _, a := range sortedKeys(actionSet(perms)) {
 			r, ok := ruleIndex[a]
-			if !ok || r.class != classOptional {
+			if !ok || r.class != ClassOptional {
 				continue
 			}
 			if r.ownedBy != tfType {
@@ -228,7 +227,7 @@ func TestValidate_BareS3Bucket(t *testing.T) {
 			got := make(map[string]bool)
 			for _, m := range missing {
 				got[m.Action] = true
-				if m.Class != "[required]" {
+				if m.Class != ClassManagement {
 					t.Errorf("%s: class %s, want [required]", m.Action, m.Class)
 				}
 			}
@@ -250,7 +249,7 @@ func TestValidate_S3SubresourceKeepsItsOwnAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(missing) != 1 || missing[0].Action != "s3:PutBucketVersioning" || missing[0].Class != "[required]" {
+	if len(missing) != 1 || missing[0].Action != "s3:PutBucketVersioning" || missing[0].Class != ClassManagement {
 		t.Errorf("missing = %+v, want s3:PutBucketVersioning [required]", missing)
 	}
 }

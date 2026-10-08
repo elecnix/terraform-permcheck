@@ -11,10 +11,11 @@ import "github.com/elecnix/terraform-permcheck/internal/plan"
 
 // passRoleRequirements returns iam:PassRole on each role the resource
 // passes. A delete passes no role. A role the plan does not show is checked
-// only when the resource may set its attribute, and then only a grant scoped
-// to other roles under --strict-resources is reported (see
-// knownTargetsOnly). Every requirement is ungated, so a resource that passes
-// two roles has one finding.
+// only when the resource may set its attribute. When the resource sets it,
+// a policy with no PassRole grant at all misses it. When the plan does not
+// say, only a grant scoped to other roles under --strict-resources is
+// reported (see knownTargetsOnly). Every requirement is ungated, so a
+// resource that passes two roles has one finding.
 func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	if rc.Change == "delete" {
 		return nil
@@ -28,7 +29,7 @@ func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 		reqs = append(reqs, targeted{
 			Requirement:      Requirement{Action: "iam:PassRole"},
 			targets:          targets,
-			knownTargetsOnly: true,
+			knownTargetsOnly: !setsRole(rc, attr),
 		})
 	}
 	return reqs
@@ -38,7 +39,13 @@ func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 // the attribute holds a value, references another object, or the plan does
 // not say which attributes are set.
 func passesRole(rc *plan.ResourceChange, attr string) bool {
-	return rc.Attributes == nil || rc.Attributes[attr] || len(rc.References[attr]) > 0
+	return rc.Attributes == nil || setsRole(rc, attr)
+}
+
+// setsRole reports whether the plan shows that the resource sets the role
+// attribute attr.
+func setsRole(rc *plan.ResourceChange, attr string) bool {
+	return rc.Attributes[attr] || len(rc.References[attr]) > 0
 }
 
 // roleTargets derives the roles held by attr: a literal ARN, or a

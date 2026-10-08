@@ -1,6 +1,7 @@
-// Package iam parses IAM policy documents and validates that required
-// permissions are covered.
-package iam
+// Package policy parses IAM policy documents and decides whether a policy
+// grants an action, on a resource when the caller knows its ARN. It depends
+// on nothing else in this module.
+package policy
 
 import (
 	"encoding/json"
@@ -8,8 +9,8 @@ import (
 	"strings"
 )
 
-// PolicyDocument is a parsed IAM policy.
-type PolicyDocument struct {
+// Document is a parsed IAM policy.
+type Document struct {
 	Version    string        `json:"Version"`
 	Statements statementList `json:"Statement"`
 }
@@ -77,9 +78,9 @@ func (r *resourceField) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ParsePolicy parses a raw IAM policy JSON document.
-func ParsePolicy(raw []byte) (*PolicyDocument, error) {
-	var doc PolicyDocument
+// Parse parses a raw IAM policy JSON document.
+func Parse(raw []byte) (*Document, error) {
+	var doc Document
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, fmt.Errorf("parse IAM policy: %w", err)
 	}
@@ -101,7 +102,7 @@ func ParsePolicy(raw []byte) (*PolicyDocument, error) {
 // and has no Condition. An action that takes no resource is matched against
 // "*" by AWS, which an arn: pattern does not match. The tool cannot tell such
 // actions apart, so it may report one as missing behind an arn:* Deny.
-func (d *PolicyDocument) Covers(action string) bool {
+func (d *Document) Covers(action string) bool {
 	allowed := false
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
@@ -297,7 +298,7 @@ func globContains(outer, inner string) bool {
 // matches every ARN, or a NotResource list. Such a grant covers the action only
 // for the right target, so without a target ARN the tool cannot confirm it.
 // It returns false when no Allow statement names the action.
-func (d *PolicyDocument) grantsOnlyOnScopedResources(action string) bool {
+func (d *Document) grantsOnlyOnScopedResources(action string) bool {
 	scoped := false
 	for _, s := range d.Statements {
 		if s.Effect != "Allow" || !s.matchesAction(action) {

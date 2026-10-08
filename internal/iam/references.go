@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -132,22 +133,14 @@ func instanceOf(c *plan.ResourceChange) (name, key string) {
 	return name, instance[len(name):]
 }
 
-// worstVerdict checks action against each target and returns the worst
-// verdict. Each target is the list of ARN forms of one resource the change
-// acts on, and every one of them must be covered. With no targets, the
-// action alone decides.
-func (d *PolicyDocument) worstVerdict(action string, targets [][]string, strict bool) Verdict {
-	if len(targets) == 0 {
-		return d.Coverage(action, nil, strict)
-	}
-	worst := Covered
-	for _, forms := range targets {
-		switch d.Coverage(action, forms, strict) {
-		case Missing:
-			return Missing
-		case Unverified:
-			worst = Unverified
-		}
-	}
-	return worst
+// stripResourceIndex removes a count or for_each index suffix from a
+// terraform resource name.
+//
+//	cloudtrail[0]       → cloudtrail
+//	config["us-east-1"]  → config
+func stripResourceIndex(name string) string {
+	return resourceIndexRE.ReplaceAllString(name, "")
 }
+
+// resourceIndexRE matches a trailing bracket-index suffix like [0] or ["key"].
+var resourceIndexRE = regexp.MustCompile(`\[[^\]]*\]$`)

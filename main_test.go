@@ -756,7 +756,7 @@ func TestStaticHCL_EmptyRootSkipsPolicy(t *testing.T) {
 		}
 	})
 
-	if want := "All required permissions covered (0 resource types (static HCL mode) checked).\n"; out != want {
+	if want := "No resources to check.\n"; out != want {
 		t.Errorf("output = %q, want %q", out, want)
 	}
 }
@@ -1097,11 +1097,12 @@ func TestValidate_AllowUnresolvedTypes(t *testing.T) {
 		name    string
 		args    []string
 		wantErr bool
+		label   string // how the summary labels the type
 	}{
-		{"flag", []string{"--config", emptyCfg, "--allow-unresolved-types"}, false},
-		{"config", []string{"--config", allowCfg}, false},
-		{"flag overrides config", []string{"--config", allowCfg, "--allow-unresolved-types=false"}, true},
-		{"exclusion", []string{"--config", excludeCfg}, false},
+		{"flag", []string{"--config", emptyCfg, "--allow-unresolved-types"}, false, "allowed"},
+		{"config", []string{"--config", allowCfg}, false, "allowed"},
+		{"flag overrides config", []string{"--config", allowCfg, "--allow-unresolved-types=false"}, true, ""},
+		{"exclusion", []string{"--config", excludeCfg}, false, "excluded"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1113,8 +1114,8 @@ func TestValidate_AllowUnresolvedTypes(t *testing.T) {
 			if strings.Contains(stdout, "All required permissions covered") {
 				t.Errorf("all-clear printed with an unresolved type:\n%s", stdout)
 			}
-			if !tc.wantErr && !strings.Contains(stderr, "1 resource type unresolved (allowed)") {
-				t.Errorf("summary does not count the allowed type:\n%s", stderr)
+			if want := "1 resource type unresolved (" + tc.label + ")"; !tc.wantErr && !strings.Contains(stderr, want) {
+				t.Errorf("summary does not count the %s type:\n%s", tc.label, stderr)
 			}
 		})
 	}
@@ -1149,5 +1150,52 @@ func TestStaticHCL_UnresolvedTypeFails(t *testing.T) {
 	}
 	if r := result.UnresolvedTypes[0].Resources; len(r) != 1 || r[0].File != "main.tf" || r[0].Line != 1 {
 		t.Errorf("resources = %+v, want main.tf:1", r)
+	}
+}
+
+// TestValidate_ModuleFindingHasNoRootLocation checks that a finding in a
+// module does not take the file and line of a root block that shares its
+// type and name. The parser cannot tell which module call a subdirectory
+// belongs to, so the module finding has no location.
+func TestValidate_ModuleFindingHasNoRootLocation(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	queue := "resource \"aws_sqs_queue\" \"q\" {\n  name = \"q\"\n}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte("\n"+queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "modules", "app", "main.tf"), []byte(queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(root, "plan.json")
+	plan := `{"resource_changes":[
+		{"address":"module.app.aws_sqs_queue.q","module_address":"module.app","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["create"]}}]}`
+	if err := os.WriteFile(planPath, []byte(plan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(root, "policy.json")
+	if err := os.WriteFile(policyPath, []byte(`{"Version":"2012-10-17","Statement":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", planPath,
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("want errGapsFound, got %v", err)
+		}
+	})
+	if !strings.Contains(out, "module.app.aws_sqs_queue.q (create)") {
+		t.Fatalf("want a finding on the module queue, got:\n%s", out)
+	}
+	if strings.Contains(out, "file=") {
+		t.Errorf("a module finding must have no file location, got:\n%s", out)
 	}
 }

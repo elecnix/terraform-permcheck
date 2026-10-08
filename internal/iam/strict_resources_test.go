@@ -45,7 +45,7 @@ func TestValidate_StrictScopedGrantWithoutRuleIsUnverified(t *testing.T) {
 	if len(missing) != 1 || !unverifiedOn(missing, "lambda:CreateFunction", "aws_lambda_function") {
 		t.Fatalf("strict mode must report the scoped grant unverified, got %+v", missing)
 	}
-	if missing[0].Class != "[required]" {
+	if missing[0].Class != ClassManagement {
 		t.Errorf("class = %q, want [required]", missing[0].Class)
 	}
 }
@@ -209,22 +209,5 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 		if len(m) != 1 || m[0].ResourceScopeUnverified {
 			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
 		}
-	}
-}
-
-func TestParseConfig_StrictResources(t *testing.T) {
-	c, err := parseConfig([]byte(`{"strict_resources": true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.StrictResources {
-		t.Error("strict_resources not read from config")
-	}
-	c, err = parseConfig([]byte(`{"exclude": []}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.StrictResources {
-		t.Error("strict_resources must default to false")
 	}
 }

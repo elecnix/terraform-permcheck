@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // impliedMissing checks only the requirements AWS implies for rc, with no
 // filter, the way Validate checks them.
-func impliedMissing(rc *plan.ResourceChange, policy *PolicyDocument, set *changeSet, strict bool) []MissingAction {
+func impliedMissing(rc *plan.ResourceChange, policy *policy.Document, set *changeSet, strict bool) []MissingAction {
 	return checkChange(rc, impliedRequirements(rc, set), policy, false, nil, FilterConfig{StrictResources: strict})
 }
 

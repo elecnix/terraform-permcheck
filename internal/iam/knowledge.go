@@ -27,7 +27,7 @@ type rule struct {
 	action string
 	// class is the action's class on any resource that is not a dedicated
 	// sub-resource for it.
-	class permissionClass
+	class Class
 	// ownedBy is the aws_s3_bucket_* type that configures this bucket
 	// feature on its own. When the plan has one, aws_s3_bucket leaves the
 	// action to it. Empty when no sub-resource owns the action.
@@ -35,9 +35,9 @@ type rule struct {
 }
 
 // serviceClasses gives a class to every action of a service.
-var serviceClasses = map[string]permissionClass{
-	"s3tables":       classDataPlane, // S3 Tables is a data-plane service
-	"backup-storage": classDataPlane, // backup-storage is the AWS Backup data-plane
+var serviceClasses = map[string]Class{
+	"s3tables":       ClassDataPlane, // S3 Tables is a data-plane service
+	"backup-storage": ClassDataPlane, // backup-storage is the AWS Backup data-plane
 }
 
 // The aws_s3_bucket_* types that own a bucket feature.
@@ -66,7 +66,7 @@ const (
 // optionalS3 is a bucket feature that aws_s3_bucket only configures when the
 // matching attribute is set, owned by the sub-resource ownedBy.
 func optionalS3(action, ownedBy string) rule {
-	return rule{action: action, class: classOptional, ownedBy: ownedBy}
+	return rule{action: action, class: ClassOptional, ownedBy: ownedBy}
 }
 
 // rules lists every action the tool classifies other than [required]. An
@@ -75,72 +75,72 @@ func optionalS3(action, ownedBy string) rule {
 // log-reading calls are data-plane too, but no resource reaches them.
 var rules = []rule{
 	// DynamoDB data-plane
-	{action: "dynamodb:PutItem", class: classDataPlane},
-	{action: "dynamodb:GetItem", class: classDataPlane},
-	{action: "dynamodb:UpdateItem", class: classDataPlane},
-	{action: "dynamodb:DeleteItem", class: classDataPlane},
-	{action: "dynamodb:Query", class: classDataPlane},
-	{action: "dynamodb:Scan", class: classDataPlane},
-	{action: "dynamodb:BatchWriteItem", class: classDataPlane},
-	{action: "dynamodb:BatchGetItem", class: classDataPlane},
+	{action: "dynamodb:PutItem", class: ClassDataPlane},
+	{action: "dynamodb:GetItem", class: ClassDataPlane},
+	{action: "dynamodb:UpdateItem", class: ClassDataPlane},
+	{action: "dynamodb:DeleteItem", class: ClassDataPlane},
+	{action: "dynamodb:Query", class: ClassDataPlane},
+	{action: "dynamodb:Scan", class: ClassDataPlane},
+	{action: "dynamodb:BatchWriteItem", class: ClassDataPlane},
+	{action: "dynamodb:BatchGetItem", class: ClassDataPlane},
 	// S3 object-level operations
-	{action: "s3:GetObject", class: classDataPlane},
-	{action: "s3:GetObjectMetadata", class: classDataPlane},
-	{action: "s3:PutObject", class: classDataPlane},
-	{action: "s3:PutObjectAcl", class: classDataPlane},
-	{action: "s3:DeleteObject", class: classDataPlane},
-	{action: "s3:AbortMultipartUpload", class: classDataPlane},
+	{action: "s3:GetObject", class: ClassDataPlane},
+	{action: "s3:GetObjectMetadata", class: ClassDataPlane},
+	{action: "s3:PutObject", class: ClassDataPlane},
+	{action: "s3:PutObjectAcl", class: ClassDataPlane},
+	{action: "s3:DeleteObject", class: ClassDataPlane},
+	{action: "s3:AbortMultipartUpload", class: ClassDataPlane},
 	// Listing the versions to delete when force_destroy empties a bucket
-	{action: "s3:ListBucketVersions", class: classDataPlane},
+	{action: "s3:ListBucketVersions", class: ClassDataPlane},
 	// KMS data-plane (encrypt/decrypt at object level)
-	{action: "kms:Encrypt", class: classDataPlane},
-	{action: "kms:Decrypt", class: classDataPlane},
-	{action: "kms:GenerateDataKey", class: classDataPlane},
-	{action: "kms:GenerateDataKeyWithoutPlaintext", class: classDataPlane},
-	{action: "kms:ReEncryptFrom", class: classDataPlane},
-	{action: "kms:ReEncryptTo", class: classDataPlane},
+	{action: "kms:Encrypt", class: ClassDataPlane},
+	{action: "kms:Decrypt", class: ClassDataPlane},
+	{action: "kms:GenerateDataKey", class: ClassDataPlane},
+	{action: "kms:GenerateDataKeyWithoutPlaintext", class: ClassDataPlane},
+	{action: "kms:ReEncryptFrom", class: ClassDataPlane},
+	{action: "kms:ReEncryptTo", class: ClassDataPlane},
 	// Kinesis data-plane
-	{action: "kinesis:PutRecords", class: classDataPlane},
-	{action: "kinesis:DescribeStream", class: classDataPlane},
+	{action: "kinesis:PutRecords", class: ClassDataPlane},
+	{action: "kinesis:DescribeStream", class: ClassDataPlane},
 	// CloudWatch Logs data-plane: writing log events and querying them.
 	// Creating a log stream is provisioning, since the provider calls it for
 	// aws_cloudwatch_log_stream.
-	{action: "logs:PutLogEvents", class: classDataPlane},
-	{action: "logs:StartQuery", class: classDataPlane},
+	{action: "logs:PutLogEvents", class: ClassDataPlane},
+	{action: "logs:StartQuery", class: ClassDataPlane},
 
 	// Backup vault features, only needed when the configuration sets the
 	// matching block (access_policy, notifications, lock_configuration).
-	{action: "backup:PutBackupVaultAccessPolicy", class: classOptional},
-	{action: "backup:PutBackupVaultNotifications", class: classOptional},
-	{action: "backup:PutBackupVaultLockConfiguration", class: classOptional},
-	{action: "backup:DeleteBackupVaultAccessPolicy", class: classOptional},
-	{action: "backup:DeleteBackupVaultNotifications", class: classOptional},
-	{action: "backup:DeleteBackupVaultLockConfiguration", class: classOptional},
-	{action: "backup:GetBackupVaultAccessPolicy", class: classOptional},
-	{action: "backup:GetBackupVaultNotifications", class: classOptional},
+	{action: "backup:PutBackupVaultAccessPolicy", class: ClassOptional},
+	{action: "backup:PutBackupVaultNotifications", class: ClassOptional},
+	{action: "backup:PutBackupVaultLockConfiguration", class: ClassOptional},
+	{action: "backup:DeleteBackupVaultAccessPolicy", class: ClassOptional},
+	{action: "backup:DeleteBackupVaultNotifications", class: ClassOptional},
+	{action: "backup:DeleteBackupVaultLockConfiguration", class: ClassOptional},
+	{action: "backup:GetBackupVaultAccessPolicy", class: ClassOptional},
+	{action: "backup:GetBackupVaultNotifications", class: ClassOptional},
 
 	// DynamoDB optional features (import/export, Kinesis streaming,
 	// contributor insights, resource policy, replicas)
-	{action: "dynamodb:ImportTable", class: classOptional},
-	{action: "dynamodb:DescribeImport", class: classOptional},
-	{action: "dynamodb:EnableKinesisStreamingDestination", class: classOptional},
-	{action: "dynamodb:DisableKinesisStreamingDestination", class: classOptional},
-	{action: "dynamodb:UpdateContributorInsights", class: classOptional},
-	{action: "dynamodb:DescribeContributorInsights", class: classOptional},
-	{action: "dynamodb:GetResourcePolicy", class: classOptional},
-	{action: "dynamodb:PutResourcePolicy", class: classOptional},
-	{action: "dynamodb:CreateTableReplica", class: classOptional},
-	{action: "dynamodb:AssociateTableReplica", class: classOptional},
+	{action: "dynamodb:ImportTable", class: ClassOptional},
+	{action: "dynamodb:DescribeImport", class: ClassOptional},
+	{action: "dynamodb:EnableKinesisStreamingDestination", class: ClassOptional},
+	{action: "dynamodb:DisableKinesisStreamingDestination", class: ClassOptional},
+	{action: "dynamodb:UpdateContributorInsights", class: ClassOptional},
+	{action: "dynamodb:DescribeContributorInsights", class: ClassOptional},
+	{action: "dynamodb:GetResourcePolicy", class: ClassOptional},
+	{action: "dynamodb:PutResourcePolicy", class: ClassOptional},
+	{action: "dynamodb:CreateTableReplica", class: ClassOptional},
+	{action: "dynamodb:AssociateTableReplica", class: ClassOptional},
 
 	// IAM policy sub-types that the deploy role doesn't manage
-	{action: "iam:GetUserPolicy", class: classOptional},
-	{action: "iam:GetGroupPolicy", class: classOptional},
-	{action: "iam:PutUserPolicy", class: classOptional},
-	{action: "iam:PutGroupPolicy", class: classOptional},
+	{action: "iam:GetUserPolicy", class: ClassOptional},
+	{action: "iam:GetGroupPolicy", class: ClassOptional},
+	{action: "iam:PutUserPolicy", class: ClassOptional},
+	{action: "iam:PutGroupPolicy", class: ClassOptional},
 
 	// Secrets Manager optional
-	{action: "secretsmanager:GetRandomPassword", class: classOptional},
-	{action: "secretsmanager:ReplicateSecretToRegions", class: classOptional},
+	{action: "secretsmanager:GetRandomPassword", class: ClassOptional},
+	{action: "secretsmanager:ReplicateSecretToRegions", class: ClassOptional},
 
 	// S3 bucket features. aws_s3_bucket only configures one when the matching
 	// attribute is set, and a dedicated aws_s3_bucket_* resource exists to
@@ -231,7 +231,7 @@ var rules = []rule{
 	optionalS3("s3:UpdateBucketMetadataAnnotationTableConfiguration", ""),
 	// The bucket ACL stays [required] on aws_s3_bucket, which writes it on
 	// create, but aws_s3_bucket_acl takes it over when the plan has one.
-	{action: "s3:PutBucketAcl", class: classManagement, ownedBy: s3ACL},
+	{action: "s3:PutBucketAcl", class: ClassManagement, ownedBy: s3ACL},
 }
 
 // ruleIndex looks up a rule by action name.
@@ -245,20 +245,20 @@ var ruleIndex = func() map[string]rule {
 
 // actionClass returns the class of action on a resource that is not a
 // dedicated sub-resource for it.
-func actionClass(action string) permissionClass {
+func actionClass(action string) Class {
 	if class, ok := serviceClasses[actionService(action)]; ok {
 		return class
 	}
 	if r, ok := ruleIndex[action]; ok {
 		return r.class
 	}
-	return classManagement
+	return ClassManagement
 }
 
 // decision is what the rules decide about one action on one resource.
 type decision struct {
 	// class is the action's class on this resource.
-	class permissionClass
+	class Class
 	// absorbedBy is the sub-resource type in the plan that takes the action
 	// over from this resource, or empty. An absorbed action is reported on
 	// the sub-resource, not here.
@@ -278,19 +278,19 @@ func decide(tfType, action string, bestEffort, dedicated bool, inPlan map[string
 	class := actionClass(action)
 	// A dedicated aws_s3_bucket_* resource exists to configure its feature,
 	// so the action that is optional on aws_s3_bucket is required there.
-	if class == classOptional && strings.HasPrefix(tfType, "aws_s3_bucket_") && actionService(action) == "s3" {
-		class = classManagement
+	if class == ClassOptional && strings.HasPrefix(tfType, "aws_s3_bucket_") && actionService(action) == "s3" {
+		class = ClassManagement
 	}
 	// The data-plane and optional classes describe a call a resource makes
 	// beside its own work. On a type whose own work is such a call, the call
 	// is the work, so it is required.
 	if dedicated {
-		class = classManagement
+		class = ClassManagement
 	}
 	// A call whose failure the provider ignores cannot fail the apply, so it
 	// is optional whatever its action.
-	if bestEffort && class == classManagement {
-		class = classOptional
+	if bestEffort && class == ClassManagement {
+		class = ClassOptional
 	}
 	return decision{class: class}
 }
@@ -323,7 +323,7 @@ func isDedicated(s *Schema) bool {
 		if !r.Ungated() || r.BestEffort || isRead(r.Action) {
 			continue
 		}
-		if actionClass(r.Action) == classManagement {
+		if actionClass(r.Action) == ClassManagement {
 			return false
 		}
 	}

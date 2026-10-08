@@ -9,6 +9,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
@@ -26,7 +27,7 @@ func (s stubProvider) Resolve(tfType string) (*iam.Schema, error) {
 // only s3:ListBucket (what HeadBucket needs) and returns the missing actions.
 func missingFor(t *testing.T, resolver iam.Resolver, tfType string) map[string]bool {
 	t.Helper()
-	policy, err := iam.ParsePolicy([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
+	doc, err := policy.Parse([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +38,7 @@ func missingFor(t *testing.T, resolver iam.Resolver, tfType string) map[string]b
 		Attributes:        map[string]bool{"bucket": true},
 		ChangedAttributes: map[string]bool{"bucket": true},
 	}}
-	missing, err := iam.Validate(changes, policy, resolver, iam.DefaultFilter())
+	missing, err := iam.Validate(changes, doc, resolver, iam.DefaultFilter())
 	if err != nil {
 		t.Fatal(err)
 	}

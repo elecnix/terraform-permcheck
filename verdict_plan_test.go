@@ -50,14 +50,14 @@ func TestValidate_PlanVerdicts(t *testing.T) {
 			// A deferred data source read is not a managed resource change.
 			name:     "data source read is skipped",
 			args:     planArgs("data_source_plan.json", "none_policy.json"),
-			want:     []string{"All required permissions covered (0 resource changes checked)."},
+			want:     []string{"No resources to check."},
 			wantNone: []string{"aws_iam_policy_document"},
 		},
 		{
 			// forget removes the object from state and calls no API.
 			name: "forget is skipped",
 			args: planArgs("forget_plan.json", "none_policy.json"),
-			want: []string{"All required permissions covered (0 resource changes checked)."},
+			want: []string{"No resources to check."},
 		},
 		{
 			// The exclusion names the root queue. The module's queue of the

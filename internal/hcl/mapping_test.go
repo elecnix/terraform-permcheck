@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // writeTF writes a .tf file into dir, creating parent directories as needed.
@@ -117,12 +115,12 @@ resource "aws_s3_bucket" "unique" {
 	}
 
 	// Build the expected map independently: first resource block wins.
-	want := make(iam.Locations)
+	want := make(map[string]Location)
 	for _, b := range blocks {
 		if b.Mode != "resource" {
 			continue
 		}
-		key := iam.ResourceKey(b.Type + "." + b.Name)
+		key := b.Type + "." + b.Name
 		if _, exists := want[key]; exists {
 			continue
 		}
@@ -130,7 +128,7 @@ resource "aws_s3_bucket" "unique" {
 		if err != nil {
 			t.Fatalf("rel %s: %v", b.Filename, err)
 		}
-		want[key] = iam.FileLocation{Path: rel, Line: b.Line}
+		want[key] = Location{Path: rel, Line: b.Line}
 	}
 
 	locations, err := MapResources(dir)
@@ -180,7 +178,7 @@ func TestResourceLocations_Projection(t *testing.T) {
 
 	locations := resourceLocations(absDir, blocks)
 
-	want := iam.Locations{
+	want := map[string]Location{
 		"aws_s3_bucket.dup":    {Path: "a.tf", Line: 3},
 		"aws_s3_bucket.nested": {Path: filepath.Join("modules", "x", "x.tf"), Line: 1},
 	}
@@ -407,5 +405,22 @@ func TestReadFileAt_UsesTheInstalledReader(t *testing.T) {
 	}
 	if string(got) != "real contents" {
 		t.Errorf("after restore, reader = %q, want the real file contents back", got)
+	}
+}
+
+// TestRootResourceLocations keeps only the blocks of .tf files directly in
+// the root, the root module. A block in a subdirectory belongs to a module
+// whose address the parser cannot know.
+func TestRootResourceLocations(t *testing.T) {
+	absDir := "/root"
+	blocks := []ResourceBlock{
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "a", Filename: "/root/modules/x/x.tf", Line: 1},
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "a", Filename: "/root/main.tf", Line: 5},
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "nested", Filename: "/root/modules/x/x.tf", Line: 9},
+	}
+	got := rootResourceLocations(absDir, blocks)
+	want := map[string]Location{"aws_s3_bucket.a": {Path: "main.tf", Line: 5}}
+	if len(got) != len(want) || got["aws_s3_bucket.a"] != want["aws_s3_bucket.a"] {
+		t.Errorf("rootResourceLocations = %+v, want %+v", got, want)
 	}
 }

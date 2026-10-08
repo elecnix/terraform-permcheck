@@ -215,3 +215,11 @@ func TestIAMPrefixTables_CoverTheProviderCheckout(t *testing.T) {
 		t.Errorf("%s has no IAM prefix; rerun gen_iam_services.go against %s", name, DefaultProviderRef)
 	}
 }
+
+// The tables come from one provider checkout. A bump of DefaultProviderRef
+// must regenerate them too.
+func TestIAMServices_GeneratedFromDefaultRef(t *testing.T) {
+	if iamServicesProviderRef != DefaultProviderRef {
+		t.Errorf("iam_services_gen.go was generated from %s, but DefaultProviderRef is %s; rerun gen_iam_services.go", iamServicesProviderRef, DefaultProviderRef)
+	}
+}

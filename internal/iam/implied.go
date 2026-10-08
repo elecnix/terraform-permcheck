@@ -1,6 +1,9 @@
 package iam
 
-import "github.com/elecnix/terraform-permcheck/internal/plan"
+import (
+	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
+)
 
 // Implied requirements.
 //
@@ -43,10 +46,10 @@ func impliedRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 
 // verdict returns the policy's verdict on a requirement: whether the policy
 // grants its action on each of its targets.
-func (t targeted) verdict(policy *PolicyDocument, strict bool) Verdict {
-	v := policy.worstVerdict(t.Action, t.targets, strict)
-	if v == Missing && t.knownTargetsOnly && len(t.targets) == 0 {
-		return Covered
+func (t targeted) verdict(doc *policy.Document, strict bool) policy.Verdict {
+	v := doc.WorstVerdict(t.Action, t.targets, strict)
+	if v == policy.Missing && t.knownTargetsOnly && len(t.targets) == 0 {
+		return policy.Covered
 	}
 	return v
 }
@@ -84,17 +87,17 @@ func (a actionPaths) gates() []Gate {
 }
 
 // verdict returns the worst verdict over the paths that run for rc.
-func (a actionPaths) verdict(rc *plan.ResourceChange, policy *PolicyDocument, strict bool) Verdict {
-	worst := Covered
+func (a actionPaths) verdict(rc *plan.ResourceChange, doc *policy.Document, strict bool) policy.Verdict {
+	worst := policy.Covered
 	for _, p := range a.paths {
 		if !p.holds(rc) {
 			continue
 		}
-		switch p.verdict(policy, strict) {
-		case Missing:
-			return Missing
-		case Unverified:
-			worst = Unverified
+		switch p.verdict(doc, strict) {
+		case policy.Missing:
+			return policy.Missing
+		case policy.Unverified:
+			worst = policy.Unverified
 		}
 	}
 	return worst
