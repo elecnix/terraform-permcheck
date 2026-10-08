@@ -17,7 +17,7 @@ var sdkPackageIAMPrefixes = map[string]string{
 	"amp":                             "aps",
 	"amplify":                         "amplify",
 	"apigateway":                      "apigateway",
-	"apigatewayv2":                    "apigateway",
+	"apigatewayv2":                    "apigatewayv2",
 	"appconfig":                       "appconfig",
 	"appfabric":                       "appfabric",
 	"appflow":                         "appflow",
@@ -276,7 +276,7 @@ var clientAccessorIAMPrefixes = map[string]string{
 	"ACMPCAClient":                       "acm-pca",
 	"AMPClient":                          "aps",
 	"APIGatewayClient":                   "apigateway",
-	"APIGatewayV2Client":                 "apigateway",
+	"APIGatewayV2Client":                 "apigatewayv2",
 	"AccessAnalyzerClient":               "access-analyzer",
 	"AccountClient":                      "account",
 	"AmplifyClient":                      "amplify",
@@ -525,6 +525,12 @@ var clientAccessorIAMPrefixes = map[string]string{
 	"XRayClient":                         "xray",
 }
 
+// sdkClientKeyPrefixes maps the service keys of SDK clients that are not
+// IAM prefixes to the IAM prefix they authorize under.
+var sdkClientKeyPrefixes = map[string]string{
+	"apigatewayv2": "apigateway",
+}
+
 // retiredIAMPrefixes are prefixes the service reference no longer lists,
 // because AWS retired the service.
 var retiredIAMPrefixes = map[string]bool{
@@ -602,7 +608,7 @@ var sdkOperationActions = map[string]map[string]string{
 		"ExportApi":                         "GET",
 		"FlushStageAuthorizersCache":        "DELETE",
 		"FlushStageCache":                   "DELETE",
-		"GenerateClientCertificate":         "PUT",
+		"GenerateClientCertificate":         "POST",
 		"GetAccount":                        "GET",
 		"GetApi":                            "GET",
 		"GetApiKey":                         "GET",
@@ -663,7 +669,7 @@ var sdkOperationActions = map[string]map[string]string{
 		"ImportApi":                         "PUT",
 		"ImportApiKeys":                     "POST",
 		"ImportDocumentationParts":          "PUT",
-		"ImportRestApi":                     "UpdateRestApiPolicy",
+		"ImportRestApi":                     "POST",
 		"PutGatewayResponse":                "PUT",
 		"PutIntegration":                    "PUT",
 		"PutIntegrationResponse":            "PUT",
@@ -677,7 +683,7 @@ var sdkOperationActions = map[string]map[string]string{
 		"TagResource":                       "PUT",
 		"TestInvokeAuthorizer":              "POST",
 		"TestInvokeMethod":                  "POST",
-		"UntagResource":                     "PATCH",
+		"UntagResource":                     "DELETE",
 		"UpdateAccount":                     "PATCH",
 		"UpdateApi":                         "PATCH",
 		"UpdateApiKey":                      "PATCH",
@@ -704,6 +710,9 @@ var sdkOperationActions = map[string]map[string]string{
 		"UpdateUsage":                       "PATCH",
 		"UpdateUsagePlan":                   "PATCH",
 		"UpdateVpcLink":                     "PATCH",
+	},
+	"apigatewayv2": {
+		"TagResource": "POST",
 	},
 	"appflow": {
 		"UnregisterConnector": "UnRegisterConnector",

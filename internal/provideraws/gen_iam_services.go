@@ -58,6 +58,29 @@ var prefixOverrides = map[string]string{
 	"S3ExpressClient": "s3express",
 }
 
+// clientKeys gives an SDK package a service key of its own when its
+// operations share a name with operations of another package under the same
+// IAM prefix, but authorize differently. The value is the IAM prefix the key
+// folds to. API Gateway v2 TagResource is POST /v2/tags/{resource-arn}, while
+// v1 TagResource is PUT /tags/{resource_arn}.
+var clientKeys = map[string]string{
+	"apigatewayv2": "apigateway",
+}
+
+// operationOverrides sets, per service key, the IAM action of operations the
+// service reference maps wrongly or cannot tell apart. Each row names the
+// REST route of the operation in the API reference.
+var operationOverrides = map[string]map[string]string{
+	"apigateway": {
+		"GenerateClientCertificate": "POST",   // POST /clientcertificates
+		"ImportRestApi":             "POST",   // POST /restapis?mode=import
+		"UntagResource":             "DELETE", // DELETE /tags/{resource_arn}
+	},
+	"apigatewayv2": {
+		"TagResource": "POST", // POST /v2/tags/{resource-arn}
+	},
+}
+
 // retiredPrefixes are IAM prefixes of services the provider still imports but
 // the service reference no longer lists, because AWS retired the service.
 var retiredPrefixes = map[string]string{
@@ -157,6 +180,14 @@ func main() {
 		}
 	}
 
+	// A package with a key of its own takes the key in place of its prefix.
+	for pkg, prefix := range clientKeys {
+		if pkgPrefix[pkg] != prefix {
+			log.Fatalf("SDK package %s authorizes under %q, not %q", pkg, pkgPrefix[pkg], prefix)
+		}
+		pkgPrefix[pkg] = pkg
+	}
+
 	// An import alias resolves to its package's prefix, unless it shadows a
 	// package with another prefix.
 	for alias, pkg := range aliases {
@@ -183,6 +214,14 @@ func main() {
 	}
 
 	renames := operationRenames(refs, pkgBoto3, pkgPrefix, actions)
+	for key, ops := range operationOverrides {
+		if renames[key] == nil {
+			renames[key] = map[string]string{}
+		}
+		for op, action := range ops {
+			renames[key][op] = action
+		}
+	}
 
 	writeGo(filepath.Join(*out, "iam_services_gen.go"), pkgPrefix, accessorPrefix, renames)
 	var golden bytes.Buffer
@@ -248,7 +287,12 @@ func topVote(client string, votes, homes map[string]int) string {
 func operationRenames(refs []reference, pkgBoto3, pkgPrefix map[string]string, actions map[string]map[string]bool) map[string]map[string]string {
 	boto3Prefix := map[string]string{}
 	for pkg, b := range pkgBoto3 {
-		boto3Prefix[b] = pkgPrefix[pkg]
+		// A package with a key of its own shares the rows of its prefix.
+		prefix := pkgPrefix[pkg]
+		if p, ok := clientKeys[prefix]; ok {
+			prefix = p
+		}
+		boto3Prefix[b] = prefix
 	}
 	renames := map[string]map[string]string{}
 	conflicts := map[string]bool{}
@@ -523,6 +567,12 @@ func writeGo(path string, pkgPrefix, accessorPrefix map[string]string, renames m
 	b.WriteString("// service prefix of the client they return.\n")
 	b.WriteString("var clientAccessorIAMPrefixes = map[string]string{\n")
 	writeMap(&b, accessorPrefix)
+	b.WriteString("}\n\n")
+
+	b.WriteString("// sdkClientKeyPrefixes maps the service keys of SDK clients that are not\n")
+	b.WriteString("// IAM prefixes to the IAM prefix they authorize under.\n")
+	b.WriteString("var sdkClientKeyPrefixes = map[string]string{\n")
+	writeMap(&b, clientKeys)
 	b.WriteString("}\n\n")
 
 	b.WriteString("// retiredIAMPrefixes are prefixes the service reference no longer lists,\n")

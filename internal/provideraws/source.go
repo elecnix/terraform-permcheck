@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // sdkResourceAnnotationRE matches the @SDKResource annotation in provider source.
@@ -377,7 +378,11 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 }
 
 // addTagActions adds tagging actions to the given operation, gated on the
-// `tags` attribute, skipping any already present for that operation.
+// `tags` attribute. An action can already be present for that operation,
+// because API Gateway authorizes calls by HTTP verb: CreateDomainName and
+// TagResource are both apigateway:POST. The action is then reached on two
+// paths and is needed when either gate holds, so the tags gate joins the
+// gates the action already has.
 func addTagActions(schema *cloud.Schema, op string, actions []string) {
 	if len(actions) == 0 {
 		return
@@ -386,17 +391,93 @@ func addTagActions(schema *cloud.Schema, op string, actions []string) {
 	for _, a := range schema.Permissions[op] {
 		existing[a] = true
 	}
-	if schema.Conditional[op] == nil {
-		schema.Conditional[op] = make(map[string]string)
-	}
+	tags := iam.Gate{Attribute: "tags"}
 	for _, action := range actions {
-		if !existing[action] {
-			schema.Permissions[op] = append(schema.Permissions[op], action)
-			existing[action] = true
+		if existing[action] {
+			setGates(schema, op, action, append(actionGates(schema, op, action), tags))
+			continue
 		}
-		schema.Conditional[op][action] = "tags"
-		delete(schema.BestEffort[op], action)
+		schema.Permissions[op] = append(schema.Permissions[op], action)
+		existing[action] = true
+		setGates(schema, op, action, []iam.Gate{tags})
 	}
+}
+
+// actionGates returns the gates of an action in the schema: its gate list
+// when it has one, or else the one gate the single-valued maps hold.
+func actionGates(schema *cloud.Schema, op, action string) []iam.Gate {
+	if gates, ok := schema.Gates[op][action]; ok {
+		return append([]iam.Gate(nil), gates...)
+	}
+	return []iam.Gate{{
+		Attribute:    schema.Conditional[op][action],
+		ValueGuarded: schema.ValueConditional[op][action],
+		Changed:      schema.ChangeGated[op][action],
+		BestEffort:   schema.BestEffort[op][action],
+	}}
+}
+
+// setGates records the gates of an action. A path that always runs and whose
+// failure counts makes the action required whatever the other paths do, so
+// the action is left ungated. One gate goes in the single-valued maps, and
+// several go in the gate list.
+func setGates(schema *cloud.Schema, op, action string, gates []iam.Gate) {
+	clearGates(schema, op, action)
+	var distinct []iam.Gate
+	for _, g := range gates {
+		if g.Ungated() && !g.BestEffort {
+			return
+		}
+		if !containsGate(distinct, g) {
+			distinct = append(distinct, g)
+		}
+	}
+	if len(distinct) > 1 {
+		setNested(&schema.Gates, op, action, distinct)
+		return
+	}
+	g := distinct[0]
+	if g.Attribute != "" {
+		setNested(&schema.Conditional, op, action, g.Attribute)
+	}
+	if g.ValueGuarded {
+		setNested(&schema.ValueConditional, op, action, true)
+	}
+	if g.Changed != "" {
+		setNested(&schema.ChangeGated, op, action, g.Changed)
+	}
+	if g.BestEffort {
+		setNested(&schema.BestEffort, op, action, true)
+	}
+}
+
+// clearGates removes every gate the schema records for an action.
+func clearGates(schema *cloud.Schema, op, action string) {
+	delete(schema.Conditional[op], action)
+	delete(schema.ValueConditional[op], action)
+	delete(schema.ChangeGated[op], action)
+	delete(schema.BestEffort[op], action)
+	delete(schema.Gates[op], action)
+}
+
+func containsGate(gates []iam.Gate, g iam.Gate) bool {
+	for _, h := range gates {
+		if h == g {
+			return true
+		}
+	}
+	return false
+}
+
+// setNested sets m[op][action], creating the maps it needs.
+func setNested[V any](m *map[string]map[string]V, op, action string, v V) {
+	if *m == nil {
+		*m = make(map[string]map[string]V)
+	}
+	if (*m)[op] == nil {
+		(*m)[op] = make(map[string]V)
+	}
+	(*m)[op][action] = v
 }
 
 // resourceTypeFromAnnotation extracts the terraform resource type from an

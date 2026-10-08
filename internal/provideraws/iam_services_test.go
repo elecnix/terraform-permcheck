@@ -43,6 +43,10 @@ func knownIAMPrefixes(t *testing.T) map[string]bool {
 func TestIAMPrefixTables_ProduceKnownPrefixes(t *testing.T) {
 	known := knownIAMPrefixes(t)
 	check := func(table, key, prefix string) {
+		// A client key folds to its IAM prefix in sdKMethodToIAMAction.
+		if p, ok := sdkClientKeyPrefixes[prefix]; ok {
+			prefix = p
+		}
 		if !known[prefix] && !retiredIAMPrefixes[prefix] {
 			t.Errorf("%s[%q] = %q, which is not an IAM service prefix", table, key, prefix)
 		}
@@ -76,7 +80,9 @@ func TestParamTypeToService_SDKPackagesWhoseNameIsNotThePrefix(t *testing.T) {
 		{"cloudwatchlogs", "logs"},
 		{"cloudcontrol", "cloudformation"},
 		{"resourcegroupstaggingapi", "tag"},
-		{"apigatewayv2", "apigateway"},
+		// API Gateway v2 keeps a client key of its own, folded to the
+		// apigateway prefix when its actions are named.
+		{"apigatewayv2", "apigatewayv2"},
 		{"s3control", "s3"},
 		{"s3", "s3"},
 		{"iam", "iam"},

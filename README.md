@@ -94,6 +94,18 @@ DynamoDB KMS key and keeps its state as it is when the lookup fails. PermCheck
 reports these calls as `[optional]`, so the default filter drops them and
 `--no-filter` shows them.
 
+### API Gateway actions by HTTP verb
+
+API Gateway checks the HTTP verb of each call, under the `apigateway` prefix,
+for both the v1 (REST) and v2 (HTTP and WebSocket) APIs. IAM has no
+`apigatewayv2` prefix. PermCheck reports `apigateway:POST` for
+`CreateDomainName`, `apigateway:GET` for `GetApiMapping`, `apigateway:PATCH`
+for an update and `apigateway:DELETE` for a delete. Tagging follows the route
+of each API: v1 `TagResource` is `apigateway:PUT`, v2 `TagResource` is
+`apigateway:POST`, and `UntagResource` is `apigateway:DELETE`. PermCheck
+matches the verb only. It does not check the path-style resource ARN, such as
+`arn:aws:apigateway:us-east-1::/domainnames/*`.
+
 ### Cross-service callback permissions
 
 Some AWS APIs require an IAM action from a *different* service than the one the

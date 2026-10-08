@@ -82,13 +82,15 @@ func ExtractTagActions(src string) (TagActions, error) {
 
 // isRemoveTagAction reports whether a tagging action removes tags (so it is
 // only relevant on update). Covers Untag*/Delete*/Remove* method conventions
-// across services (kms:UntagResource, ec2:DeleteTags, etc.).
+// across services (kms:UntagResource, ec2:DeleteTags, etc.), and the HTTP
+// DELETE that API Gateway authorizes for UntagResource.
 func isRemoveTagAction(action string) bool {
 	verb := action
 	if idx := strings.Index(action, ":"); idx >= 0 {
 		verb = action[idx+1:]
 	}
-	return strings.HasPrefix(verb, "Untag") ||
+	return verb == "DELETE" ||
+		strings.HasPrefix(verb, "Untag") ||
 		strings.HasPrefix(verb, "Delete") ||
 		strings.HasPrefix(verb, "Remove")
 }

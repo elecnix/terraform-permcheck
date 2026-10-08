@@ -1563,11 +1563,23 @@ func isAWSMethod(name string) bool {
 // action string. Convention: backup + CreateBackupVault -> backup:CreateBackupVault.
 // A method that IAM does not know as an action is renamed to the action the
 // AWS service reference says it needs, e.g. s3 HeadObject -> s3:GetObject.
+//
+// A service can be a client key that is not an IAM prefix, such as
+// apigatewayv2. Its own rows come first, then the rows of the prefix it folds
+// to, and the action takes that prefix: API Gateway v2 TagResource is
+// apigateway:POST, while v1 TagResource is apigateway:PUT.
 func sdKMethodToIAMAction(method string, service string) string {
-	if canonical := normalizeSDKMethod(service, method); canonical != "" {
-		return service + ":" + canonical
+	prefix := service
+	if p, ok := sdkClientKeyPrefixes[service]; ok {
+		prefix = p
 	}
-	return service + ":" + method
+	if canonical := normalizeSDKMethod(service, method); canonical != "" {
+		return prefix + ":" + canonical
+	}
+	if canonical := normalizeSDKMethod(prefix, method); canonical != "" {
+		return prefix + ":" + canonical
+	}
+	return prefix + ":" + method
 }
 
 // normalizeSDKMethod returns the IAM action an SDK method needs when IAM spells

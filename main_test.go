@@ -986,3 +986,23 @@ resource "aws_sqs_queue" "orders" {
 		t.Errorf("every finding should be unverified, got %s", stderr)
 	}
 }
+
+// TestValidate_APIGatewayV2ByHTTPVerb runs the plan from issue #56. API
+// Gateway v2 authorizes by HTTP verb under the apigateway prefix, so a policy
+// that grants the verbs covers a domain name and its API mapping.
+func TestValidate_APIGatewayV2ByHTTPVerb(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/apigatewayv2_plan.json",
+			"--policy-file", "testdata/apigatewayv2_policy.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Errorf("expected no gaps, got %v", err)
+		}
+	})
+	if strings.Contains(out, "apigatewayv2:") || strings.Contains(out, "CreateDomainName") {
+		t.Errorf("report names an action AWS does not evaluate:\n%s", out)
+	}
+}
