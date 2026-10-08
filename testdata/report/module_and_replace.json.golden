@@ -1,0 +1,54 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 4,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "delete",
+      "missing_action": "sqs:DeleteQueue",
+      "class": "[required]"
+    },
+    {
+      "module_address": "module.prod",
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "delete",
+      "missing_action": "sqs:DeleteQueue",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]"
+    }
+  ],
+  "excluded": [
+    {
+      "module_address": "module.legacy",
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "delete",
+      "excluded_action": "sqs:DeleteQueue",
+      "reason": "deleted by hand"
+    }
+  ],
+  "unresolved_types": [
+    {
+      "resource_type": "aws_new_thing",
+      "allowed": false,
+      "resources": [
+        {
+          "module_address": "module.app[\"eu\"]",
+          "resource_name": "a[0]",
+          "change": "create"
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

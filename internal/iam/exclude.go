@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -18,10 +19,12 @@ type Exclusion struct {
 	// "s3:*".
 	Permission string `json:"permission"`
 	// Resource optionally scopes the exclusion to matching terraform
-	// resources. Supports glob patterns matched against either the resource
-	// type ("aws_secretsmanager_secret") or the full address
-	// ("aws_secretsmanager_secret.forwarder"), e.g. "aws_secretsmanager_*".
-	// Empty means the exclusion applies to every resource.
+	// resources. Supports glob patterns matched against the resource type
+	// ("aws_secretsmanager_secret"), which matches it in every module, or
+	// against the address with its module ("aws_secretsmanager_secret.f" in
+	// the root module, "module.app.aws_secretsmanager_secret.f" in a module),
+	// e.g. "aws_secretsmanager_*". Empty means the exclusion applies to every
+	// resource.
 	Resource string `json:"resource,omitempty"`
 	// Operations optionally limits the exclusion to matching terraform
 	// operations ("create", "update", "delete", "read"), so a role can lack a
@@ -146,17 +149,25 @@ func operationMatches(operations []string, change string) bool {
 	return false
 }
 
-// resourceMatches reports whether the resource glob matches m's resource type
-// or its full "type.name" address (with any count/for_each index stripped).
+// resourceMatches reports whether the resource glob matches m's resource
+// type, its address without count or for_each indexes, or its full address.
+// An address starts with the module, so "aws_sqs_queue.q" names the root
+// module's queue only, while "aws_sqs_queue" names the type in every module.
 // For a declared need, the glob matches "needs.<sid>".
 func resourceMatches(pattern string, m MissingAction) bool {
 	if m.Need != "" {
 		ok, _ := path.Match(pattern, "needs."+m.Need)
 		return ok
 	}
-	if ok, _ := path.Match(pattern, m.ResourceType); ok {
-		return true
+	addr := m.Address()
+	for _, s := range []string{m.ResourceType, addressIndexRE.ReplaceAllString(addr, ""), addr} {
+		if ok, _ := path.Match(pattern, s); ok {
+			return true
+		}
 	}
-	ok, _ := path.Match(pattern, string(KeyOf(m.ResourceType, m.ResourceName)))
-	return ok
+	return false
 }
+
+// addressIndexRE matches an instance key in a resource or module address:
+// [0] or ["key"], where a quoted key may hold a "]".
+var addressIndexRE = regexp.MustCompile(`\[("[^"]*"|[^\]]*)\]`)

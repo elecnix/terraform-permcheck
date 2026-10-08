@@ -18,12 +18,15 @@ const (
 
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
-	ResourceType string // terraform resource type, e.g. "aws_backup_vault"
-	ResourceName string // terraform resource name, e.g. "this"
-	Change       string // "create", "update", or "delete"
-	Action       string // required IAM action, e.g. "kms:CreateGrant"
-	Service      string // extracted service prefix, e.g. "kms"
-	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", or ""
+	// ModuleAddress is the module of the resource, e.g. "module.prod". It
+	// is empty for a resource in the root module.
+	ModuleAddress string
+	ResourceType  string // terraform resource type, e.g. "aws_backup_vault"
+	ResourceName  string // terraform resource name with any index, e.g. "this[0]"
+	Change        string // "create", "update", or "delete"
+	Action        string // required IAM action, e.g. "kms:CreateGrant"
+	Service       string // extracted service prefix, e.g. "kms"
+	Class         string // classification tag: "[required]", "[optional]", "[data-plane]", or ""
 	// ResourceScopeUnverified marks an action the policy grants only on some
 	// resources while the target ARN is unknown (--strict-resources). The
 	// grant may or may not apply, so the finding is unverified, not missing.
@@ -43,6 +46,20 @@ type MissingAction struct {
 	// The tool has no permission data for it, so Action is empty and the
 	// change was not checked.
 	Unresolved bool
+}
+
+// Address returns the terraform address of m's resource, module and index
+// included: module.prod.aws_sqs_queue.q[0]. It is empty for a finding from a
+// declared need.
+func (m MissingAction) Address() string {
+	if m.Need != "" {
+		return ""
+	}
+	addr := m.ResourceType + "." + m.ResourceName
+	if m.ModuleAddress != "" {
+		addr = m.ModuleAddress + "." + addr
+	}
+	return addr
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -72,28 +89,36 @@ func DefaultFilter() FilterConfig {
 
 // Validate checks all resource changes against the policy and the resolver.
 // The filter controls which permission classes are excluded from validation.
-// A change whose type the resolver does not know becomes an Unresolved
-// finding. A lookup that fails with ErrLookupFailed stops validation with
+// A no-op change needs no permission: it is there so that a change
+// referencing it can derive its target. A change whose type the resolver
+// does not know becomes an Unresolved finding. A lookup that fails with ErrLookupFailed stops validation with
 // that error, since the tool cannot say whether the type is covered.
 func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
+	// Every change, no-op included, can be the target of a reference.
+	set := newChangeSet(changes)
+	var checked []*plan.ResourceChange
 	inPlan := make(map[string]bool, len(changes))
 	for _, rc := range changes {
-		inPlan[rc.Type] = true
+		if rc.Checked() {
+			checked = append(checked, rc)
+			inPlan[rc.Type] = true
+		}
 	}
 
-	for _, rc := range changes {
+	for _, rc := range checked {
 		schema, err := resolver.Resolve(rc.Type)
 		if errors.Is(err, ErrLookupFailed) {
 			return nil, err
 		}
 		if err != nil {
 			missing = append(missing, MissingAction{
-				ResourceType: rc.Type,
-				ResourceName: rc.Name,
-				Change:       rc.Change,
-				Unresolved:   true,
+				ModuleAddress: rc.ModuleAddress,
+				ResourceType:  rc.Type,
+				ResourceName:  rc.InstanceName(),
+				Change:        rc.Change,
+				Unresolved:    true,
 			})
 			continue
 		}
@@ -127,7 +152,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 			// Action coverage, resource-scoped when the target ARN is derivable
 			// from the plan.
-			verdict := policy.worstVerdict(action, resourceTargets(rc, changes), filter.StrictResources)
+			verdict := policy.worstVerdict(action, resourceTargets(rc, set), filter.StrictResources)
 			if verdict == Covered {
 				continue
 			}
@@ -145,8 +170,9 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 			}
 
 			missing = append(missing, MissingAction{
+				ModuleAddress:      rc.ModuleAddress,
 				ResourceType:       rc.Type,
-				ResourceName:       rc.Name,
+				ResourceName:       rc.InstanceName(),
 				Change:             rc.Change,
 				Action:             action,
 				Service:            actionService(action),
@@ -162,8 +188,8 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 	// AWS invokes at apply time (e.g. elasticloadbalancing:SetWebACL for an
 	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
 	// schema/source resolution, so they're checked separately here.
-	for _, rc := range changes {
-		for _, m := range append(crossServiceMissing(rc, policy, filter.StrictResources), passRoleMissing(rc, policy, changes, filter.StrictResources)...) {
+	for _, rc := range checked {
+		for _, m := range append(crossServiceMissing(rc, policy, filter.StrictResources), passRoleMissing(rc, policy, set, filter.StrictResources)...) {
 			if filter.ExcludeConditional && m.ConditionAttribute != "" {
 				continue
 			}

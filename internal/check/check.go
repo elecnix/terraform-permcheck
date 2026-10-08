@@ -141,8 +141,33 @@ func (in Input) label() string {
 	return "resource changes"
 }
 
+// empty reports whether the input has nothing to check. A plan of no-op
+// changes has none.
 func (in Input) empty() bool {
-	return len(in.changes) == 0 && len(in.blocks) == 0
+	return countResources(in.changes) == 0 && len(in.blocks) == 0
+}
+
+// countResources counts the resources whose changes need a check. A replace
+// is checked as a delete and a create of one resource, so it counts once. A
+// no-op is not checked and does not count.
+func countResources(changes []*plan.ResourceChange) int {
+	seen := make(map[string]bool, len(changes))
+	n := 0
+	for i, rc := range changes {
+		if !rc.Checked() {
+			continue
+		}
+		// A change without an address (a test, say) counts on its own.
+		key := rc.Address
+		if key == "" {
+			key = fmt.Sprint(i)
+		}
+		if !seen[key] {
+			seen[key] = true
+			n++
+		}
+	}
+	return n
 }
 
 // Options configure a check.
@@ -171,8 +196,8 @@ type Result struct {
 	Missing []iam.MissingAction
 	// Excluded are the gaps a config exclusion matched.
 	Excluded []iam.ExcludedAction
-	// Checked counts resource changes in plan mode and distinct resource
-	// types in static mode. Neither count includes an unresolved type.
+	// Checked counts the resources with a change in plan mode and distinct
+	// resource types in static mode. Neither count includes an unresolved type.
 	Checked int
 	// Label names what Checked counts.
 	Label string
@@ -223,7 +248,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	resolver = newMemoResolver(resolver)
 
 	changes := in.changes
-	res.Checked = len(changes)
+	res.Checked = countResources(changes)
 	if in.static {
 		changes, res.Checked, err = staticChanges(in.blocks, resolver)
 		if err != nil {
@@ -236,13 +261,22 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 		return Result{}, err
 	}
 	if !in.static {
-		// Validate reports each change whose type no source knows as one
-		// unresolved finding. Such a change is not checked, as in static
+		// A resource whose type no source knows is not checked, as in static
 		// mode, whether or not an exclusion hides it.
+		unresolved := make(map[string]bool)
 		for _, m := range missing {
 			if m.Unresolved {
-				res.Checked--
+				unresolved[m.ResourceType] = true
 			}
+		}
+		if len(unresolved) > 0 {
+			var resolved []*plan.ResourceChange
+			for _, rc := range changes {
+				if !unresolved[rc.Type] {
+					resolved = append(resolved, rc)
+				}
+			}
+			res.Checked = countResources(resolved)
 		}
 	}
 	missing = append(missing, iam.CheckNeeds(needs, policy, opts.Filter.StrictResources)...)

@@ -19,18 +19,8 @@ type pathState struct {
 	before, after, afterUnknown any
 }
 
-// newPathState decodes the raw states. A value that does not decode reads as
-// absent.
-func newPathState(state, unknown, before, after, afterUnknown json.RawMessage) *pathState {
-	return &pathState{
-		state:        decodeState(state),
-		unknown:      decodeState(unknown),
-		before:       decodeState(before),
-		after:        decodeState(after),
-		afterUnknown: decodeState(afterUnknown),
-	}
-}
-
+// decodeState decodes a raw state for path walking. A value that does not
+// decode reads as absent.
 func decodeState(raw json.RawMessage) any {
 	if len(raw) == 0 {
 		return nil

@@ -25,13 +25,13 @@ var passRoleAttributes = map[string][]string{
 // is skipped, so only provable non-coverage is reported. With strict set, such
 // a role is reported unverified instead when the policy grants PassRole only
 // on some roles.
-func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, all []*plan.ResourceChange, strict bool) []MissingAction {
+func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, set *changeSet, strict bool) []MissingAction {
 	if rc.Change == "delete" {
 		return nil
 	}
 	const action = "iam:PassRole"
 	for _, attr := range passRoleAttributes[rc.Type] {
-		targets := roleTargets(rc, attr, all)
+		targets := roleTargets(rc, attr, set)
 		verdict := policy.worstVerdict(action, targets, strict)
 		if verdict == Covered {
 			continue
@@ -43,8 +43,9 @@ func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, all []*pla
 		}
 		// One finding per resource, even when it passes two roles.
 		return []MissingAction{{
+			ModuleAddress:           rc.ModuleAddress,
 			ResourceType:            rc.Type,
-			ResourceName:            rc.Name,
+			ResourceName:            rc.InstanceName(),
 			Change:                  rc.Change,
 			Action:                  action,
 			Service:                 "iam",
@@ -65,7 +66,7 @@ func passesRole(rc *plan.ResourceChange, attr string) bool {
 // roleTargets derives the roles held by attr: a literal ARN, or a
 // reference to managed aws_iam_role instances whose names are known. Each
 // role is one target.
-func roleTargets(rc *plan.ResourceChange, attr string, all []*plan.ResourceChange) [][]string {
+func roleTargets(rc *plan.ResourceChange, attr string, set *changeSet) [][]string {
 	if v := rc.AttributeValues[attr]; v != "" {
 		if isARN(v) {
 			return [][]string{{v}}
@@ -73,7 +74,7 @@ func roleTargets(rc *plan.ResourceChange, attr string, all []*plan.ResourceChang
 		return nil
 	}
 	var targets [][]string
-	for _, c := range referencedChanges(rc, all, attr, "aws_iam_role") {
+	for _, c := range referencedChanges(rc, set, attr, "aws_iam_role") {
 		if forms := roleARNPatterns(c); forms != nil {
 			targets = append(targets, forms)
 		}

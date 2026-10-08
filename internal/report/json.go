@@ -30,14 +30,18 @@ type JSONUnresolved struct {
 
 // JSONUnresolvedResource is one resource change of an unresolved type.
 type JSONUnresolvedResource struct {
-	ResourceName string `json:"resource_name"`
-	Change       string `json:"change"`
-	File         string `json:"file,omitempty"`
-	Line         int    `json:"line,omitempty"`
+	// ModuleAddress is the module of the resource, e.g. "module.prod".
+	// It is absent for a resource in the root module.
+	ModuleAddress string `json:"module_address,omitempty"`
+	ResourceName  string `json:"resource_name"`
+	Change        string `json:"change"`
+	File          string `json:"file,omitempty"`
+	Line          int    `json:"line,omitempty"`
 }
 
 // JSONExcluded is a single config-excluded permission in JSON output.
 type JSONExcluded struct {
+	ModuleAddress  string `json:"module_address,omitempty"`
 	ResourceType   string `json:"resource_type,omitempty"`
 	ResourceName   string `json:"resource_name,omitempty"`
 	Change         string `json:"change,omitempty"`
@@ -54,7 +58,9 @@ type JSONExcluded struct {
 //
 // A finding from a declared need has no terraform resource, so it carries
 // need and need_resource instead of resource_type, resource_name and change.
+// module_address is absent for a resource in the root module.
 type JSONMissing struct {
+	ModuleAddress      string `json:"module_address,omitempty"`
 	ResourceType       string `json:"resource_type,omitempty"`
 	ResourceName       string `json:"resource_name,omitempty"`
 	Change             string `json:"change,omitempty"`
@@ -82,6 +88,7 @@ func (r *Report) json() string {
 
 	for _, e := range r.excluded {
 		result.Excluded = append(result.Excluded, JSONExcluded{
+			ModuleAddress:  e.ModuleAddress,
 			ResourceType:   e.ResourceType,
 			ResourceName:   e.ResourceName,
 			Change:         e.Change,
@@ -96,7 +103,7 @@ func (r *Report) json() string {
 	for _, g := range r.unresolved {
 		u := JSONUnresolved{ResourceType: g.key, Allowed: r.unresolvedAllowed}
 		for _, f := range g.items {
-			res := JSONUnresolvedResource{ResourceName: f.ResourceName, Change: f.Change}
+			res := JSONUnresolvedResource{ModuleAddress: f.ModuleAddress, ResourceName: f.ResourceName, Change: f.Change}
 			if f.loc != nil {
 				res.File = f.loc.Path
 				res.Line = f.loc.Line
@@ -114,6 +121,7 @@ func (r *Report) json() string {
 	if len(r.findings) > 0 {
 		for _, f := range r.findings {
 			item := JSONMissing{
+				ModuleAddress:      f.ModuleAddress,
 				ResourceType:       f.ResourceType,
 				ResourceName:       f.ResourceName,
 				Change:             f.Change,

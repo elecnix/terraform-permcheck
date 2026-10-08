@@ -17,13 +17,15 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(changes) != 3 {
-		t.Fatalf("expected 3 changes (excluding no-op s3_bucket), got %d", len(changes))
+	if len(changes) != 4 {
+		t.Fatalf("expected 4 changes (no-op s3_bucket included), got %d", len(changes))
 	}
 
 	found := make(map[string]bool)
+	checked := make(map[string]bool)
 	for _, c := range changes {
 		found[c.Type] = true
+		checked[c.Type] = c.Checked()
 	}
 
 	for _, want := range []string{"aws_backup_vault", "aws_dynamodb_table", "aws_iam_role"} {
@@ -32,9 +34,9 @@ func TestParse(t *testing.T) {
 		}
 	}
 
-	// s3_bucket should not appear since it's "no-op"
-	if found["aws_s3_bucket"] {
-		t.Error("no-op resource should not appear in changes")
+	// s3_bucket is kept for reference resolution but needs no check.
+	if !found["aws_s3_bucket"] || checked["aws_s3_bucket"] {
+		t.Error("no-op resource should be kept but not checked")
 	}
 }
 
@@ -354,9 +356,8 @@ func TestParseDeleteAttributeValuesFromBefore(t *testing.T) {
 }
 
 func TestParseReplaceStillUsesAfter(t *testing.T) {
-	// Replace actions ([\"delete\",\"create\"] / [\"create\",\"delete\"]) map to
-	// "create" and must keep using after, not before — only pure deletes read
-	// from before.
+	// The create half of a replace must read after, not before. Only the
+	// delete half reads before.
 	raw := []byte(`{
 		"resource_changes": [
 			{
@@ -375,10 +376,10 @@ func TestParseReplaceStillUsesAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if changes[0].Change != "create" {
-		t.Fatalf("expected replace to map to create, got %q", changes[0].Change)
+	if len(changes) != 2 || changes[1].Change != "create" {
+		t.Fatalf("expected replace to yield delete then create, got %d changes", len(changes))
 	}
-	if !changes[0].Attributes["tags"] {
+	if !changes[1].Attributes["tags"] {
 		t.Error("expected replace (create) to read tags from after, not before")
 	}
 }
@@ -490,7 +491,6 @@ func TestParseReferencesNestedModule(t *testing.T) {
 	raw := []byte(`{
 		"resource_changes": [
 			{
-				"address": "module.secrets.aws_secretsmanager_secret_version.b",
 				"module_address": "module.secrets",
 				"type": "aws_secretsmanager_secret_version",
 				"name": "b",
@@ -765,11 +765,16 @@ func TestParseChangedAttributes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(changes) != 1 {
-				t.Fatalf("expected 1 change, got %d", len(changes))
+			// A replace yields a delete and a create; the create is the
+			// change whose planned state these cases measure.
+			change := changes[0]
+			for _, c := range changes {
+				if c.Change == "create" {
+					change = c
+				}
 			}
 
-			got := changes[0].ChangedAttributes
+			got := change.ChangedAttributes
 			if tt.want == nil {
 				if got != nil {
 					t.Fatalf("expected nil ChangedAttributes, got %v", got)
@@ -1030,19 +1035,23 @@ func TestParseConfiguredAttributesSameNameInTwoModules(t *testing.T) {
 	}
 }
 
-func TestModuleForAddress_RejectsMalformedAddresses(t *testing.T) {
-	root := &tfModule{ModuleCalls: map[string]tfModuleCall{
-		"a": {Module: tfModule{ModuleCalls: map[string]tfModuleCall{"b": {}}}},
-	}}
+func TestConfigIndex_RejectsMalformedAddresses(t *testing.T) {
+	r := []tfConfigResource{{Mode: "managed", Type: "aws_x", Name: "r"}}
+	idx := indexConfiguration(&tfConfiguration{RootModule: &tfModule{
+		Resources: r,
+		ModuleCalls: map[string]tfModuleCall{
+			"a": {Module: tfModule{Resources: r, ModuleCalls: map[string]tfModuleCall{"b": {Module: tfModule{Resources: r}}}}},
+		},
+	}})
 	for _, addr := range []string{"data.foo.bar", "module.a.aws_instance.b", "module.a.module", "module.a.module.b.x", "module", "module.a]", "module.a.", "module..module.b", "module.a[0", `module.a["k"`} {
-		if m := moduleForAddress(root, addr); m != nil {
-			t.Errorf("moduleForAddress(%q) resolved a module, want nil", addr)
+		if idx.resource(addr, "aws_x", "r") != nil {
+			t.Errorf("resource(%q) resolved a resource, want nil", addr)
 		}
 	}
-	if moduleForAddress(root, "") != root {
+	if idx.resource("", "aws_x", "r") == nil {
 		t.Error("the empty address must resolve to the root module")
 	}
-	if moduleForAddress(root, `module.a[0].module.b["k"]`) == nil {
+	if idx.resource(`module.a[0].module.b["k"]`, "aws_x", "r") == nil {
 		t.Error("a well-formed nested address must resolve")
 	}
 }

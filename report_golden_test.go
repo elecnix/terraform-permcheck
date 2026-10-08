@@ -59,6 +59,14 @@ func goldenCases() []goldenCase {
 		{MissingAction: iam.MissingAction{Need: "Logs", Action: "logs:DeleteLogGroup", Class: "[required]"}, Reason: "logs are kept"},
 	}
 
+	// A replace is checked as a delete and a create, so its findings carry
+	// both changes. A finding in a module names the module.
+	replaceDelete := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}
+	replaceCreate := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: "[required]"}
+	moduleDelete := iam.MissingAction{ModuleAddress: "module.prod", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}
+	moduleNew := iam.MissingAction{ModuleAddress: `module.app["eu"]`, ResourceType: "aws_new_thing", ResourceName: "a[0]", Change: "create", Unresolved: true}
+	moduleExcluded := iam.ExcludedAction{MissingAction: iam.MissingAction{ModuleAddress: "module.legacy", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}, Reason: "deleted by hand"}
+
 	planLabel := "resource changes"
 	return []goldenCase{
 		{
@@ -177,6 +185,16 @@ func goldenCases() []goldenCase {
 				Excluded: []iam.ExcludedAction{{MissingAction: newA, Reason: "checked by hand"}},
 				Checked:  1, Label: planLabel,
 			},
+		},
+		{
+			name: "module_and_replace",
+			res: check.Result{
+				Missing:    []iam.MissingAction{replaceDelete, moduleDelete, replaceCreate},
+				Unresolved: []iam.MissingAction{moduleNew},
+				Excluded:   []iam.ExcludedAction{moduleExcluded},
+				Checked:    4, Label: planLabel,
+			},
+			showExcluded: true,
 		},
 		{
 			name: "excluded_shown_all_clear",

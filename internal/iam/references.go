@@ -23,7 +23,7 @@ import (
 // a bare address selects every instance only when no reference to the same
 // resource carries a key. That is the case for r[count.index] and for a
 // resource with no count or for_each.
-func referencedChanges(rc *plan.ResourceChange, all []*plan.ResourceChange, attr, resType string) []*plan.ResourceChange {
+func referencedChanges(rc *plan.ResourceChange, set *changeSet, attr, resType string) []*plan.ResourceChange {
 	keys := map[string]map[string]bool{} // resource name → instance keys
 	var names []string
 	for _, ref := range rc.References[attr] {
@@ -41,21 +41,45 @@ func referencedChanges(rc *plan.ResourceChange, all []*plan.ResourceChange, attr
 	}
 	var out []*plan.ResourceChange
 	for _, name := range names {
-		for _, c := range all {
-			if c.Type != resType || c.ModuleAddress != rc.ModuleAddress {
-				continue
-			}
-			cName, cKey := instanceOf(c)
-			if cName != name {
-				continue
-			}
-			if len(keys[name]) > 0 && !keys[name][cKey] {
+		for _, c := range set.named(rc.ModuleAddress, resType, name) {
+			if _, cKey := instanceOf(c); len(keys[name]) > 0 && !keys[name][cKey] {
 				continue
 			}
 			out = append(out, c)
 		}
 	}
 	return out
+}
+
+// changeSet indexes the plan's changes by module, type and resource name, so
+// a reference resolves without a scan over every change. A plan with
+// thousands of references would otherwise take time quadratic in its size.
+type changeSet struct {
+	byName map[changeKey][]*plan.ResourceChange
+}
+
+type changeKey struct {
+	module, typ, name string
+}
+
+// newChangeSet indexes changes, keeping plan order within each resource.
+func newChangeSet(changes []*plan.ResourceChange) *changeSet {
+	s := &changeSet{byName: make(map[changeKey][]*plan.ResourceChange, len(changes))}
+	for _, c := range changes {
+		name, _ := instanceOf(c)
+		k := changeKey{c.ModuleAddress, c.Type, name}
+		s.byName[k] = append(s.byName[k], c)
+	}
+	return s
+}
+
+// named returns the changes of the resource with the given module, type
+// and name, every instance included. A nil set has none.
+func (s *changeSet) named(module, typ, name string) []*plan.ResourceChange {
+	if s == nil {
+		return nil
+	}
+	return s.byName[changeKey{module, typ, name}]
 }
 
 // parseResourceReference splits a reference to a managed resource of type
@@ -80,19 +104,13 @@ func parseResourceReference(ref, resType string) (name, key string, ok bool) {
 	return name, key, name != ""
 }
 
-// instanceOf returns the resource name and instance key of a change, read
-// from its address. A change without an address, as tests build them, may
-// carry the key in its name.
+// instanceOf returns the resource name and instance key of a change. A
+// change without an address, as tests build them, may carry the key in its
+// name.
 func instanceOf(c *plan.ResourceChange) (name, key string) {
-	if c.Address == "" {
-		name = stripResourceIndex(c.Name)
-		return name, c.Name[len(name):]
-	}
-	local := c.Address
-	if c.ModuleAddress != "" {
-		local = strings.TrimPrefix(local, c.ModuleAddress+".")
-	}
-	return c.Name, strings.TrimPrefix(local, c.Type+"."+c.Name)
+	instance := c.InstanceName()
+	name = stripResourceIndex(instance)
+	return name, instance[len(name):]
 }
 
 // worstVerdict checks action against each target and returns the worst
