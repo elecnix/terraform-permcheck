@@ -304,7 +304,7 @@ func TestRun_ProviderSourceOutput(t *testing.T) {
 		}
 		for _, m := range res.Missing {
 			if m.Class != iam.ClassManagement {
-				t.Errorf("%s: %s class = %q, want [required]", tc.name, m.Action, m.Class)
+				t.Errorf("%s: %s class = %q, want %q", tc.name, m.Action, m.Class, iam.ClassManagement)
 			}
 		}
 	}
