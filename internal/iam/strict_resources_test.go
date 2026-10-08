@@ -45,7 +45,7 @@ func TestValidate_StrictScopedGrantWithoutRuleIsUnverified(t *testing.T) {
 	if len(missing) != 1 || !unverifiedOn(missing, "lambda:CreateFunction", "aws_lambda_function") {
 		t.Fatalf("strict mode must report the scoped grant unverified, got %+v", missing)
 	}
-	if missing[0].Class != "[required]" {
+	if missing[0].Class != ClassManagement {
 		t.Errorf("class = %q, want [required]", missing[0].Class)
 	}
 }

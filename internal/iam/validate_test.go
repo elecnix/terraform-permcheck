@@ -167,8 +167,8 @@ func TestValidate_BestEffortIsOptional(t *testing.T) {
 	if !found {
 		t.Fatal("kms:DescribeKey dropped with no filter")
 	}
-	if class != "[optional]" {
-		t.Errorf("kms:DescribeKey class = %q, want [optional]", class)
+	if class != ClassOptional {
+		t.Errorf("kms:DescribeKey class = %q, want %q", class, ClassOptional)
 	}
 }
 
@@ -268,15 +268,15 @@ func hasAction(missing []MissingAction, action string) bool {
 	return false
 }
 
-// classOf returns the class tag the report gives an action, and whether the
-// action is in the report at all.
-func classOf(missing []MissingAction, action string) (string, bool) {
+// classOf returns the class of an action, and whether the action is in the
+// findings at all.
+func classOf(missing []MissingAction, action string) (Class, bool) {
 	for _, m := range missing {
 		if m.Action == action {
 			return m.Class, true
 		}
 	}
-	return "", false
+	return 0, false
 }
 
 func TestValidate_ExcludeConditional(t *testing.T) {

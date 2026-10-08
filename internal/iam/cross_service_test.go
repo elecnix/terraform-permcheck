@@ -50,7 +50,7 @@ func TestCrossServiceMissing_KnownALBTarget(t *testing.T) {
 	if m.ConditionAttribute != "" {
 		t.Errorf("known target should be unconditional, got condition %q", m.ConditionAttribute)
 	}
-	if m.Class != "[required]" {
+	if m.Class != ClassManagement {
 		t.Errorf("expected [required] class, got %q", m.Class)
 	}
 }

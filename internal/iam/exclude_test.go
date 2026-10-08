@@ -9,9 +9,9 @@ import (
 
 func missingFixture() []MissingAction {
 	return []MissingAction{
-		{ResourceType: "aws_cloudtrail", ResourceName: "audit", Change: "create", Action: "s3:DeleteBucketPublicAccessBlock", Class: "[required]"},
-		{ResourceType: "aws_secretsmanager_secret", ResourceName: "forwarder", Change: "create", Action: "secretsmanager:UpdateSecretVersionStage", Class: "[required]"},
-		{ResourceType: "aws_dynamodb_table", ResourceName: "items", Change: "create", Action: "dynamodb:CreateTable", Class: "[required]"},
+		{ResourceType: "aws_cloudtrail", ResourceName: "audit", Change: "create", Action: "s3:DeleteBucketPublicAccessBlock", Class: ClassManagement},
+		{ResourceType: "aws_secretsmanager_secret", ResourceName: "forwarder", Change: "create", Action: "secretsmanager:UpdateSecretVersionStage", Class: ClassManagement},
+		{ResourceType: "aws_dynamodb_table", ResourceName: "items", Change: "create", Action: "dynamodb:CreateTable", Class: ClassManagement},
 	}
 }
 

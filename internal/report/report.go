@@ -42,7 +42,7 @@ type finding struct {
 // findingKey groups the findings that differ only in what needs them.
 type findingKey struct {
 	action     string
-	class      string
+	class      iam.Class
 	condition  string
 	unverified bool
 }
@@ -107,13 +107,16 @@ type Report struct {
 	checked int
 	label   string // what checked counts
 	needs   int    // declared needs checked
+	// hasGaps reports that the result fails the run. It sets the json
+	// status.
+	hasGaps bool
 }
 
 // New builds the report of res. locations gives the file and line of each
 // resource block; it may be nil. Excluded findings appear in the report only
 // when showExcluded is set.
 func New(res check.Result, locations iam.Locations, showExcluded bool) *Report {
-	r := &Report{checked: res.Checked, label: res.Label, needs: res.Needs, unresolvedAllowed: res.UnresolvedAllowed}
+	r := &Report{checked: res.Checked, label: res.Label, needs: res.Needs, unresolvedAllowed: res.UnresolvedAllowed, hasGaps: res.HasGaps()}
 	locate := func(m iam.MissingAction) finding {
 		f := finding{MissingAction: m}
 		if loc, ok := locations.Of(m); ok {
@@ -195,12 +198,6 @@ func (r *Report) allCovered() bool {
 	return len(r.findings) == 0 && len(r.unresolved) == 0 && r.excludedUnresolved == 0
 }
 
-// gaps reports whether the report fails the run: a finding remains, or a
-// resource type is unresolved and not allowed. It sets the json status.
-func (r *Report) gaps() bool {
-	return len(r.findings) > 0 || (len(r.unresolved) > 0 && !r.unresolvedAllowed)
-}
-
 // allowedUnresolved counts the unresolved types that do not fail the run:
 // those the run allows and those a config exclusion covers.
 func (r *Report) allowedUnresolved() int {
@@ -277,6 +274,22 @@ func source(m iam.MissingAction) string {
 		s += " on " + m.NeedResource
 	}
 	return s
+}
+
+// classTag is the tag of a permission class in every format. The json
+// report keeps the brackets, as it always has. A finding with no action has
+// no tag.
+func classTag(c iam.Class) string {
+	switch c {
+	case iam.ClassManagement:
+		return "[required]"
+	case iam.ClassOptional:
+		return "[optional]"
+	case iam.ClassDataPlane:
+		return "[data-plane]"
+	default:
+		return ""
+	}
 }
 
 // unverifiedTag marks a finding whose coverage depends on a resource scope the

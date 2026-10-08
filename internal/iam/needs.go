@@ -106,7 +106,7 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
 			add := func(resource string, verdict policy.Verdict) {
-				m := newFinding(action, classManagement, verdict)
+				m := newFinding(action, ClassManagement, verdict)
 				m.Need = n.Sid
 				m.NeedResource = resource
 				missing = append(missing, m)

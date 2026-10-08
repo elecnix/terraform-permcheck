@@ -9,15 +9,37 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
-// permissionClass categorizes an IAM permission as management-plane or data-plane.
-type permissionClass int
+// Class categorizes an IAM permission as management-plane or data-plane.
+// The report renders it as a tag, such as [required].
+type Class int
 
 const (
-	classUnknown    permissionClass = iota
-	classManagement                 // provisioning/configuration actions (needed by deploy role)
-	classDataPlane                  // data access actions (belongs to application roles)
-	classOptional                   // actions for optional sub-resources (access policy, notifications, etc.)
+	// ClassUnknown is the zero Class, of a finding with no action: an
+	// unresolved resource type.
+	ClassUnknown Class = iota
+	// ClassManagement is a provisioning or configuration action, which the
+	// deploy role needs.
+	ClassManagement
+	// ClassDataPlane is a data access action, which belongs to application
+	// roles.
+	ClassDataPlane
+	// ClassOptional is an action for an optional sub-resource, such as an
+	// access policy or notifications.
+	ClassOptional
 )
+
+func (c Class) String() string {
+	switch c {
+	case ClassManagement:
+		return "management"
+	case ClassDataPlane:
+		return "data-plane"
+	case ClassOptional:
+		return "optional"
+	default:
+		return "unknown"
+	}
+}
 
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
@@ -29,7 +51,7 @@ type MissingAction struct {
 	Change        string // "create", "update", or "delete"
 	Action        string // required IAM action, e.g. "kms:CreateGrant"
 	Service       string // extracted service prefix, e.g. "kms"
-	Class         string // classification tag: "[required]", "[optional]", "[data-plane]", or ""
+	Class         Class  // permission class of Action
 	// ResourceScopeUnverified marks an action the policy grants only on some
 	// resources while the target ARN is unknown (--strict-resources). The
 	// grant may or may not apply, so the finding is unverified, not missing.
@@ -174,10 +196,10 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 
 		// Filter by class
 		class := d.class
-		if filter.ExcludeDataPlane && class == classDataPlane {
+		if filter.ExcludeDataPlane && class == ClassDataPlane {
 			continue
 		}
-		if filter.ExcludeOptional && class == classOptional {
+		if filter.ExcludeOptional && class == ClassOptional {
 			continue
 		}
 		if filter.ExcludeConditional && gateAttr != "" {
@@ -193,11 +215,11 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 
 // newFinding returns the finding that the policy does not grant action, of
 // class class. A verdict of Unverified marks it unverified.
-func newFinding(action string, class permissionClass, verdict policy.Verdict) MissingAction {
+func newFinding(action string, class Class, verdict policy.Verdict) MissingAction {
 	return MissingAction{
 		Action:                  action,
 		Service:                 actionService(action),
-		Class:                   classTag(class),
+		Class:                   class,
 		ResourceScopeUnverified: verdict == policy.Unverified,
 	}
 }
@@ -257,18 +279,4 @@ func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool 
 		return true
 	}
 	return rc.Attributes[top]
-}
-
-// classTag returns a human-readable classification tag for a permissionClass.
-func classTag(c permissionClass) string {
-	switch c {
-	case classOptional:
-		return "[optional]"
-	case classDataPlane:
-		return "[data-plane]"
-	case classManagement:
-		return "[required]"
-	default:
-		return "[unknown]"
-	}
 }

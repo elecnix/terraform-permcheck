@@ -93,7 +93,7 @@ func TestCheckNeeds(t *testing.T) {
 
 func TestCheckNeeds_FindingShape(t *testing.T) {
 	got := CheckNeeds([]Need{{Sid: "Push", Actions: []string{"ecr:PutImage"}}}, mustPolicy(t, `{"Statement":[]}`), false)
-	want := []MissingAction{{Action: "ecr:PutImage", Service: "ecr", Class: "[required]", Need: "Push"}}
+	want := []MissingAction{{Action: "ecr:PutImage", Service: "ecr", Class: ClassManagement, Need: "Push"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}

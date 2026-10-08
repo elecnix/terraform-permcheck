@@ -7,60 +7,60 @@ import (
 func TestActionClass(t *testing.T) {
 	tests := []struct {
 		action string
-		class  permissionClass
+		class  Class
 	}{
 		// Management-plane
-		{"backup:CreateBackupVault", classManagement},
-		{"backup:DeleteBackupVault", classManagement},
-		{"dynamodb:CreateTable", classManagement},
-		{"dynamodb:DescribeTable", classManagement},
-		{"dynamodb:UpdateTable", classManagement},
-		{"kms:CreateGrant", classManagement},
-		{"kms:DescribeKey", classManagement},
-		{"ec2:CreateVpc", classManagement},
-		{"iam:CreateRole", classManagement},
-		{"s3:CreateBucket", classManagement},
-		{"s3:DeleteBucket", classManagement},
-		{"logs:CreateLogGroup", classManagement},
-		{"logs:DeleteLogGroup", classManagement},
-		{"logs:DescribeLogGroups", classManagement},
-		{"logs:PutRetentionPolicy", classManagement},
+		{"backup:CreateBackupVault", ClassManagement},
+		{"backup:DeleteBackupVault", ClassManagement},
+		{"dynamodb:CreateTable", ClassManagement},
+		{"dynamodb:DescribeTable", ClassManagement},
+		{"dynamodb:UpdateTable", ClassManagement},
+		{"kms:CreateGrant", ClassManagement},
+		{"kms:DescribeKey", ClassManagement},
+		{"ec2:CreateVpc", ClassManagement},
+		{"iam:CreateRole", ClassManagement},
+		{"s3:CreateBucket", ClassManagement},
+		{"s3:DeleteBucket", ClassManagement},
+		{"logs:CreateLogGroup", ClassManagement},
+		{"logs:DeleteLogGroup", ClassManagement},
+		{"logs:DescribeLogGroups", ClassManagement},
+		{"logs:PutRetentionPolicy", ClassManagement},
 		// Managing an aws_cloudwatch_log_stream or a log group's tags and KMS
 		// key is provisioning work (issue #54).
-		{"logs:CreateLogStream", classManagement},
-		{"logs:DeleteLogStream", classManagement},
-		{"logs:DescribeLogStreams", classManagement},
-		{"logs:TagResource", classManagement},
-		{"logs:UntagResource", classManagement},
-		{"logs:AssociateKmsKey", classManagement},
-		{"logs:DeleteRetentionPolicy", classManagement},
-		{"logs:PutSubscriptionFilter", classManagement},
+		{"logs:CreateLogStream", ClassManagement},
+		{"logs:DeleteLogStream", ClassManagement},
+		{"logs:DescribeLogStreams", ClassManagement},
+		{"logs:TagResource", ClassManagement},
+		{"logs:UntagResource", ClassManagement},
+		{"logs:AssociateKmsKey", ClassManagement},
+		{"logs:DeleteRetentionPolicy", ClassManagement},
+		{"logs:PutSubscriptionFilter", ClassManagement},
 
 		// Data-plane
-		{"dynamodb:PutItem", classDataPlane},
-		{"dynamodb:GetItem", classDataPlane},
-		{"dynamodb:Query", classDataPlane},
-		{"dynamodb:Scan", classDataPlane},
-		{"s3:GetObject", classDataPlane},
-		{"s3:PutObject", classDataPlane},
-		{"s3:DeleteObject", classDataPlane},
-		{"kms:Encrypt", classDataPlane},
-		{"kms:Decrypt", classDataPlane},
-		{"kinesis:PutRecords", classDataPlane},
-		{"logs:PutLogEvents", classDataPlane},
-		{"logs:StartQuery", classDataPlane},
-		{"backup-storage:MountCapsule", classDataPlane},
-		{"s3tables:CreateTable", classDataPlane},
+		{"dynamodb:PutItem", ClassDataPlane},
+		{"dynamodb:GetItem", ClassDataPlane},
+		{"dynamodb:Query", ClassDataPlane},
+		{"dynamodb:Scan", ClassDataPlane},
+		{"s3:GetObject", ClassDataPlane},
+		{"s3:PutObject", ClassDataPlane},
+		{"s3:DeleteObject", ClassDataPlane},
+		{"kms:Encrypt", ClassDataPlane},
+		{"kms:Decrypt", ClassDataPlane},
+		{"kinesis:PutRecords", ClassDataPlane},
+		{"logs:PutLogEvents", ClassDataPlane},
+		{"logs:StartQuery", ClassDataPlane},
+		{"backup-storage:MountCapsule", ClassDataPlane},
+		{"s3tables:CreateTable", ClassDataPlane},
 
 		// Optional sub-resources
-		{"backup:PutBackupVaultAccessPolicy", classOptional},
-		{"backup:PutBackupVaultNotifications", classOptional},
-		{"backup:PutBackupVaultLockConfiguration", classOptional},
-		{"s3:PutBucketWebsite", classOptional},
-		{"s3:PutBucketLogging", classOptional},
-		{"s3:PutReplicationConfiguration", classOptional},
-		{"dynamodb:ImportTable", classOptional},
-		{"secretsmanager:GetRandomPassword", classOptional},
+		{"backup:PutBackupVaultAccessPolicy", ClassOptional},
+		{"backup:PutBackupVaultNotifications", ClassOptional},
+		{"backup:PutBackupVaultLockConfiguration", ClassOptional},
+		{"s3:PutBucketWebsite", ClassOptional},
+		{"s3:PutBucketLogging", ClassOptional},
+		{"s3:PutReplicationConfiguration", ClassOptional},
+		{"dynamodb:ImportTable", ClassOptional},
+		{"secretsmanager:GetRandomPassword", ClassOptional},
 	}
 
 	for _, tt := range tests {
@@ -68,27 +68,6 @@ func TestActionClass(t *testing.T) {
 			got := actionClass(tt.action)
 			if got != tt.class {
 				t.Errorf("actionClass(%q) = %d, want %d", tt.action, got, tt.class)
-			}
-		})
-	}
-}
-
-func TestClassTag(t *testing.T) {
-	tests := []struct {
-		class permissionClass
-		tag   string
-	}{
-		{classManagement, "[required]"},
-		{classOptional, "[optional]"},
-		{classDataPlane, "[data-plane]"},
-		{classUnknown, "[unknown]"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.tag, func(t *testing.T) {
-			got := classTag(tt.class)
-			if got != tt.tag {
-				t.Errorf("classTag(%d) = %q, want %q", tt.class, got, tt.tag)
 			}
 		})
 	}

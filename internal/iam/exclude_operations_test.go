@@ -12,8 +12,8 @@ import (
 // permission, which is what an operations list has to separate.
 func deleteAndCreateFixture() []MissingAction {
 	return []MissingAction{
-		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "create", Action: "s3:PutBucketEncryption", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "delete", Action: "s3:PutBucketEncryption", Class: "[required]"},
+		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "create", Action: "s3:PutBucketEncryption", Class: ClassManagement},
+		{ResourceType: "aws_s3_bucket_server_side_encryption_configuration", ResourceName: "locked", Change: "delete", Action: "s3:PutBucketEncryption", Class: ClassManagement},
 	}
 }
 

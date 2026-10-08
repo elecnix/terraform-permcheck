@@ -114,7 +114,7 @@ func (r *Report) json() string {
 	}
 	result.UnresolvedAllowed = r.allowedUnresolved()
 
-	if r.gaps() {
+	if r.hasGaps {
 		result.Status = "gaps_found"
 		result.Missing = make([]JSONMissing, 0, len(r.findings))
 	}
@@ -128,7 +128,7 @@ func (r *Report) json() string {
 				Need:               f.Need,
 				NeedResource:       f.NeedResource,
 				MissingAction:      f.Action,
-				Class:              f.Class,
+				Class:              classTag(f.Class),
 				ConditionAttribute: f.ConditionAttribute,
 			}
 			if f.ResourceScopeUnverified {

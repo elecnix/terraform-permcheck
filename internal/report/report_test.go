@@ -14,11 +14,11 @@ import (
 // finding, with two findings that share a group.
 func countFixture() []iam.MissingAction {
 	return []iam.MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "b[0]", Change: "create", Action: "s3:CreateBucket", Class: "[required]"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: "[optional]"},
-		{ResourceType: "aws_kms_key", ResourceName: "k", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "policy"},
-		{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: "[required]", ResourceScopeUnverified: true},
+		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "b[0]", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+		{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassOptional},
+		{ResourceType: "aws_kms_key", ResourceName: "k", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "policy"},
+		{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true},
 	}
 }
 

@@ -27,18 +27,18 @@ type goldenCase struct {
 }
 
 func goldenCases() []goldenCase {
-	bucketA := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a[0]", Change: "create", Action: "s3:PutBucketTagging", Class: "[required]"}
-	bucketB := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: `b["x"]`, Change: "create", Action: "s3:PutBucketTagging", Class: "[required]"}
-	bucketC := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "c", Change: "update", Action: "s3:PutBucketTagging", Class: "[required]"}
-	kmsOptional := iam.MissingAction{ResourceType: "aws_kms_key", ResourceName: "main", Change: "create", Action: "kms:DescribeKey", Class: "[optional]"}
-	dataPlane := iam.MissingAction{ResourceType: "aws_backup_vault", ResourceName: "v", Change: "delete", Action: "backup-storage:MountCapsule", Class: "[data-plane]"}
-	conditional := iam.MissingAction{ResourceType: "aws_backup_vault", ResourceName: "v", Change: "delete", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"}
-	conditional2 := iam.MissingAction{ResourceType: "aws_sns_topic", ResourceName: "t[1]", Change: "create", Action: "kms:CreateGrant", Class: "[required]", ConditionAttribute: "kms_key_arn"}
-	unverified := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: "[required]", ResourceScopeUnverified: true}
-	unverified2 := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: `r["k"]`, Change: "create", Action: "sqs:CreateQueue", Class: "[required]", ResourceScopeUnverified: true}
-	needOn := iam.MissingAction{Need: "EcrImageVerification", NeedResource: "arn:aws:ecr:us-east-1:111122223333:repository/a", Action: "ecr:DescribeImages", Class: "[required]"}
-	needAny := iam.MissingAction{Need: "Logs", Action: "logs:CreateLogGroup", Class: "[required]"}
-	needUnverified := iam.MissingAction{Need: "Logs", Action: "logs:PutLogEvents", Class: "[required]", ResourceScopeUnverified: true}
+	bucketA := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a[0]", Change: "create", Action: "s3:PutBucketTagging", Class: iam.ClassManagement}
+	bucketB := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: `b["x"]`, Change: "create", Action: "s3:PutBucketTagging", Class: iam.ClassManagement}
+	bucketC := iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "c", Change: "update", Action: "s3:PutBucketTagging", Class: iam.ClassManagement}
+	kmsOptional := iam.MissingAction{ResourceType: "aws_kms_key", ResourceName: "main", Change: "create", Action: "kms:DescribeKey", Class: iam.ClassOptional}
+	dataPlane := iam.MissingAction{ResourceType: "aws_backup_vault", ResourceName: "v", Change: "delete", Action: "backup-storage:MountCapsule", Class: iam.ClassDataPlane}
+	conditional := iam.MissingAction{ResourceType: "aws_backup_vault", ResourceName: "v", Change: "delete", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "kms_key_arn"}
+	conditional2 := iam.MissingAction{ResourceType: "aws_sns_topic", ResourceName: "t[1]", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "kms_key_arn"}
+	unverified := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true}
+	unverified2 := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: `r["k"]`, Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true}
+	needOn := iam.MissingAction{Need: "EcrImageVerification", NeedResource: "arn:aws:ecr:us-east-1:111122223333:repository/a", Action: "ecr:DescribeImages", Class: iam.ClassManagement}
+	needAny := iam.MissingAction{Need: "Logs", Action: "logs:CreateLogGroup", Class: iam.ClassManagement}
+	needUnverified := iam.MissingAction{Need: "Logs", Action: "logs:PutLogEvents", Class: iam.ClassManagement, ResourceScopeUnverified: true}
 
 	newA := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: "a", Change: "create", Unresolved: true}
 	newB := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: `b["k"]`, Change: "update", Unresolved: true}
@@ -53,19 +53,19 @@ func goldenCases() []goldenCase {
 	}
 
 	excluded := []iam.ExcludedAction{
-		{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a[0]", Change: "delete", Action: "s3:DeleteBucket", Class: "[required]"}, Reason: "bucket is retained"},
-		{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: `b["x"]`, Change: "delete", Action: "s3:DeleteBucket", Class: "[required]"}, Reason: "bucket is retained"},
-		{MissingAction: iam.MissingAction{ResourceType: "aws_kms_key", ResourceName: "main", Change: "create", Action: "kms:TagResource", Class: "[required]"}},
-		{MissingAction: iam.MissingAction{Need: "Logs", Action: "logs:DeleteLogGroup", Class: "[required]"}, Reason: "logs are kept"},
+		{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a[0]", Change: "delete", Action: "s3:DeleteBucket", Class: iam.ClassManagement}, Reason: "bucket is retained"},
+		{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: `b["x"]`, Change: "delete", Action: "s3:DeleteBucket", Class: iam.ClassManagement}, Reason: "bucket is retained"},
+		{MissingAction: iam.MissingAction{ResourceType: "aws_kms_key", ResourceName: "main", Change: "create", Action: "kms:TagResource", Class: iam.ClassManagement}},
+		{MissingAction: iam.MissingAction{Need: "Logs", Action: "logs:DeleteLogGroup", Class: iam.ClassManagement}, Reason: "logs are kept"},
 	}
 
 	// A replace is checked as a delete and a create, so its findings carry
 	// both changes. A finding in a module names the module.
-	replaceDelete := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}
-	replaceCreate := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: "[required]"}
-	moduleDelete := iam.MissingAction{ModuleAddress: "module.prod", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}
+	replaceDelete := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: iam.ClassManagement}
+	replaceCreate := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement}
+	moduleDelete := iam.MissingAction{ModuleAddress: "module.prod", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: iam.ClassManagement}
 	moduleNew := iam.MissingAction{ModuleAddress: `module.app["eu"]`, ResourceType: "aws_new_thing", ResourceName: "a[0]", Change: "create", Unresolved: true}
-	moduleExcluded := iam.ExcludedAction{MissingAction: iam.MissingAction{ModuleAddress: "module.legacy", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: "[required]"}, Reason: "deleted by hand"}
+	moduleExcluded := iam.ExcludedAction{MissingAction: iam.MissingAction{ModuleAddress: "module.legacy", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: iam.ClassManagement}, Reason: "deleted by hand"}
 
 	planLabel := "resource changes"
 	return []goldenCase{
