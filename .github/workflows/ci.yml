@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: Build
         run: go build ./...
@@ -36,7 +36,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       - name: Test (live CFN registry)
         run: go test ./... -count=1 -v
@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version-file: go.mod
 
       # Clones terraform-provider-aws at DefaultProviderRef and parses it.
       - name: Regenerate the embedded permissions table
@@ -60,3 +60,36 @@ jobs:
             echo "::error file=internal/permdata/permissions.json::The embedded permissions table is stale. Run 'go run . generate-permissions --out internal/permdata/permissions.json' and commit the result."
             exit 1
           }
+
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the action with a policy that covers the plan
+        id: covered
+        uses: ./
+        with:
+          plan-file: testdata/plan.json
+          policy-file: testdata/policy_allow_all.json
+          format: text
+
+      - name: Run the action with a policy that misses permissions
+        id: partial
+        continue-on-error: true
+        uses: ./
+        with:
+          plan-file: testdata/plan.json
+          policy-file: testdata/policy_partial.json
+
+      # The failed action has no outputs, so read the environment variables
+      # its check step set.
+      - name: Check the exit codes
+        env:
+          COVERED: ${{ steps.covered.outputs.exit-code }}
+          OUTCOME: ${{ steps.partial.outcome }}
+        run: |
+          test "$COVERED" = 0 || { echo "covered run exited $COVERED, want 0"; exit 1; }
+          test "$OUTCOME" = failure || { echo "partial run outcome $OUTCOME, want failure"; exit 1; }
+          test "$PERMCHECK_EXIT_CODE" = 1 || { echo "partial run exited $PERMCHECK_EXIT_CODE, want 1"; exit 1; }
+          grep -q '::warning' "$PERMCHECK_REPORT_FILE" || { echo "partial report has no annotations"; exit 1; }
