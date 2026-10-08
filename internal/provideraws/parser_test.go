@@ -263,12 +263,12 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 		// S3 SDK v2 normalization: method name differs from canonical IAM action
 		{"PutPublicAccessBlock", "s3", "s3:PutBucketPublicAccessBlock"},
 		{"GetPublicAccessBlock", "s3", "s3:GetBucketPublicAccessBlock"},
-		{"DeletePublicAccessBlock", "s3", "s3:DeleteBucketPublicAccessBlock"},
+		{"DeletePublicAccessBlock", "s3", "s3:PutBucketPublicAccessBlock"},
 		{"PutBucketNotificationConfiguration", "s3", "s3:PutBucketNotification"},
 		// S3 encryption configuration: the SDK method names do not exist in IAM
 		{"GetBucketEncryption", "s3", "s3:GetEncryptionConfiguration"},
 		{"PutBucketEncryption", "s3", "s3:PutEncryptionConfiguration"},
-		{"DeleteBucketEncryption", "s3", "s3:DeleteEncryptionConfiguration"},
+		{"DeleteBucketEncryption", "s3", "s3:PutEncryptionConfiguration"},
 		// S3 object lock: the SDK drops the Bucket infix that IAM keeps
 		{"PutObjectLockConfiguration", "s3", "s3:PutBucketObjectLockConfiguration"},
 		{"GetObjectLockConfiguration", "s3", "s3:GetBucketObjectLockConfiguration"},
@@ -286,21 +286,23 @@ func TestSDKMethodToIAMAction(t *testing.T) {
 	}
 }
 
-// TestS3SDKMethodNames_NoDeadRows checks that every rename row changes the
+// TestSDKOperationActions_NoDeadRows checks that every rename row changes the
 // name and is keyed on an SDK method, not on an IAM action. A row that maps a
 // name to itself does nothing, because an unmapped method already passes
-// through unchanged. A row keyed on an IAM action never fires, because the
-// parser only sees SDK method names.
-func TestS3SDKMethodNames_NoDeadRows(t *testing.T) {
-	values := make(map[string]bool, len(s3SDKMethodNames))
-	for _, canonical := range s3SDKMethodNames {
-		values[canonical] = true
-	}
-	for method, canonical := range s3SDKMethodNames {
-		if method == canonical {
-			t.Errorf("row %q maps to itself", method)
-		} else if values[method] {
-			t.Errorf("row %q is keyed on a name that another row produces as an IAM action", method)
+// through unchanged. A row keyed on an IAM action would rename a method that
+// IAM already knows.
+func TestSDKOperationActions_NoDeadRows(t *testing.T) {
+	for service, rows := range sdkOperationActions {
+		values := make(map[string]bool, len(rows))
+		for _, canonical := range rows {
+			values[canonical] = true
+		}
+		for method, canonical := range rows {
+			if method == canonical {
+				t.Errorf("%s row %q maps to itself", service, method)
+			} else if values[method] {
+				t.Errorf("%s row %q is keyed on a name that another row produces as an IAM action", service, method)
+			}
 		}
 	}
 }
@@ -430,9 +432,9 @@ func TestSDKPackageToIAMService(t *testing.T) {
 		pkg  string
 		want string
 	}{
-		{"s3", ""},                 // exact match, no lookup needed
-		{"iam", ""},                // exact match
-		{"dynamodb", ""},           // exact match
+		{"s3", "s3"},               // package name is the IAM prefix
+		{"iam", "iam"},             // package name is the IAM prefix
+		{"dynamodb", "dynamodb"},   // package name is the IAM prefix
 		{"cloudwatchlogs", "logs"}, // package name differs from IAM namespace
 		{"s3control", "s3"},
 		{"sfn", "states"},

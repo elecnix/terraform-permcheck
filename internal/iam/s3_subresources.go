@@ -18,7 +18,6 @@ var s3SubresourcePermissions = map[string][]string{
 		"s3:PutEncryptionConfiguration",
 		"s3:GetEncryptionConfiguration",
 		"s3:DeleteBucketEncryption",
-		"s3:DeleteEncryptionConfiguration",
 	},
 	"aws_s3_bucket_versioning": {
 		"s3:PutBucketVersioning",
@@ -37,8 +36,6 @@ var s3SubresourcePermissions = map[string][]string{
 		"s3:PutBucketCORS",
 		"s3:GetBucketCORS",
 		"s3:DeleteBucketCors",
-		"s3:PutBucketCors",
-		"s3:GetBucketCors",
 	},
 	"aws_s3_bucket_acl": {
 		"s3:PutBucketAcl",
@@ -50,8 +47,6 @@ var s3SubresourcePermissions = map[string][]string{
 	"aws_s3_bucket_accelerate_configuration": {
 		"s3:PutAccelerateConfiguration",
 		"s3:GetAccelerateConfiguration",
-		"s3:PutBucketAccelerateConfiguration",
-		"s3:GetBucketAccelerateConfiguration",
 	},
 	"aws_s3_bucket_object_lock_configuration": {
 		"s3:PutBucketObjectLockConfiguration",
@@ -63,7 +58,6 @@ var s3SubresourcePermissions = map[string][]string{
 		"s3:PutReplicationConfiguration",
 		"s3:GetReplicationConfiguration",
 		"s3:DeleteBucketReplication",
-		"s3:GetBucketReplication",
 	},
 	"aws_s3_bucket_lifecycle_configuration": {
 		"s3:PutLifecycleConfiguration",
@@ -73,7 +67,6 @@ var s3SubresourcePermissions = map[string][]string{
 	"aws_s3_bucket_public_access_block": {
 		"s3:PutBucketPublicAccessBlock",
 		"s3:GetBucketPublicAccessBlock",
-		"s3:DeleteBucketPublicAccessBlock",
 	},
 	"aws_s3_bucket_ownership_controls": {
 		"s3:PutBucketOwnershipControls",
@@ -87,25 +80,19 @@ var s3SubresourcePermissions = map[string][]string{
 		"s3:PutAnalyticsConfiguration",
 		"s3:GetAnalyticsConfiguration",
 		"s3:DeleteBucketAnalyticsConfiguration",
-		"s3:GetBucketAnalyticsConfiguration",
 	},
 	"aws_s3_bucket_inventory": {
 		"s3:PutInventoryConfiguration",
 		"s3:GetInventoryConfiguration",
-		"s3:GetBucketInventoryConfiguration",
-		"s3:DeleteBucketInventoryConfiguration",
 	},
 	"aws_s3_bucket_metric": {
 		"s3:PutMetricsConfiguration",
 		"s3:GetMetricsConfiguration",
 		"s3:DeleteBucketMetricsConfiguration",
-		"s3:GetBucketMetricsConfiguration",
 	},
 	"aws_s3_bucket_intelligent_tiering_configuration": {
 		"s3:PutIntelligentTieringConfiguration",
 		"s3:GetIntelligentTieringConfiguration",
-		"s3:GetBucketIntelligentTieringConfiguration",
-		"s3:DeleteBucketIntelligentTieringConfiguration",
 	},
 }
 

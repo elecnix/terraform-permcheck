@@ -138,7 +138,8 @@ func TestParse_S3BucketCreateReachesClosuresAndIfInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"s3:CreateBucket", "s3:HeadBucket", "s3:PutBucketTagging", "s3:PutBucketPolicy"} {
+	// HeadBucket needs s3:ListBucket.
+	for _, want := range []string{"s3:CreateBucket", "s3:ListBucket", "s3:PutBucketTagging", "s3:PutBucketPolicy"} {
 		if !hasAction(actions, "create", want) {
 			t.Errorf("create is missing %s; got %v", want, actionNames(actions, "create"))
 		}
@@ -160,15 +161,15 @@ func TestParsePackage_FollowsHelpersInOtherFiles(t *testing.T) {
 
 	for op, want := range map[string]string{
 		"read":   "s3:GetBucketPolicy",
-		"create": "s3:GetBucketPolicy", // create → update → read
-		"delete": "s3:ListObjectVersions",
+		"create": "s3:GetBucketPolicy",    // create → update → read
+		"delete": "s3:ListBucketVersions", // ListObjectVersions
 	} {
 		if !hasAction(actions, op, want) {
 			t.Errorf("%s is missing %s; got %v", op, want, actionNames(actions, op))
 		}
 	}
-	if !hasAction(actions, "delete", "s3:DeleteObjects") {
-		t.Errorf("delete is missing s3:DeleteObjects; got %v", actionNames(actions, "delete"))
+	if !hasAction(actions, "delete", "s3:DeleteObject") { // DeleteObjects
+		t.Errorf("delete is missing s3:DeleteObject; got %v", actionNames(actions, "delete"))
 	}
 }
 
