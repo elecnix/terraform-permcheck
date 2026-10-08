@@ -1,0 +1,1 @@
+{"exclude":[{"permission":"sqs:CreateQueue","resource":"aws_sqs_queue.q","reason":"root queue only"}]}

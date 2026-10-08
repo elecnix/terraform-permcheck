@@ -15,7 +15,7 @@ func TestSecretPattern_SuffixIsSixCharacters(t *testing.T) {
 		Type: "aws_secretsmanager_secret", Name: "s", Change: "create",
 		AttributeValues: map[string]string{"name": "app"},
 	}
-	targets := resourceTargets(secret, []*plan.ResourceChange{secret})
+	targets := resourceTargets(secret, newChangeSet([]*plan.ResourceChange{secret}))
 	cases := []struct {
 		grant string
 		want  bool
@@ -61,9 +61,9 @@ func TestRoleTargets_PathAndName(t *testing.T) {
 			changes := roleWith(c.values)
 			policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 				{"Effect":"Allow","Action":"iam:PassRole","Resource":"`+c.grant+`"}]}`)
-			got := len(passRoleMissing(changes[0], policy, changes, false)) == 0
+			got := len(passRoleMissing(changes[0], policy, newChangeSet(changes), false)) == 0
 			if got != c.want {
-				t.Errorf("covered = %v, want %v (targets %v)", got, c.want, roleTargets(changes[0], "role", changes))
+				t.Errorf("covered = %v, want %v (targets %v)", got, c.want, roleTargets(changes[0], "role", newChangeSet(changes)))
 			}
 		})
 	}

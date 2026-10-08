@@ -90,7 +90,7 @@ func TestPassRole_ReferenceResolution(t *testing.T) {
 	policy := mustPolicy(t, passOnlyAllowed)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := passRoleMissing(c.changes[0], policy, c.changes, false)
+			got := passRoleMissing(c.changes[0], policy, newChangeSet(c.changes), false)
 			if (len(got) > 0) != c.missing {
 				t.Errorf("missing = %+v, want missing %v", got, c.missing)
 			}

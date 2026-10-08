@@ -10,24 +10,30 @@ import (
 
 // ResourceChange is a single resource action extracted from a plan.
 type ResourceChange struct {
-	Type   string // terraform resource type, e.g. "aws_backup_vault"
-	Name   string // terraform resource name, e.g. "this"
-	Change string // "create", "update", or "delete"
-
-	// Address is the full instance address, e.g.
-	// `module.a["x"].aws_iam_role.r[0]`. Empty when the source has none.
-	Address string
-	// ModuleAddress is the address of the module instance the resource
-	// lives in, e.g. `module.a["x"]`. Empty for the root module.
+	// ModuleAddress is the module the resource lives in, as terraform
+	// writes it (module.prod, module.a[0].module.b). It is empty for a
+	// resource in the root module.
 	ModuleAddress string
+	Type          string // terraform resource type, e.g. "aws_backup_vault"
+	Name          string // terraform resource name, e.g. "this"
+	// Address is the full instance address as terraform prints it, e.g.
+	// `module.a["x"].aws_iam_role.r[0]`. It is empty when the source has
+	// none (static HCL mode).
+	Address string
+	// Change is "create", "update", "delete", or NoOp. A replace becomes two
+	// changes, a delete that reads the prior state and a create that reads
+	// the planned state, in the order terraform runs them.
+	Change string
 
 	// Attributes records which top-level attributes are meaningfully set,
 	// following terraform's GetOk semantics: a key maps to true only when its
-	// value is non-null and non-zero. For create/update/replace it reflects the
-	// planned "after" state; for a pure delete it reflects the prior "before"
-	// state, since that's what the provider's d.GetOk reads at destroy time. It
-	// is nil when the plan carries neither state, meaning presence is unknown.
-	// Used to gate conditional permissions on attribute presence.
+	// value is non-null and non-zero. For a create or update it reflects the
+	// planned "after" state; for a delete it reflects the prior "before"
+	// state, since that's what the provider's d.GetOk reads at destroy time.
+	// An attribute computed at apply time counts as set when the author
+	// configured it, since the provider reads a value for it then. It is nil
+	// when the plan carries neither state, meaning presence is unknown. Used
+	// to gate conditional permissions on attribute presence.
 	Attributes map[string]bool
 
 	// ChangedAttributes records which top-level attributes differ between the
@@ -35,14 +41,13 @@ type ResourceChange struct {
 	// d.HasChange semantics. An attribute computed at apply time counts as
 	// changed, since terraform still applies a diff for it. A create or a
 	// replace measures against empty prior state, because the provider's Create
-	// starts from nothing. It is nil when the
-	// plan carries no planned state (a pure delete), meaning change is unknown.
+	// starts from nothing. It is nil for a delete, meaning change is unknown.
 	// Used to gate permissions on whether an attribute changed.
 	ChangedAttributes map[string]bool
 
 	// AttributeValues records the concrete string values of top-level
-	// attributes — from "after" for create/update/replace, from "before" for a
-	// pure delete. Only known, non-empty string values are included (values
+	// attributes — from "after" for a create or update, from "before" for a
+	// delete. Only known, non-empty string values are included (values
 	// computed at apply time are absent). Used to resolve resource-scoped
 	// coverage — e.g. the service embedded in an aws_wafv2_web_acl_association's
 	// resource_arn, or a target secret's name referenced by an
@@ -70,6 +75,36 @@ type ResourceChange struct {
 	// paths keeps the decoded states for gates on nested attribute paths.
 	// Nil for a change built without plan state.
 	paths *pathState
+}
+
+// NoOp is the Change of a resource the plan leaves as it is. Parse keeps it so
+// that a change referencing it can read its values, but it needs no
+// permission.
+const NoOp = "no-op"
+
+// Checked reports whether the change needs permissions checked: every change
+// but a no-op.
+func (rc *ResourceChange) Checked() bool {
+	return rc.Change != NoOp
+}
+
+// InstanceName returns the resource name with the count or for_each key the
+// address carries: q, q[0] or q["k"]. It reads the key from the address, so
+// the key keeps terraform's quoting. A change without an address, or with
+// one of an unexpected form, yields Name.
+func (rc *ResourceChange) InstanceName() string {
+	rest := rc.Address
+	if rc.ModuleAddress != "" {
+		rest = strings.TrimPrefix(rest, rc.ModuleAddress+".")
+	}
+	local := rc.Type + "." + rc.Name
+	if !strings.HasPrefix(rest, local) {
+		return rc.Name
+	}
+	if key := rest[len(local):]; strings.HasPrefix(key, "[") {
+		return rc.Name + key
+	}
+	return rc.Name
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -108,6 +143,30 @@ type tfExpression struct {
 	References []string `json:"references"`
 }
 
+// UnmarshalJSON reads an attribute expression or a nested block. Terraform
+// writes a nested block (ttl { ... }) as a list of objects that each map
+// attribute names to expressions. A block keeps the references of every
+// expression inside it. Any other shape reads as an expression with no
+// references rather than failing the whole plan.
+func (e *tfExpression) UnmarshalJSON(raw []byte) error {
+	var blocks []map[string]tfExpression
+	if json.Unmarshal(raw, &blocks) == nil {
+		for _, block := range blocks {
+			for _, expr := range block {
+				e.References = append(e.References, expr.References...)
+			}
+		}
+		return nil
+	}
+	var expr struct {
+		References []string `json:"references"`
+	}
+	if json.Unmarshal(raw, &expr) == nil {
+		e.References = expr.References
+	}
+	return nil
+}
+
 // tfModuleCall mirrors a module call in the configuration section, whose
 // nested module_calls/resources hold the module's own resources.
 type tfModuleCall struct {
@@ -117,6 +176,7 @@ type tfModuleCall struct {
 type tfResourceChange struct {
 	Address       string `json:"address"`
 	ModuleAddress string `json:"module_address"`
+	Mode          string `json:"mode"`
 	Type          string `json:"type"`
 	Name          string `json:"name"`
 	Change        struct {
@@ -127,84 +187,133 @@ type tfResourceChange struct {
 	} `json:"change"`
 }
 
-// actionsToChange converts terraform action slices to a single verb.
-// ["create"] → "create", ["update"] → "update", ["delete"] → "delete",
-// ["create","delete"] (replace) → "create" (needs create perms).
-func actionsToChange(actions []string) string {
+// changeActions returns the changes to check for a resource change's
+// terraform actions, in the order terraform runs them. A replace
+// (["delete","create"] or ["create","delete"]) yields both. A forget removes
+// the object from state without calling the provider, so it yields nothing.
+// An empty action list reads as a no-op.
+func changeActions(actions []string) []string {
 	if len(actions) == 0 {
-		return "no-op"
+		return []string{NoOp}
 	}
-	if len(actions) == 1 {
-		return actions[0]
-	}
-	// Multi-action (e.g. replace): check if it includes create.
+	var out []string
 	for _, a := range actions {
-		if a == "create" {
-			return "create"
+		if a != "forget" {
+			out = append(out, a)
 		}
 	}
-	return actions[0]
+	return out
 }
 
-// Parse extracts every resource change from raw terraform plan JSON,
-// keeping only resources whose type starts with prefix (e.g. "aws_").
-// If prefix is empty, all resource types are kept.
+// Parse extracts every managed resource change from raw terraform plan JSON,
+// keeping only resources whose type starts with prefix (e.g. "aws_"). If
+// prefix is empty, all resource types are kept. Data sources are skipped: a
+// read calls no mutating API. A no-op is kept so that references can resolve
+// to it; Checked reports false for it.
 func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 	var plan tfPlanJSON
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, err
 	}
 
+	configs := indexConfiguration(plan.Configuration)
 	var changes []*ResourceChange
 	for _, rc := range plan.ResourceChanges {
 		if prefix != "" && !strings.HasPrefix(rc.Type, prefix) {
 			continue
 		}
-		action := actionsToChange(rc.Change.Actions)
-		if action == "no-op" {
+		if rc.Mode != "" && rc.Mode != "managed" {
 			continue
 		}
-		// Pure deletes carry no "after" state. At destroy time the provider's
-		// d.GetOk reads prior state, exposed by the plan JSON as "before" — so
-		// evaluate attribute presence/values there instead. Replace actions
-		// (mapped to "create" above) still need "after", since that's the state
-		// being applied.
-		attrSource, afterUnknown := rc.Change.After, rc.Change.AfterUnknown
-		if action == "delete" {
-			attrSource, afterUnknown = rc.Change.Before, nil // before-values are never "unknown"
+		actions := changeActions(rc.Change.Actions)
+		if len(actions) == 0 {
+			continue
 		}
-		changes = append(changes, &ResourceChange{
-			Type:              rc.Type,
-			Name:              rc.Name,
-			Change:            action,
-			Address:           rc.Address,
-			ModuleAddress:     rc.ModuleAddress,
-			Attributes:        attributePresence(attrSource, afterUnknown),
-			ChangedAttributes: changedAttributes(changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
-			AttributeValues:   attributeStringValues(attrSource),
-			References:        resourceReferences(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
-			Configured:        configuredAttributes(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
-			paths:             newPathState(attrSource, afterUnknown, changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
-		})
+		e := decodeEntry(rc, configs.resource(rc.ModuleAddress, rc.Type, rc.Name))
+		for _, action := range actions {
+			changes = append(changes, e.change(action))
+		}
 	}
 	return changes, nil
 }
 
-// resourceReferences returns, per attribute, the addresses the attribute
-// references in the configuration of a resource. The module address picks
-// the module the resource lives in, so a resource never reads the expressions
-// of a same-named resource in another module. The addresses are relative to
-// that module. Returns nil when the plan carries no configuration section or
-// the resource isn't found.
-func resourceReferences(cfg *tfConfiguration, moduleAddr, resType, resName string) map[string][]string {
-	if cfg == nil || cfg.RootModule == nil {
+// planEntry is one resource_changes entry with its states and its
+// configuration decoded once, however many changes it yields.
+type planEntry struct {
+	rc tfResourceChange
+	// before, after and unknown are the top-level fields of the prior
+	// state, the planned state and after_unknown. hasBefore and hasAfter
+	// report whether the state is present and an object.
+	before, after, unknown map[string]json.RawMessage
+	hasBefore, hasAfter    bool
+	configured             map[string]bool
+	references             map[string][]string
+	// beforeValue, afterValue and unknownValue are the same three states
+	// decoded whole, for gates on nested attribute paths.
+	beforeValue, afterValue, unknownValue any
+}
+
+func decodeEntry(rc tfResourceChange, cfg *tfConfigResource) *planEntry {
+	e := &planEntry{rc: rc}
+	e.before, e.hasBefore = stateFields(rc.Change.Before)
+	e.after, e.hasAfter = stateFields(rc.Change.After)
+	e.unknown, _ = stateFields(rc.Change.AfterUnknown)
+	e.configured = configuredAttributes(cfg)
+	e.references = resourceReferences(cfg)
+	e.beforeValue = decodeState(rc.Change.Before)
+	e.afterValue = decodeState(rc.Change.After)
+	e.unknownValue = decodeState(rc.Change.AfterUnknown)
+	return e
+}
+
+// change builds the change for one action of the entry. A delete reads the
+// prior "before" state, since that is what the provider's d.GetOk reads at
+// destroy time; its change set is unknown. Any other action reads the
+// planned "after" state. A create measures change against empty prior state,
+// since the provider's Create starts from nothing, even within a replace.
+func (e *planEntry) change(action string) *ResourceChange {
+	state, hasState, unknown := e.after, e.hasAfter, e.unknown
+	paths := &pathState{state: e.afterValue, unknown: e.unknownValue, before: e.beforeValue, after: e.afterValue, afterUnknown: e.unknownValue}
+	var changed map[string]bool
+	switch action {
+	case "delete":
+		state, hasState, unknown = e.before, e.hasBefore, nil // before-values are never "unknown"
+		// The change of a delete is unknown, even within a replace.
+		paths = &pathState{state: e.beforeValue}
+	case "create":
+		changed = changedAttributes(nil, e.after, e.hasAfter, e.unknown)
+		paths.before = nil
+	default:
+		changed = changedAttributes(e.before, e.after, e.hasAfter, e.unknown)
+	}
+	return &ResourceChange{
+		ModuleAddress:     e.rc.ModuleAddress,
+		Type:              e.rc.Type,
+		Name:              e.rc.Name,
+		Address:           e.rc.Address,
+		Change:            action,
+		Attributes:        attributePresence(state, hasState, unknown, e.configured),
+		ChangedAttributes: changed,
+		AttributeValues:   attributeStringValues(state, hasState),
+		References:        e.references,
+		Configured:        e.configured,
+		paths:             paths,
+	}
+}
+
+// resourceReferences returns, per attribute, the addresses a resource's
+// configuration references, relative to the module the resource lives in.
+// Returns nil when the resource has no configuration entry.
+func resourceReferences(r *tfConfigResource) map[string][]string {
+	if r == nil {
 		return nil
 	}
-	m := moduleForAddress(cfg.RootModule, moduleAddr)
-	if m == nil {
-		return nil
+	refs := make(map[string][]string)
+	for attr, expr := range r.Expressions {
+		if len(expr.References) > 0 {
+			refs[attr] = expr.References
+		}
 	}
-	refs := referencesInModule(m, resType, resName)
 	if len(refs) == 0 {
 		return nil
 	}
@@ -212,56 +321,75 @@ func resourceReferences(cfg *tfConfiguration, moduleAddr, resType, resName strin
 }
 
 // configuredAttributes returns the set of top-level attributes a resource's
-// configuration writes. The module address picks the module instance the
-// resource lives in, so two modules declaring the same type and name each read
-// their own configuration. Returns nil when the plan carries no configuration
-// section or the resource isn't found, which reads as "unknown", not "none".
-func configuredAttributes(cfg *tfConfiguration, moduleAddr, resType, resName string) map[string]bool {
+// configuration writes. Returns nil when the resource has no configuration
+// entry, which reads as "unknown", not "none".
+func configuredAttributes(r *tfConfigResource) map[string]bool {
+	if r == nil {
+		return nil
+	}
+	// A resource in the configuration with no expressions is configured
+	// with nothing, which is not the same as absent from it.
+	configured := make(map[string]bool, len(r.Expressions))
+	for attr := range r.Expressions {
+		configured[attr] = true
+	}
+	return configured
+}
+
+// configKey identifies a managed resource in the configuration section: the
+// module call path without instance keys ("a.b" for module.a[0].module.b),
+// the type and the name.
+type configKey struct {
+	module, typ, name string
+}
+
+// configIndex maps each managed resource in the configuration section to its
+// entry, so a lookup does not scan the module's resources.
+type configIndex map[configKey]*tfConfigResource
+
+// indexConfiguration indexes every managed resource of the configuration
+// section, in the root module and in every module call. It returns nil when
+// the plan carries no configuration section.
+func indexConfiguration(cfg *tfConfiguration) configIndex {
 	if cfg == nil || cfg.RootModule == nil {
 		return nil
 	}
-	m := moduleForAddress(cfg.RootModule, moduleAddr)
-	if m == nil {
-		return nil
+	idx := make(configIndex)
+	var walk func(m *tfModule, path string)
+	walk = func(m *tfModule, path string) {
+		for i := range m.Resources {
+			r := &m.Resources[i]
+			if r.Mode != "" && r.Mode != "managed" {
+				continue
+			}
+			idx[configKey{path, r.Type, r.Name}] = r
+		}
+		for name, mc := range m.ModuleCalls {
+			child := mc.Module
+			if path != "" {
+				name = path + "." + name
+			}
+			walk(&child, name)
+		}
 	}
-	for _, r := range m.Resources {
-		if r.Mode != "" && r.Mode != "managed" {
-			continue
-		}
-		if r.Type != resType || r.Name != resName {
-			continue
-		}
-		// A resource in the configuration with no expressions is configured
-		// with nothing, which is not the same as absent from it.
-		configured := make(map[string]bool, len(r.Expressions))
-		for attr := range r.Expressions {
-			configured[attr] = true
-		}
-		return configured
-	}
-	return nil
+	walk(cfg.RootModule, "")
+	return idx
 }
 
-// moduleForAddress follows a resource change's module_address (for example
-// `module.a[0].module.b["k"]`) down the configuration's module calls. Instance
+// resource returns the configuration entry of a managed resource in the
+// module at moduleAddr (for example `module.a[0].module.b["k"]`). Instance
 // keys are dropped: the configuration describes a module call, not its
-// instances. Returns nil when a module in the path is not in the configuration
-// or the address is not a module address.
-func moduleForAddress(root *tfModule, addr string) *tfModule {
-	m := root
-	names, ok := moduleCallNames(addr)
+// instances. It returns nil when the plan carries no configuration section,
+// the resource is not in it, or the address is not a module address.
+func (idx configIndex) resource(moduleAddr, resType, resName string) *tfConfigResource {
+	if idx == nil {
+		return nil
+	}
+	names, ok := moduleCallNames(moduleAddr)
 	if !ok {
 		return nil
 	}
-	for _, name := range names {
-		mc, ok := m.ModuleCalls[name]
-		if !ok {
-			return nil
-		}
-		next := mc.Module
-		m = &next
-	}
-	return m
+	return idx[configKey{strings.Join(names, "."), resType, resName}]
 }
 
 // moduleCallNames returns the module call names in a module address, in order,
@@ -316,35 +444,14 @@ func moduleCallNames(addr string) ([]string, bool) {
 	return names, true
 }
 
-// referencesInModule finds the resource in one config module and returns
-// its per-attribute reference lists.
-func referencesInModule(m *tfModule, resType, resName string) map[string][]string {
-	for _, r := range m.Resources {
-		if r.Mode != "" && r.Mode != "managed" {
-			continue
-		}
-		if r.Type != resType || r.Name != resName {
-			continue
-		}
-		refs := make(map[string][]string)
-		for attr, expr := range r.Expressions {
-			if len(expr.References) > 0 {
-				refs[attr] = expr.References
-			}
-		}
-		return refs
-	}
-	return nil
-}
-
 // attributePresence reports which top-level attributes of a resource change
-// state (either the planned "after" state, or "before" for a pure delete) are
-// meaningfully set. afterUnknown is the parallel "after_unknown" object, where
-// a top-level attribute maps to true when its value is computed at apply time
-// (always nil when state is "before", since prior state is never unknown).
+// state (either the planned "after" state, or "before" for a delete) are
+// meaningfully set. afterUnknown is the parallel "after_unknown" object, which
+// marks the values computed at apply time (always nil when state is "before",
+// since prior state is never unknown). configured is the set of attributes
+// the configuration writes, or nil when the plan carries no configuration.
 // Returns nil when state is absent or null (presence unknown).
-func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
-	fields, ok := stateFields(state)
+func attributePresence(fields map[string]json.RawMessage, ok bool, unknown map[string]json.RawMessage, configured map[string]bool) map[string]bool {
 	if !ok {
 		return nil
 	}
@@ -362,34 +469,24 @@ func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
 		present["tags"] = true
 	}
 
-	// A `tags` value computed at apply time (e.g. tags = { X = some.arn })
-	// shows as null in "after" but true in "after_unknown". The tags will still
-	// be applied, so the gate must be satisfied. Only `tags` counts here, never
-	// `tags_all`: tags_all is provider-computed and reads as unknown even on an
-	// untagged resource with no default_tags, which would false-positive on
-	// every such resource.
-	if unknownAttrSet(afterUnknown, "tags") {
-		present["tags"] = true
+	// An attribute computed at apply time (parent_id = aws_x.y.id) shows as
+	// null in "after" and as true in "after_unknown", at the top level or
+	// inside a nested block. The provider reads a value for it at apply time,
+	// so the gate must be satisfied. An attribute the author did not configure
+	// is unknown only because the provider computes it, and the provider's
+	// Create reads no value for it, so it stays unset when the configuration
+	// says so. tags_all never counts: it is provider-computed and reads as
+	// unknown even on an untagged resource with no default_tags.
+	for attr, u := range unknown {
+		if attr == "tags_all" || !anyUnknown(u) {
+			continue
+		}
+		if configured == nil || configured[attr] {
+			present[attr] = true
+		}
 	}
 
 	return present
-}
-
-// changeBaseline returns the prior state a change is measured against. A
-// replace destroys the old object and creates the new one from empty state, so
-// the provider's Create reads d.HasChange as true for every attribute it sets,
-// even one equal to the old value. The baseline for a replace is therefore
-// empty, the same as for a create; any other change measures against before.
-func changeBaseline(actions []string, before json.RawMessage) json.RawMessage {
-	var creates, deletes bool
-	for _, a := range actions {
-		creates = creates || a == "create"
-		deletes = deletes || a == "delete"
-	}
-	if creates && deletes {
-		return nil
-	}
-	return before
 }
 
 // changedAttributes reports which top-level attributes differ between the
@@ -401,16 +498,14 @@ func changeBaseline(actions []string, before json.RawMessage) json.RawMessage {
 // attribute planned as null counts as unchanged, matching the absent diff entry
 // the provider sees. Returns nil when there is no planned state, meaning change
 // is unknown.
-func changedAttributes(before, after, afterUnknown json.RawMessage) map[string]bool {
-	afterFields, ok := stateFields(after)
-	if !ok {
+func changedAttributes(beforeFields, afterFields map[string]json.RawMessage, hasAfter bool, unknownFields map[string]json.RawMessage) map[string]bool {
+	if !hasAfter {
 		return nil
 	}
-	beforeFields, _ := stateFields(before) // absent or null prior state reads as empty
 
 	changed := make(map[string]bool, len(afterFields))
 	for attr, afterValue := range afterFields {
-		if unknownAttrSet(afterUnknown, attr) {
+		if anyUnknown(unknownFields[attr]) {
 			changed[attr] = true
 			continue
 		}
@@ -466,19 +561,36 @@ func nonEmptyOrNull(raw json.RawMessage) json.RawMessage {
 	return raw
 }
 
-// unknownAttrSet reports whether a top-level attribute is marked fully
-// computed-at-apply in a change's "after_unknown" object (i.e. the attribute
-// maps to the JSON literal true).
-func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
-	fields, ok := stateFields(afterUnknown)
-	if !ok {
+// anyUnknown reports whether an "after_unknown" value marks anything as
+// computed at apply time: it is true, or a list or object holding a true
+// value at any depth.
+func anyUnknown(raw json.RawMessage) bool {
+	var v any
+	if len(raw) == 0 || json.Unmarshal(raw, &v) != nil {
 		return false
 	}
-	var unknown bool
-	if err := json.Unmarshal(fields[attr], &unknown); err != nil {
-		return false
+	return holdsTrue(v)
+}
+
+// holdsTrue reports whether a decoded JSON value is true or contains true.
+func holdsTrue(v any) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case []any:
+		for _, e := range val {
+			if holdsTrue(e) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, e := range val {
+			if holdsTrue(e) {
+				return true
+			}
+		}
 	}
-	return unknown
+	return false
 }
 
 // attributeStringValues extracts the concrete string values of top-level
@@ -487,8 +599,7 @@ func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
 // null, empty, and non-string values (numbers, bools, objects, arrays, and
 // values computed at apply time) are omitted. Returns nil when state is
 // absent or null.
-func attributeStringValues(state json.RawMessage) map[string]string {
-	fields, ok := stateFields(state)
+func attributeStringValues(fields map[string]json.RawMessage, ok bool) map[string]string {
 	if !ok {
 		return nil
 	}

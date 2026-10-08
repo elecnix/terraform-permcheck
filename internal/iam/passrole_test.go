@@ -56,7 +56,7 @@ func TestPassRoleMissing_GrantOnDifferentRole(t *testing.T) {
 		{"Effect":"Allow","Action":"lambda:*","Resource":"*"},
 		{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/example-other-role"}]}`)
 
-	missing := passRoleMissing(rc, policy, []*plan.ResourceChange{rc}, false)
+	missing := passRoleMissing(rc, policy, newChangeSet([]*plan.ResourceChange{rc}), false)
 	if !hasActionOn(missing, "iam:PassRole", "aws_lambda_function", "fn") {
 		t.Fatalf("expected iam:PassRole missing, got %+v", missing)
 	}
@@ -72,7 +72,7 @@ func TestPassRoleMissing_Covered(t *testing.T) {
 		"wildcard": `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"*"}]}`,
 		"prefix":   `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:*","Resource":"arn:aws:iam::111122223333:role/example-fn-*"}]}`,
 	} {
-		if m := passRoleMissing(rc, mustPolicy(t, doc), []*plan.ResourceChange{rc}, false); len(m) != 0 {
+		if m := passRoleMissing(rc, mustPolicy(t, doc), newChangeSet([]*plan.ResourceChange{rc}), false); len(m) != 0 {
 			t.Errorf("%s: expected covered, got %+v", name, m)
 		}
 	}
@@ -98,11 +98,11 @@ func TestPassRoleMissing_ManagedRoleReference(t *testing.T) {
 	all := []*plan.ResourceChange{role, fn}
 
 	other := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/example-other-role"}]}`)
-	if m := passRoleMissing(fn, other, all, false); len(m) != 1 {
+	if m := passRoleMissing(fn, other, newChangeSet(all), false); len(m) != 1 {
 		t.Errorf("expected PassRole missing for other role, got %+v", m)
 	}
 	pathed := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/app/example-fn-role"}]}`)
-	if m := passRoleMissing(fn, pathed, all, false); len(m) != 0 {
+	if m := passRoleMissing(fn, pathed, newChangeSet(all), false); len(m) != 0 {
 		t.Errorf("a role under a path must still match, got %+v", m)
 	}
 }

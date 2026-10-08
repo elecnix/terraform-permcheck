@@ -112,12 +112,12 @@ func TestStaticChanges_KeepsUnresolvableTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := "aws_s3_bucket.create,aws_unknown_service_thing.create,aws_unknown_service_thing.create"
+	want := "aws_s3_bucket.create,aws_s3_bucket.create,aws_unknown_service_thing.create,aws_unknown_service_thing.create"
 	if got := staticOpChanges(changes); strings.Join(got, ",") != want {
 		t.Errorf("changes = %v, want [%s]", got, want)
 	}
-	if changes[1].Name != "c" || changes[2].Name != "d" {
-		t.Errorf("unresolved names = %s, %s; want c, d", changes[1].Name, changes[2].Name)
+	if changes[2].Name != "c" || changes[3].Name != "d" {
+		t.Errorf("unresolved names = %s, %s; want c, d", changes[2].Name, changes[3].Name)
 	}
 	if checked != 1 {
 		t.Errorf("checked = %d, want 1 (only the resolvable type was checked)", checked)
@@ -157,5 +157,50 @@ func TestStaticChanges_CarriesParsedAttributes(t *testing.T) {
 		if !rc.Attributes["tags"] || !rc.Attributes["name"] || rc.Attributes["absent"] {
 			t.Errorf("%s attributes = %v, want name and tags set", rc.Change, rc.Attributes)
 		}
+	}
+}
+
+// TestStaticChanges_EachBlockKeepsItsAttributes verifies that every block of
+// a type is checked with its own attributes. A permission gated on an
+// attribute only the second block sets must still be checked, and reported
+// on that block.
+func TestStaticChanges_EachBlockKeepsItsAttributes(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Mode: "resource", Type: "aws_api_gateway_rest_api", Name: "plain", Attributes: []string{"name"}},
+		{Mode: "resource", Type: "aws_api_gateway_rest_api", Name: "openapi", Attributes: []string{"name", "body"}},
+	}
+	resolver := fakePermResolver{"aws_api_gateway_rest_api": {"create": {"apigateway:POST"}}}
+
+	changes, checked, err := staticChanges(blocks, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 2 || changes[0].Name != "plain" || changes[1].Name != "openapi" {
+		t.Fatalf("changes = %v, want one create per block", staticOpChanges(changes))
+	}
+	if changes[0].Attributes["body"] || !changes[1].Attributes["body"] {
+		t.Errorf("body presence = %v, %v; want false for plain, true for openapi",
+			changes[0].Attributes["body"], changes[1].Attributes["body"])
+	}
+	if checked != 1 {
+		t.Errorf("checked = %d, want 1 resource type", checked)
+	}
+}
+
+// TestStaticChanges_SkipsDataBlocks verifies that a data block, which only
+// reads, is not checked as a resource the configuration manages.
+func TestStaticChanges_SkipsDataBlocks(t *testing.T) {
+	blocks := []hcl.ResourceBlock{
+		{Mode: "data", Type: "aws_iam_policy_document", Name: "p"},
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "b"},
+	}
+	resolver := fakePermResolver{"aws_s3_bucket": {"create": {"s3:CreateBucket"}}}
+
+	changes, checked, err := staticChanges(blocks, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := staticOpChanges(changes); strings.Join(got, ",") != "aws_s3_bucket.create" || checked != 1 {
+		t.Errorf("changes = %v, checked = %d; want only the bucket", got, checked)
 	}
 }

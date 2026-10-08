@@ -1,0 +1,4 @@
+{"resource_changes":[
+{"address":"aws_organizations_account.a","mode":"managed","type":"aws_organizations_account","name":"a","change":{"actions":["create"],"before":null,"after":{"name":"acct","email":"a@example.com","create_govcloud":false,"parent_id":null,"tags":null},"after_unknown":{"id":true,"parent_id":true}}}
+],
+"configuration":{"root_module":{"resources":[{"address":"aws_organizations_account.a","mode":"managed","type":"aws_organizations_account","name":"a","expressions":{"name":{"constant_value":"acct"},"email":{"constant_value":"a@example.com"},"parent_id":{"references":["aws_organizations_organizational_unit.ou.id","aws_organizations_organizational_unit.ou"]}}}]}}}

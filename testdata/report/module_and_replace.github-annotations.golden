@@ -1,0 +1,8 @@
+--- stdout ---
+::warning title=Missing IAM permission::sqs:DeleteQueue needed by: aws_sqs_queue.q (delete), module.prod.aws_sqs_queue.q (delete)
+::warning title=Missing IAM permission::sqs:CreateQueue needed by: aws_sqs_queue.q (create)
+::warning title=Unresolved resource type::aws_new_thing has no permission data, so its permissions were not checked. Resources: module.app["eu"].aws_new_thing.a[0] (create)
+
+4 resource changes checked, 2 distinct missing permissions found, 1 resource type unresolved.
+::notice title=Excluded IAM permission::sqs:DeleteQueue excluded (per config): deleted by hand for: module.legacy.aws_sqs_queue.q (delete)
+--- stderr ---

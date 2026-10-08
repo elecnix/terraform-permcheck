@@ -1,0 +1,4 @@
+{"resource_changes":[
+{"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["delete"],"before":{"name":"legacy"},"after":null}},
+{"address":"module.prod.aws_sqs_queue.q","module_address":"module.prod","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["delete"],"before":{"name":"prod-orders"},"after":null}}
+]}

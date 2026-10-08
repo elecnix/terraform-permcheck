@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["forget"],"before":{"name":"q1"},"after":null}}]}

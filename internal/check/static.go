@@ -12,11 +12,13 @@ import (
 var staticMutationOps = []string{"create", "update", "delete"}
 
 // staticChanges turns the parsed HCL blocks into the resource changes worth
-// validating. It deduplicates by resource type, resolves each type's schema
-// once, and emits one entry per operation that adds a permission the create
-// check does not already cover. It returns the changes and the number of
-// distinct resource types checked, which is not len(changes): a single type
-// can carry several entries.
+// validating. It resolves each type's schema once, picks the operations that
+// add a permission the create check does not already cover, and emits one
+// entry per block and operation. Each entry carries its own block's
+// attributes, so a permission gated on an attribute that only one block of a
+// type sets is checked, and reported on that block. Data blocks only read, so
+// they are skipped. It returns the changes and the number of distinct
+// resource types checked, which is not len(changes).
 //
 // A type the resolver does not know gets one create entry per block, so
 // validation reports every address of it as unresolved. It does not count as
@@ -25,32 +27,36 @@ func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.R
 	var changes []*plan.ResourceChange
 	checked := 0
 
-	seen := make(map[string]bool)
+	opsByType := make(map[string][]string)
 	unresolved := make(map[string]bool)
 	for _, b := range blocks {
+		if b.Mode == "data" {
+			continue
+		}
 		if unresolved[b.Type] {
 			changes = append(changes, &plan.ResourceChange{Type: b.Type, Name: b.Name, Change: "create"})
 			continue
 		}
-		if seen[b.Type] {
-			continue
+		ops, seen := opsByType[b.Type]
+		if !seen {
+			schema, err := resolver.Resolve(b.Type)
+			if errors.Is(err, iam.ErrLookupFailed) {
+				return nil, 0, err
+			}
+			if err != nil {
+				unresolved[b.Type] = true
+				changes = append(changes, &plan.ResourceChange{Type: b.Type, Name: b.Name, Change: "create"})
+				continue
+			}
+			ops = staticOpsFor(schema)
+			opsByType[b.Type] = ops
+			if len(ops) > 0 {
+				checked++
+			}
 		}
-		seen[b.Type] = true
-
-		schema, err := resolver.Resolve(b.Type)
-		if errors.Is(err, iam.ErrLookupFailed) {
-			return nil, 0, err
-		}
-		if err != nil {
-			unresolved[b.Type] = true
-			changes = append(changes, &plan.ResourceChange{Type: b.Type, Name: b.Name, Change: "create"})
-			continue
-		}
-		ops := staticOpsFor(schema)
 		if len(ops) == 0 {
 			continue
 		}
-		checked++
 
 		var attrs map[string]bool
 		if len(b.Attributes) > 0 {

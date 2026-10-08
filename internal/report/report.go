@@ -270,7 +270,7 @@ func (r *Report) allClear() string {
 // declared need and the resource it is on.
 func source(m iam.MissingAction) string {
 	if m.Need == "" {
-		return fmt.Sprintf("%s.%s (%s)", m.ResourceType, m.ResourceName, m.Change)
+		return fmt.Sprintf("%s (%s)", m.Address(), m.Change)
 	}
 	s := fmt.Sprintf("needs %q", m.Need)
 	if m.NeedResource != "" {

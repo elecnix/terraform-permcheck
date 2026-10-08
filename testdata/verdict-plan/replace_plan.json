@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["delete","create"],"before":{"name":"old-q","fifo_queue":false},"after":{"name":"new-q","fifo_queue":false},"after_unknown":{"arn":true}}}]}

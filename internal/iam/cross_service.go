@@ -49,8 +49,9 @@ func crossServiceMissing(rc *plan.ResourceChange, policy *PolicyDocument, strict
 			condAttr = rule.arnAttribute
 		}
 		missing = append(missing, MissingAction{
+			ModuleAddress:      rc.ModuleAddress,
 			ResourceType:       rc.Type,
-			ResourceName:       rc.Name,
+			ResourceName:       rc.InstanceName(),
 			Change:             rc.Change,
 			Action:             cb.action,
 			Service:            actionService(cb.action),

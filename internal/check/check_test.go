@@ -138,14 +138,19 @@ func TestRun_StaticChecksEachTypeOnce(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// Static mode checks the first block of each type, for every operation
-	// that adds an action create does not cover.
+	// Static mode checks every block of a type, for every operation that
+	// adds an action create does not cover, but counts the type once.
 	want := []string{
+		"aws_kms_key.update:kms:EnableKeyRotation",
+		"aws_kms_key.delete:kms:ScheduleKeyDeletion",
 		"aws_kms_key.update:kms:EnableKeyRotation",
 		"aws_kms_key.delete:kms:ScheduleKeyDeletion",
 	}
 	if got := actions(res.Missing); !reflect.DeepEqual(got, want) {
 		t.Errorf("missing = %v, want %v", got, want)
+	}
+	if got, want := addresses(res.Missing), []string{"aws_kms_key.a", "aws_kms_key.a", "aws_kms_key.b", "aws_kms_key.b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("missing on %v, want %v", got, want)
 	}
 	if res.Checked != 1 || res.Label != "resource types (static HCL mode)" {
 		t.Errorf("Checked, Label = %d, %q; want 1, static label", res.Checked, res.Label)
@@ -403,5 +408,40 @@ func TestRun_LookupFailure(t *testing.T) {
 		if !errors.Is(err, iam.ErrLookupFailed) {
 			t.Errorf("Run(%s) err = %v, want ErrLookupFailed", in.label(), err)
 		}
+	}
+}
+
+// TestRun_PlanCountsResources verifies that the checked count counts
+// resources: a replace, checked as a delete and a create, counts once, and a
+// no-op kept for reference resolution does not count. A resource of an
+// unresolved type is not checked and does not count either.
+func TestRun_PlanCountsResources(t *testing.T) {
+	in := FromPlan([]*plan.ResourceChange{
+		{Address: "aws_kms_key.a", Type: "aws_kms_key", Name: "a", Change: "delete"},
+		{Address: "aws_kms_key.a", Type: "aws_kms_key", Name: "a", Change: "create"},
+		{Address: "aws_unknown_thing.u", Type: "aws_unknown_thing", Name: "u", Change: "delete"},
+		{Address: "aws_unknown_thing.u", Type: "aws_unknown_thing", Name: "u", Change: "create"},
+		{Address: "aws_kms_key.b", Type: "aws_kms_key", Name: "b", Change: plan.NoOp},
+		{Address: "module.m.aws_kms_key.a", ModuleAddress: "module.m", Type: "aws_kms_key", Name: "a", Change: "create"},
+	})
+	res, err := Run(in, policy("kms:*"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Checked != 2 {
+		t.Errorf("Checked = %d, want 2 (aws_kms_key.a and module.m.aws_kms_key.a)", res.Checked)
+	}
+}
+
+// TestRun_PlanOnlyNoOpSkipsPolicy verifies that a plan whose every change
+// is a no-op has nothing to check.
+func TestRun_PlanOnlyNoOpSkipsPolicy(t *testing.T) {
+	in := FromPlan([]*plan.ResourceChange{{Type: "aws_kms_key", Name: "b", Change: plan.NoOp}})
+	res, err := Run(in, noPolicy(t), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Checked != 0 {
+		t.Errorf("Checked = %d, want 0", res.Checked)
 	}
 }
