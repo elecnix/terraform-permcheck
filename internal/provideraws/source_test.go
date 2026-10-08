@@ -683,3 +683,21 @@ func TestSourceProvider_Schemas(t *testing.T) {
 		t.Error("Schemas() on an empty tree: want an error")
 	}
 }
+
+// TestSourceProvider_ParseErrorIsKept checks that a tree the parser cannot
+// read fails Ensure, Resolve and Schemas with the parse error, on the first
+// call and on later ones, so the cause is not lost.
+func TestSourceProvider_ParseErrorIsKept(t *testing.T) {
+	p := NewSourceProviderWithPath(t.TempDir())
+	for i := 0; i < 2; i++ {
+		if err := p.Ensure(); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+			t.Errorf("Ensure() call %d = %v, want the parse error", i+1, err)
+		}
+	}
+	if _, err := p.Resolve("aws_s3_bucket"); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+		t.Errorf("Resolve() = %v, want the parse error", err)
+	}
+	if _, err := p.Schemas(); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+		t.Errorf("Schemas() = %v, want the parse error", err)
+	}
+}
