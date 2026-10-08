@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"aws_kms_key.k","mode":"managed","type":"aws_kms_key","name":"k","change":{"actions":["delete"],"before":{"description":"k","deletion_window_in_days":7},"after":null}}]}

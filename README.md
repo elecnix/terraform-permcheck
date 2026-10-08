@@ -241,10 +241,17 @@ provably applies:
 - The `Deny` has no `Condition`. PermCheck can't evaluate condition keys, so
   a conditional `Deny` might never apply. PermCheck doesn't report it.
 - The `Deny` covers the whole target. When PermCheck doesn't know the target
-  ARN, only `"Resource": "*"` counts. When it knows the target, a `Resource`
+  ARN, only a `Resource` that matches every ARN counts, such as `"*"`,
+  `"arn:*"` or `"arn:aws:*"`. When it knows the target, a `Resource`
   pattern must contain the target pattern, or no `NotResource` pattern may
   overlap it. A `Deny` on one region or account doesn't count against a target
   that could be in any region or account.
+- The plan doesn't show the partition. PermCheck takes the policy to be
+  written for the partition it deploys to, so a `Deny` on
+  `arn:aws:sqs:*:*:*` covers every queue in the plan. For an action that
+  takes no resource, AWS matches the `Deny` against `"*"`, which an `arn:`
+  pattern doesn't match. PermCheck can't tell those actions apart, so it may
+  report such an action as missing.
 
 An `Allow` with a `Condition` still counts as a grant. `NotAction` grants or
 denies every action outside its list. A `NotResource` grant covers any target

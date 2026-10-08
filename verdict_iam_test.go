@@ -113,6 +113,17 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			name: "role ARN from path and name", plan: "passrole_name_plan.json", policy: "passrole_name_policy.json",
 			present: []string{"aws_lambda_function.f iam:PassRole"},
 		},
+		{
+			// A Deny that names the partition covers a queue whose
+			// partition the plan does not show.
+			name: "deny naming the partition", plan: "deny_queue_plan.json", policy: "deny_partition_policy.json",
+			present: []string{"aws_sqs_queue.q sqs:DeleteQueue"},
+		},
+		{
+			// A Deny on arn:* covers every ARN, as "*" does.
+			name: "deny on every ARN", plan: "deny_key_plan.json", policy: "deny_every_arn_policy.json",
+			present: []string{"aws_kms_key.k kms:ScheduleKeyDeletion"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { runVerdictCase(t, c) })
