@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 type mockProvider struct {
@@ -24,17 +26,17 @@ func TestChainProvider_FallsBack(t *testing.T) {
 	mockPrimary := &mockProvider{
 		name: "primary",
 		schemas: map[string]*Schema{
-			"aws_backup_vault": {TypeName: "aws_backup_vault", Permissions: map[string][]string{
+			"aws_backup_vault": {TypeName: "aws_backup_vault", Ops: ungated(map[string][]string{
 				"create": {"backup:CreateBackupVault"},
-			}},
+			})},
 		},
 	}
 	mockFallback := &mockProvider{
 		name: "fallback",
 		schemas: map[string]*Schema{
-			"aws_dynamodb_table": {TypeName: "aws_dynamodb_table", Permissions: map[string][]string{
+			"aws_dynamodb_table": {TypeName: "aws_dynamodb_table", Ops: ungated(map[string][]string{
 				"create": {"dynamodb:CreateTable"},
-			}},
+			})},
 		},
 	}
 
@@ -45,8 +47,8 @@ func TestChainProvider_FallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if schema.TypeName != "aws_backup_vault" {
-		t.Errorf("got type %q, want aws_backup_vault", schema.TypeName)
+	if got := schema.(*Schema).TypeName; got != "aws_backup_vault" {
+		t.Errorf("got type %q, want aws_backup_vault", got)
 	}
 
 	// Fallback handles dynamodb_table (not in primary)
@@ -54,8 +56,8 @@ func TestChainProvider_FallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if schema.TypeName != "aws_dynamodb_table" {
-		t.Errorf("got type %q, want aws_dynamodb_table", schema.TypeName)
+	if got := schema.(*Schema).TypeName; got != "aws_dynamodb_table" {
+		t.Errorf("got type %q, want aws_dynamodb_table", got)
 	}
 }
 
@@ -86,22 +88,22 @@ func TestChainProvider_Name(t *testing.T) {
 func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 	primarySchema := &Schema{
 		TypeName: "aws_s3_bucket",
-		Permissions: map[string][]string{
-			"create": {"s3:ListTagsForResource", "s3:PutBucketTagging"},
-			"read":   {"s3:HeadBucket"},
-		},
-		Conditional: map[string]map[string]string{
-			"create": {"s3:PutBucketTagging": "tags"},
+		Ops: map[string][]iam.Requirement{
+			"create": {
+				{Action: "s3:ListTagsForResource"},
+				{Action: "s3:PutBucketTagging", Gate: iam.Gate{Attribute: "tags"}},
+			},
+			"read": iam.Unconditional("s3:HeadBucket"),
 		},
 		Incomplete: map[string]bool{"create": true, "delete": true},
 	}
 	primary := &mockProvider{name: "source", schemas: map[string]*Schema{"aws_s3_bucket": primarySchema}}
 	fallback := &mockProvider{name: "cfn", schemas: map[string]*Schema{
-		"aws_s3_bucket": {TypeName: "AWS::S3::Bucket", Permissions: map[string][]string{
+		"aws_s3_bucket": {TypeName: "AWS::S3::Bucket", Ops: ungated(map[string][]string{
 			"create": {"s3:CreateBucket", "s3:PutBucketTagging"},
 			"read":   {"s3:GetBucketPolicy"},
 			"delete": {"s3:DeleteBucket"},
-		}},
+		})},
 	}}
 
 	schema, err := NewChainProvider(primary, fallback).Resolve("aws_s3_bucket")
@@ -114,19 +116,20 @@ func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 		"read":   {"s3:HeadBucket"},
 		"delete": {"s3:DeleteBucket"},
 	}
-	if !reflect.DeepEqual(schema.Permissions, want) {
-		t.Errorf("permissions = %v, want %v", schema.Permissions, want)
+	merged := schema.(*Schema)
+	if got := actionsByOp(merged); !reflect.DeepEqual(got, want) {
+		t.Errorf("permissions = %v, want %v", got, want)
 	}
-	if got := schema.Conditional["create"]["s3:PutBucketTagging"]; got != "tags" {
-		t.Errorf("the primary's gate on s3:PutBucketTagging was lost: %q", got)
+	if got := merged.Gates("create", "s3:PutBucketTagging"); !reflect.DeepEqual(got, []iam.Gate{{Attribute: "tags"}}) {
+		t.Errorf("the primary's gate on s3:PutBucketTagging was lost: %+v", got)
 	}
-	if len(schema.Incomplete) != 0 {
-		t.Errorf("Incomplete = %v, want none left", schema.Incomplete)
+	if len(merged.Incomplete) != 0 {
+		t.Errorf("Incomplete = %v, want none left", merged.Incomplete)
 	}
 
 	// The primary's cached schema must not change.
-	if len(primarySchema.Permissions["create"]) != 2 || primarySchema.Permissions["delete"] != nil {
-		t.Errorf("the primary schema was modified: %v", primarySchema.Permissions)
+	if len(primarySchema.Ops["create"]) != 2 || primarySchema.Ops["delete"] != nil {
+		t.Errorf("the primary schema was modified: %v", primarySchema.Ops)
 	}
 }
 
@@ -134,9 +137,9 @@ func TestChainProvider_MergesIncompleteOperations(t *testing.T) {
 // schema unchanged when no later provider knows the type.
 func TestChainProvider_IncompleteWithoutFallback(t *testing.T) {
 	s := &Schema{
-		TypeName:    "aws_thing",
-		Permissions: map[string][]string{"read": {"thing:GetThing"}},
-		Incomplete:  map[string]bool{"create": true},
+		TypeName:   "aws_thing",
+		Ops:        ungated(map[string][]string{"read": {"thing:GetThing"}}),
+		Incomplete: map[string]bool{"create": true},
 	}
 	primary := &mockProvider{name: "source", schemas: map[string]*Schema{"aws_thing": s}}
 	fallback := &mockProvider{name: "cfn", schemas: map[string]*Schema{}}
@@ -156,22 +159,22 @@ func TestChainProvider_IncompleteWithoutFallback(t *testing.T) {
 // are merged into it once it is complete.
 func TestChainProvider_FirstLaterProviderFillsEachOperation(t *testing.T) {
 	primarySchema := &Schema{
-		TypeName:    "aws_widget",
-		Permissions: map[string][]string{"create": {"widget:CreateWidget"}},
-		Incomplete:  map[string]bool{"create": true, "delete": true},
+		TypeName:   "aws_widget",
+		Ops:        ungated(map[string][]string{"create": {"widget:CreateWidget"}}),
+		Incomplete: map[string]bool{"create": true, "delete": true},
 	}
 	// The second provider knows create only, so delete stays incomplete for
 	// the third provider to fill.
 	second := &Schema{
-		TypeName:    "AWS::Widget::Widget",
-		Permissions: map[string][]string{"create": {"widget:CreateWidgetAlias"}},
+		TypeName: "AWS::Widget::Widget",
+		Ops:      ungated(map[string][]string{"create": {"widget:CreateWidgetAlias"}}),
 	}
 	third := &Schema{
 		TypeName: "aws_widget_alternative",
-		Permissions: map[string][]string{
+		Ops: ungated(map[string][]string{
 			"create": {"widget:CreateWidgetFromTemplate"},
 			"delete": {"widget:DeleteWidget"},
-		},
+		}),
 	}
 
 	chain := NewChainProvider(
@@ -180,26 +183,45 @@ func TestChainProvider_FirstLaterProviderFillsEachOperation(t *testing.T) {
 		&mockProvider{name: "alternative", schemas: map[string]*Schema{"aws_widget": third}},
 	)
 
-	got, err := chain.Resolve("aws_widget")
+	schema, err := chain.Resolve("aws_widget")
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := schema.(*Schema)
 
 	want := map[string][]string{
 		"create": {"widget:CreateWidget", "widget:CreateWidgetAlias"},
 		"delete": {"widget:DeleteWidget"},
 	}
-	if !reflect.DeepEqual(got.Permissions, want) {
-		t.Errorf("permissions = %v, want %v", got.Permissions, want)
+	if perms := actionsByOp(got); !reflect.DeepEqual(perms, want) {
+		t.Errorf("permissions = %v, want %v", perms, want)
 	}
 	if len(got.Incomplete) != 0 {
 		t.Errorf("Incomplete = %v, want none left", got.Incomplete)
 	}
 	// The primary's cached schema must survive both merges.
-	if !reflect.DeepEqual(primarySchema.Permissions, map[string][]string{"create": {"widget:CreateWidget"}}) {
-		t.Errorf("the primary schema was modified: %v", primarySchema.Permissions)
+	if !reflect.DeepEqual(actionsByOp(primarySchema), map[string][]string{"create": {"widget:CreateWidget"}}) {
+		t.Errorf("the primary schema was modified: %v", primarySchema.Ops)
 	}
 	if len(primarySchema.Incomplete) != 2 {
 		t.Errorf("the primary schema's Incomplete was modified: %v", primarySchema.Incomplete)
 	}
+}
+
+// ungated builds the requirements of operation → actions, with no gates.
+func ungated(perms map[string][]string) map[string][]iam.Requirement {
+	ops := make(map[string][]iam.Requirement, len(perms))
+	for op, actions := range perms {
+		ops[op] = iam.Unconditional(actions...)
+	}
+	return ops
+}
+
+// actionsByOp lists the distinct actions of every operation of s.
+func actionsByOp(s *Schema) map[string][]string {
+	out := make(map[string][]string, len(s.Ops))
+	for op := range s.Ops {
+		out[op] = s.Actions(op)
+	}
+	return out
 }

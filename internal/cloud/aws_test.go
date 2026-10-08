@@ -1,8 +1,11 @@
 package cloud
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 func TestCfnKeys(t *testing.T) {
@@ -54,6 +57,31 @@ func TestNewAWSProvider(t *testing.T) {
 	}
 }
 
+// TestToSchema checks that every CloudFormation handler becomes a known
+// operation of ungated requirements. A handler with no permissions is still
+// known, so the validator does not fall back to create for it.
+func TestToSchema(t *testing.T) {
+	var cfn cfnSchema
+	cfn.TypeName = "AWS::KMS::Key"
+	cfn.Handlers.Create.Permissions = []string{"kms:CreateKey", "kms:TagResource"}
+	cfn.Handlers.Read.Permissions = []string{"kms:DescribeKey"}
+
+	s := toSchema(&cfn)
+	create, ok := s.Requirements("create")
+	want := []iam.Requirement{{Action: "kms:CreateKey"}, {Action: "kms:TagResource"}}
+	if !ok || !reflect.DeepEqual(create, want) {
+		t.Errorf("create = %+v, %v; want %+v, true", create, ok, want)
+	}
+	for _, op := range []string{"update", "delete", "list"} {
+		if reqs, ok := s.Requirements(op); !ok || len(reqs) != 0 {
+			t.Errorf("%s = %+v, %v; want known and empty", op, reqs, ok)
+		}
+	}
+	if _, ok := s.Requirements("import"); ok {
+		t.Error("import known; want unknown")
+	}
+}
+
 // TestAWSProviderResolveReal checks the live CFN registry for known resource types.
 func TestAWSProviderResolveReal(t *testing.T) {
 	if testing.Short() {
@@ -79,7 +107,7 @@ func TestAWSProviderResolveReal(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolve %s: %v", tt.tfType, err)
 			}
-			createPerms := schema.GetPermissions()["create"]
+			createPerms := schema.Actions("create")
 			if len(createPerms) == 0 {
 				t.Fatal("expected non-empty create permissions")
 			}

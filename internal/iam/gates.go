@@ -11,8 +11,7 @@ import (
 // neither test is a path that always runs.
 //
 // An action reached on several paths is needed when any of its gates holds.
-// Schemas list those actions in GetGates. An action reached on one path keeps
-// its gate in the single-valued maps of SchemaLike.
+// A Schema lists one Requirement per path.
 type Gate struct {
 	// Attribute is the attribute a presence guard (d.GetOk or d.Get) tests,
 	// or "" when the path has none.
@@ -45,23 +44,8 @@ func (g Gate) holds(rc *plan.ResourceChange) bool {
 	return true
 }
 
-// gatesProvider is the optional part of SchemaLike that lists the actions
-// reached on several gated paths.
-type gatesProvider interface {
-	// GetGates maps op → action → every gate the action is reached under.
-	GetGates() map[string]map[string][]Gate
-}
-
-// schemaGates returns the multi-path gates of op, or nil when the schema
-// lists none.
-func schemaGates(schema SchemaLike, op string) map[string][]Gate {
-	if g, ok := schema.(gatesProvider); ok {
-		return g.GetGates()[op]
-	}
-	return nil
-}
-
-// evaluateGates checks an action reached on several paths. It reports whether
+// evaluateGates checks an action against the gates of the paths that reach
+// it. One path is the common case. It reports whether
 // any path runs for rc, and whether every path that runs is best-effort. It
 // also returns the attributes of the paths that decide the action, for the
 // [conditional: <attr>] tag: the paths whose failure counts when one of them

@@ -49,8 +49,8 @@ func TestS3BucketActionsFixture(t *testing.T) {
 			continue
 		}
 		ops := map[string][]string{}
-		for op, actions := range schema.Permissions {
-			sorted := append([]string{}, actions...)
+		for op := range schema.Ops {
+			sorted := append([]string{}, schema.Actions(op)...)
 			sort.Strings(sorted)
 			ops[op] = sorted
 		}

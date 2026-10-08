@@ -149,11 +149,9 @@ func TestCrossServiceMissing_NonCallbackResource(t *testing.T) {
 func TestValidate_CrossServiceCallback(t *testing.T) {
 	// Schema grants all wafv2 actions via the policy; the cross-service
 	// callback into elasticloadbalancing must still surface as missing.
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"create": {"wafv2:AssociateWebACL", "wafv2:GetWebACLForResource"},
-		},
-	}
+	schema := actionsSchema(map[string][]string{
+		"create": {"wafv2:AssociateWebACL", "wafv2:GetWebACLForResource"},
+	})
 	resolver := fakeResolver{schema}
 
 	changes := []*plan.ResourceChange{
@@ -178,7 +176,7 @@ func TestValidate_CrossServiceCallback(t *testing.T) {
 }
 
 func TestValidate_CrossServiceCallback_ExcludeConditional(t *testing.T) {
-	schema := fakeSchema{perms: map[string][]string{"create": {"wafv2:AssociateWebACL"}}}
+	schema := actionsSchema(map[string][]string{"create": {"wafv2:AssociateWebACL"}})
 	resolver := fakeResolver{schema}
 
 	// Unknown target → conditional candidates. --only-required suppresses them.

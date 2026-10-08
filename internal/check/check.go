@@ -15,44 +15,24 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
-// Resolver maps a terraform resource type to the schema that lists its
-// required permissions.
-type Resolver interface {
-	Resolve(tfType string) (iam.SchemaLike, error)
-}
-
-// FromProvider adapts a cloud.Provider, which returns the concrete
-// *cloud.Schema, to a Resolver.
-func FromProvider(p cloud.Provider) Resolver {
-	return providerResolver{p}
-}
-
-type providerResolver struct {
-	p cloud.Provider
-}
-
-func (r providerResolver) Resolve(tfType string) (iam.SchemaLike, error) {
-	return r.p.Resolve(tfType)
-}
-
 // DefaultResolver resolves schemas from the terraform-provider-aws source and
 // falls back to the CloudFormation schema registry. The resolver is built on
 // the first call and shared for the life of the process, so the provider
 // source is parsed once, however many checks run. It reads the provider
 // cache directory when it is built.
-func DefaultResolver() Resolver {
+func DefaultResolver() iam.Resolver {
 	defaultOnce.Do(func() {
-		defaultResolver = FromProvider(cloud.NewChainProvider(
+		defaultResolver = cloud.NewChainProvider(
 			provideraws.NewSourceProvider(),
 			cloud.NewAWSProvider(),
-		))
+		)
 	})
 	return defaultResolver
 }
 
 var (
 	defaultOnce     sync.Once
-	defaultResolver Resolver
+	defaultResolver iam.Resolver
 )
 
 // Filter holds the filter settings of the validate command.
@@ -122,7 +102,7 @@ type Options struct {
 	// Result.Missing to Result.Excluded.
 	Exclusions []iam.Exclusion
 	// Resolver supplies schemas. Nil means DefaultResolver.
-	Resolver Resolver
+	Resolver iam.Resolver
 }
 
 // Result is the outcome of a check, ready for the report layer.

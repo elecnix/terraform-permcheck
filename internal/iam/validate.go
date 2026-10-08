@@ -210,28 +210,6 @@ type AllowedProvider interface {
 	Covers(action string) bool
 }
 
-// SchemaLike abstracts the cloud.Schema type so the iam package doesn't
-// import cloud.
-type SchemaLike interface {
-	GetPermissions() map[string][]string
-	// GetConditional maps op → action → gating attribute name. An action with a
-	// non-empty gating attribute is only required when that attribute is set in
-	// the planned resource (a d.GetOk or d.Get guard).
-	GetConditional() map[string]map[string]string
-	// GetChangeGated maps op → action → the attribute whose change gates the
-	// action (a d.HasChange guard). Such an action is only required when that
-	// attribute differs between the prior and the planned resource.
-	GetChangeGated() map[string]map[string]string
-	// GetValueConditional maps op → action → true when the gating attribute is
-	// compared by value, so its default keeps the guard satisfied on its own.
-	// Such an action is only required when the author configured the attribute.
-	GetValueConditional() map[string]map[string]bool
-	// GetBestEffort maps op → action → true when the provider ignores the
-	// action's failure. Such an action is never required: it is classed
-	// optional.
-	GetBestEffort() map[string]map[string]bool
-}
-
 // FilterConfig controls which permission classes are filtered out of validation.
 type FilterConfig struct {
 	// ExcludeDataPlane excludes data-plane permissions (dynamodb:PutItem, s3:GetObject, etc.)
@@ -262,9 +240,7 @@ func DefaultFilter() FilterConfig {
 
 // Validate checks all resource changes against the policy and the resolver.
 // The filter controls which permission classes are excluded from validation.
-func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver interface {
-	Resolve(tfType string) (SchemaLike, error)
-}, filter FilterConfig) ([]MissingAction, error) {
+func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
 	for _, rc := range changes {
@@ -273,59 +249,25 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			continue
 		}
 
-		perms := schema.GetPermissions()
-		op := rc.Change
-		required, ok := perms[op]
+		required, ok := schema.Requirements(rc.Change)
 		if !ok {
-			op = "create"
-			required, ok = perms[op]
+			required, ok = schema.Requirements("create")
 		}
 		if !ok {
 			continue
 		}
-		conditional := schema.GetConditional()[op]
-		changeGated := schema.GetChangeGated()[op]
-		valueConditional := schema.GetValueConditional()[op]
-		bestEffortActions := schema.GetBestEffort()[op]
-		multiGates := schemaGates(schema, op)
 
-		for _, action := range required {
+		for _, paths := range pathsByAction(required) {
+			action := paths.action
 			service := strings.Split(action, ":")[0]
-			var gateAttr string
-			var bestEffort bool
-			if gates, ok := multiGates[action]; ok {
-				// An action reached on several paths is needed when any of
-				// them runs.
-				var needed bool
-				needed, gateAttr, bestEffort = evaluateGates(gates, rc)
-				if !needed {
-					continue
-				}
-			} else {
-				condAttr := conditional[action]
-				changeAttr := changeGated[action]
-				// An action is reported only when every gate it carries holds, so a
-				// failing presence gate or a failing change gate each drops it. The
-				// tag names both gating attributes, since either can be the reason.
-				gateAttr = gateAttribute(condAttr, changeAttr)
-				bestEffort = bestEffortActions[action]
-
-				// Conditional (attribute-gated) permissions: when the plan carries
-				// attribute info and the gating attribute is NOT meaningfully set,
-				// skip the permission. When Attributes is nil (e.g. static HCL
-				// mode), presence is unknown and the permission is kept.
-				if condAttr != "" && !conditionMet(condAttr, valueConditional[action], rc) {
-					continue
-				}
-
-				// Change-gated permissions: the provider makes these calls only
-				// when the attribute changed, so drop the permission when the plan
-				// shows no change. When ChangedAttributes is nil (static HCL mode,
-				// or a delete with no planned state), the change is unknown and the
-				// permission is kept.
-				if changeAttr != "" && rc.ChangedAttributes != nil && !rc.ChangedAttributes[changeAttr] {
-					continue
-				}
+			// An action is needed when the gate of any path that reaches it
+			// holds. A gate holds when its presence test and its change test
+			// both pass. When the plan does not show presence (static HCL
+			// mode) or change (static mode, or a delete with no planned
+			// state), that test passes, so the permission is kept.
+			needed, gateAttr, bestEffort := evaluateGates(paths.gates, rc)
+			if !needed {
+				continue
 			}
 
 			// Action coverage, resource-scoped when the target ARN is derivable

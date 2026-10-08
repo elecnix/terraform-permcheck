@@ -276,59 +276,23 @@ func tagActionsForService(svcDir string) TagActions {
 func (r resourceFile) schema() *cloud.Schema {
 	actions, bound := r.pkg.actionsFor(r.funcs), boundFuncs(r.funcs)
 
-	// Build the cloud.Schema with permissions plus all three gate kinds:
-	// presence (d.GetOk/d.Get), change (d.HasChange), and value guards (the
-	// attribute's value is tested rather than its presence).
+	// Build the cloud.Schema: one requirement per path that reaches an
+	// action, each carrying the path's gate: presence (d.GetOk/d.Get), change
+	// (d.HasChange), a value guard (the attribute's value is tested rather
+	// than its presence), and whether the provider ignores the call's failure.
 	schema := &cloud.Schema{
-		TypeName:         r.tfType,
-		Permissions:      make(map[string][]string),
-		Conditional:      make(map[string]map[string]string),
-		ChangeGated:      make(map[string]map[string]string),
-		ValueConditional: make(map[string]map[string]bool),
-		BestEffort:       make(map[string]map[string]bool),
+		TypeName: r.tfType,
+		Ops:      make(map[string][]iam.Requirement, len(actions)),
 	}
 
 	for op, eas := range actions {
-		perms := make([]string, 0, len(eas))
-		conds := make(map[string]string, len(eas))
-		changes := make(map[string]string, len(eas))
-		valueConds := make(map[string]bool, len(eas))
-		bestEffort := make(map[string]bool)
+		reqs := make([]iam.Requirement, 0, len(eas))
 		for _, ea := range eas {
-			perms = append(perms, ea.Action)
-			if len(ea.Gates) > 0 {
-				setNested(&schema.Gates, op, ea.Action, ea.Gates)
-				continue
-			}
-			if ea.BestEffort {
-				bestEffort[ea.Action] = true
-			}
-			if !ea.Conditional || ea.Condition == "" {
-				continue
-			}
-			switch ea.ConditionKind {
-			case ConditionChange:
-				changes[ea.Action] = ea.Condition
-			default:
-				conds[ea.Action] = ea.Condition
-				if ea.ValueGuarded {
-					valueConds[ea.Action] = true
-				}
+			for _, g := range ea.paths() {
+				reqs = append(reqs, iam.Requirement{Action: ea.Action, Gate: g})
 			}
 		}
-		schema.Permissions[op] = perms
-		if len(conds) > 0 {
-			schema.Conditional[op] = conds
-		}
-		if len(changes) > 0 {
-			schema.ChangeGated[op] = changes
-		}
-		if len(valueConds) > 0 {
-			schema.ValueConditional[op] = valueConds
-		}
-		if len(bestEffort) > 0 {
-			schema.BestEffort[op] = bestEffort
-		}
+		schema.Ops[op] = reqs
 	}
 
 	schema.Incomplete = incompleteOperations(actions, bound, r.pkg.idx.reachesClient)
@@ -359,25 +323,18 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 	if len(actions) == 0 {
 		return
 	}
-	existing := make(map[string]bool, len(schema.Permissions[op]))
-	for _, a := range schema.Permissions[op] {
-		existing[a] = true
-	}
-	// Ensure Conditional map exists even if no entries for this op.
-	if schema.Conditional == nil {
-		schema.Conditional = make(map[string]map[string]string)
-	}
-	if schema.ChangeGated == nil {
-		schema.ChangeGated = make(map[string]map[string]string)
-	}
 	for _, action := range actions {
-		if !existing[action] {
-			schema.Permissions[op] = append(schema.Permissions[op], action)
-			existing[action] = true
+		gates := schema.Gates(op, action)
+		switch len(gates) {
+		case 0:
+			schema.Ops[op] = append(schema.Ops[op], iam.Requirement{Action: action})
+		case 1:
+			// Transparent tagging checks this call's error, whatever the
+			// resource's own functions do with theirs.
+			g := gates[0]
+			g.BestEffort = false
+			setGates(schema, op, action, []iam.Gate{g})
 		}
-		// Transparent tagging checks this call's error, whatever the
-		// resource's own functions do with theirs.
-		delete(schema.BestEffort[op], action)
 	}
 }
 
@@ -388,83 +345,38 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 // paths and is needed when either gate holds, so the tags gate joins the
 // gates the action already has.
 func addTagActions(schema *cloud.Schema, op string, actions []string) {
-	if len(actions) == 0 {
-		return
-	}
-	existing := make(map[string]bool, len(schema.Permissions[op]))
-	for _, a := range schema.Permissions[op] {
-		existing[a] = true
-	}
 	tags := iam.Gate{Attribute: "tags"}
 	for _, action := range actions {
-		if existing[action] {
-			setGates(schema, op, action, append(actionGates(schema, op, action), tags))
+		setGates(schema, op, action, append(schema.Gates(op, action), tags))
+	}
+}
+
+// setGates replaces the paths of an action with the given gates, without the
+// paths another path subsumes. A path that always runs and whose failure
+// counts leaves the action ungated. The action keeps its place among the
+// operation's requirements, or goes last when it is new.
+func setGates(schema *cloud.Schema, op, action string, gates []iam.Gate) {
+	paths := make([]iam.Requirement, 0, len(gates))
+	for _, g := range essentialGates(gates) {
+		paths = append(paths, iam.Requirement{Action: action, Gate: g})
+	}
+	reqs := schema.Ops[op]
+	out := make([]iam.Requirement, 0, len(reqs)+len(paths))
+	placed := false
+	for _, r := range reqs {
+		if r.Action != action {
+			out = append(out, r)
 			continue
 		}
-		schema.Permissions[op] = append(schema.Permissions[op], action)
-		existing[action] = true
-		setGates(schema, op, action, []iam.Gate{tags})
+		if !placed {
+			out = append(out, paths...)
+			placed = true
+		}
 	}
-}
-
-// actionGates returns the gates of an action in the schema: its gate list
-// when it has one, or else the one gate the single-valued maps hold.
-func actionGates(schema *cloud.Schema, op, action string) []iam.Gate {
-	if gates, ok := schema.Gates[op][action]; ok {
-		return append([]iam.Gate(nil), gates...)
+	if !placed {
+		out = append(out, paths...)
 	}
-	return []iam.Gate{{
-		Attribute:    schema.Conditional[op][action],
-		ValueGuarded: schema.ValueConditional[op][action],
-		Changed:      schema.ChangeGated[op][action],
-		BestEffort:   schema.BestEffort[op][action],
-	}}
-}
-
-// setGates records the gates of an action, without the paths another path
-// subsumes. One gate goes in the single-valued maps, and several go in the
-// gate list. A path that always runs and whose failure counts leaves the
-// action ungated.
-func setGates(schema *cloud.Schema, op, action string, gates []iam.Gate) {
-	clearGates(schema, op, action)
-	distinct := essentialGates(gates)
-	if len(distinct) > 1 {
-		setNested(&schema.Gates, op, action, distinct)
-		return
-	}
-	g := distinct[0]
-	if g.Attribute != "" {
-		setNested(&schema.Conditional, op, action, g.Attribute)
-	}
-	if g.ValueGuarded {
-		setNested(&schema.ValueConditional, op, action, true)
-	}
-	if g.Changed != "" {
-		setNested(&schema.ChangeGated, op, action, g.Changed)
-	}
-	if g.BestEffort {
-		setNested(&schema.BestEffort, op, action, true)
-	}
-}
-
-// clearGates removes every gate the schema records for an action.
-func clearGates(schema *cloud.Schema, op, action string) {
-	delete(schema.Conditional[op], action)
-	delete(schema.ValueConditional[op], action)
-	delete(schema.ChangeGated[op], action)
-	delete(schema.BestEffort[op], action)
-	delete(schema.Gates[op], action)
-}
-
-// setNested sets m[op][action], creating the maps it needs.
-func setNested[V any](m *map[string]map[string]V, op, action string, v V) {
-	if *m == nil {
-		*m = make(map[string]map[string]V)
-	}
-	if (*m)[op] == nil {
-		(*m)[op] = make(map[string]V)
-	}
-	(*m)[op][action] = v
+	schema.Ops[op] = out
 }
 
 // resourceTypeFromAnnotation extracts the terraform resource type from an

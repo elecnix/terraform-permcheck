@@ -5,33 +5,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-// fakePermSchema is a test SchemaLike carrying a fixed permission map.
-type fakePermSchema struct {
-	perms map[string][]string
-}
-
-func (s fakePermSchema) GetPermissions() map[string][]string { return s.perms }
-
-func (s fakePermSchema) GetConditional() map[string]map[string]string { return nil }
-func (s fakePermSchema) GetChangeGated() map[string]map[string]string { return nil }
-
-func (s fakePermSchema) GetValueConditional() map[string]map[string]bool { return nil }
-func (s fakePermSchema) GetBestEffort() map[string]map[string]bool       { return nil }
-
-// fakePermResolver resolves terraform resource types from a fixed table.
+// fakePermResolver resolves terraform resource types from a fixed table of
+// operation → ungated actions.
 type fakePermResolver map[string]map[string][]string
 
-func (r fakePermResolver) Resolve(t string) (iam.SchemaLike, error) {
+func (r fakePermResolver) Resolve(t string) (iam.Schema, error) {
 	perms, ok := r[t]
 	if !ok {
 		return nil, errors.New("unknown type " + t)
 	}
-	return fakePermSchema{perms: perms}, nil
+	s := &cloud.Schema{TypeName: t, Ops: make(map[string][]iam.Requirement, len(perms))}
+	for op, actions := range perms {
+		s.Ops[op] = iam.Unconditional(actions...)
+	}
+	return s, nil
 }
 
 // staticOpChanges collapses changes to "type.change" for readable assertions.

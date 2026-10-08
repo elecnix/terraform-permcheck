@@ -16,9 +16,9 @@ func mustPolicy(t *testing.T, doc string) *PolicyDocument {
 }
 
 func TestValidate_SQSGrantOnOtherQueueIsMissing(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+	resolver := fakeResolver{actionsSchema(map[string][]string{
 		"create": {"sqs:CreateQueue", "sqs:ListQueueTags"},
-	}}}
+	})}
 	changes := []*plan.ResourceChange{{
 		Type: "aws_sqs_queue", Name: "new", Change: "create",
 		AttributeValues: map[string]string{"name": "example-new-queue"},
