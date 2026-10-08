@@ -218,7 +218,7 @@ func TestCfnKeys_EveryTableEntryIsReachable(t *testing.T) {
 		}
 		for j, other := range cfnServicePrefixes {
 			if i != j && strings.HasPrefix(other.prefix, row.prefix) {
-				t.Errorf("prefix row %d (%q) shadows row %d (%q)", j, other.prefix, i, row.prefix)
+				t.Errorf("prefix row %d (%q) shadows row %d (%q)", i, row.prefix, j, other.prefix)
 			}
 		}
 	}
