@@ -14,6 +14,13 @@ type ResourceChange struct {
 	Name   string // terraform resource name, e.g. "this"
 	Change string // "create", "update", or "delete"
 
+	// Address is the full instance address, e.g.
+	// `module.a["x"].aws_iam_role.r[0]`. Empty when the source has none.
+	Address string
+	// ModuleAddress is the address of the module instance the resource
+	// lives in, e.g. `module.a["x"]`. Empty for the root module.
+	ModuleAddress string
+
 	// Attributes records which top-level attributes are meaningfully set,
 	// following terraform's GetOk semantics: a key maps to true only when its
 	// value is non-null and non-zero. For create/update/replace it reflects the
@@ -108,6 +115,7 @@ type tfModuleCall struct {
 }
 
 type tfResourceChange struct {
+	Address       string `json:"address"`
 	ModuleAddress string `json:"module_address"`
 	Type          string `json:"type"`
 	Name          string `json:"name"`
@@ -169,6 +177,8 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Type:              rc.Type,
 			Name:              rc.Name,
 			Change:            action,
+			Address:           rc.Address,
+			ModuleAddress:     rc.ModuleAddress,
 			Attributes:        attributePresence(attrSource, afterUnknown),
 			ChangedAttributes: changedAttributes(changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
 			AttributeValues:   attributeStringValues(attrSource),

@@ -64,3 +64,19 @@ func TestPathPresentAndChanged(t *testing.T) {
 		t.Error("PathPresent on a change with no state is known")
 	}
 }
+
+func TestParse_KeepsAddresses(t *testing.T) {
+	changes, err := Parse([]byte(`{"resource_changes":[
+{"address":"module.m[\"a\"].aws_iam_role.r[0]","module_address":"module.m[\"a\"]","type":"aws_iam_role","name":"r","index":0,"change":{"actions":["create"],"after":{}}},
+{"address":"aws_iam_role.s","type":"aws_iam_role","name":"s","change":{"actions":["create"],"after":{}}}
+]}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changes[0]; got.Address != `module.m["a"].aws_iam_role.r[0]` || got.ModuleAddress != `module.m["a"]` {
+		t.Errorf("module change addresses = %q, %q", got.Address, got.ModuleAddress)
+	}
+	if got := changes[1]; got.Address != "aws_iam_role.s" || got.ModuleAddress != "" {
+		t.Errorf("root change addresses = %q, %q", got.Address, got.ModuleAddress)
+	}
+}
