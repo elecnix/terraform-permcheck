@@ -1,0 +1,5 @@
+--- stdout ---
+::warning file=sqs.tf,line=7,title=Unverified IAM permission::sqs:CreateQueue [unverified: resource scope] needed by: aws_sqs_queue.q (create), aws_sqs_queue.r["k"] (create)
+
+2 resource changes checked, 0 distinct missing permissions found, 1 unverified (resource scope).
+--- stderr ---

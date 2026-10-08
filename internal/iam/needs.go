@@ -140,16 +140,3 @@ func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingActi
 	}
 	return missing
 }
-
-// Source names what needs the action, for the report: the terraform resource
-// change, or the declared need and the resource it is on.
-func (m MissingAction) Source() string {
-	if m.Need == "" {
-		return fmt.Sprintf("%s.%s (%s)", m.ResourceType, m.ResourceName, m.Change)
-	}
-	s := fmt.Sprintf("needs %q", m.Need)
-	if m.NeedResource != "" {
-		s += " on " + m.NeedResource
-	}
-	return s
-}

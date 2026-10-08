@@ -1,0 +1,5 @@
+--- stdout ---
+::warning title=Missing IAM permission::logs:CreateLogGroup needed by: needs "Logs"
+
+0 resource changes, 1 declared need checked, 1 distinct missing permissions found.
+--- stderr ---

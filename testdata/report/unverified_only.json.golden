@@ -1,0 +1,27 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 2,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "unverified": "resource_scope"
+    },
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "r[\"k\"]",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "file": "sqs.tf",
+      "line": 7,
+      "unverified": "resource_scope"
+    }
+  ]
+}
+--- stderr ---

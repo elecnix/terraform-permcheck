@@ -1,0 +1,8 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (1):
+  logs:CreateLogGroup [required]
+    → needs "Logs"
+
+
+0 resource changes, 1 declared need checked, 1 distinct missing permissions found.

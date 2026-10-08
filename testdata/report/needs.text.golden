@@ -1,0 +1,16 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (3):
+  ecr:DescribeImages [required]
+    → needs "EcrImageVerification" on arn:aws:ecr:us-east-1:111122223333:repository/a
+  s3:PutBucketTagging [required]
+    → aws_s3_bucket.a[0] (create) [s3.tf:3]
+  logs:CreateLogGroup [required]
+    → needs "Logs"
+
+Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+  logs:PutLogEvents [required] [unverified: resource scope]
+    → needs "Logs"
+
+
+1 resource changes, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).

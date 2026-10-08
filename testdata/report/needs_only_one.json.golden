@@ -1,0 +1,14 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 0,
+  "label": "resource changes",
+  "missing": [
+    {
+      "need": "Logs",
+      "missing_action": "logs:CreateLogGroup",
+      "class": "[required]"
+    }
+  ]
+}
+--- stderr ---

@@ -1,0 +1,13 @@
+--- stdout ---
+All required permissions covered (3 resource changes checked).
+--- stderr ---
+Excluded (per config) (3):
+  s3:DeleteBucket
+    reason: bucket is retained
+    → aws_s3_bucket.a[0] (delete)
+    → aws_s3_bucket.b["x"] (delete)
+  kms:TagResource
+    → aws_kms_key.main (create)
+  logs:DeleteLogGroup
+    reason: logs are kept
+    → needs "Logs"

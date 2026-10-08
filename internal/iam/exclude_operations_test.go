@@ -164,14 +164,3 @@ func TestLoadConfig_OperationsFile(t *testing.T) {
 		t.Fatalf("operations = %+v, want [delete]", e.Operations)
 	}
 }
-
-// TestFormatExcluded_Operations names the operation in the report line.
-func TestFormatExcluded_Operations(t *testing.T) {
-	excluded := []ExcludedAction{
-		{MissingAction: MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "locked", Change: "delete", Action: "s3:PutBucketEncryption"}, Reason: "no delete by design"},
-	}
-	got := FormatExcluded(excluded)
-	if !strings.Contains(got, "→ aws_s3_bucket.locked (delete)") {
-		t.Errorf("missing operation in line\ngot:\n%s", got)
-	}
-}

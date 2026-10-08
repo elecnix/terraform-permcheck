@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"strings"
 	"testing"
 )
 
@@ -234,86 +233,5 @@ func TestClassTag(t *testing.T) {
 				t.Errorf("classTag(%d) = %q, want %q", tt.class, got, tt.tag)
 			}
 		})
-	}
-}
-
-func TestFormatMissing_WithClassification(t *testing.T) {
-	missing := []MissingAction{
-		{
-			ResourceType: "aws_backup_vault",
-			ResourceName: "this",
-			Change:       "create",
-			Action:       "backup:CreateBackupVault",
-			Service:      "backup",
-			Class:        "[required]",
-		},
-		{
-			ResourceType: "aws_backup_vault",
-			ResourceName: "this",
-			Change:       "create",
-			Action:       "backup:PutBackupVaultAccessPolicy",
-			Service:      "backup",
-			Class:        "[optional]",
-		},
-		{
-			ResourceType: "aws_backup_vault",
-			ResourceName: "this",
-			Change:       "create",
-			Action:       "kms:CreateGrant",
-			Service:      "kms",
-			Class:        "[required]",
-		},
-	}
-
-	output := FormatMissing(missing, nil)
-
-	// Check header — shows distinct action count
-	if !strings.Contains(output, "Missing IAM permissions (3)") {
-		t.Errorf("expected header with count, got: %s", output)
-	}
-
-	// Check grouped action lines with tags
-	checks := []string{
-		"backup:CreateBackupVault [required]\n",
-		"backup:PutBackupVaultAccessPolicy [optional]\n",
-		"kms:CreateGrant [required]\n",
-	}
-	for _, want := range checks {
-		if !strings.Contains(output, want) {
-			t.Errorf("expected output to contain %q, got:\n%s", want, output)
-		}
-	}
-
-	// Check resource references under each action
-	resourceChecks := []string{
-		"    → aws_backup_vault.this (create)\n",
-	}
-	for _, want := range resourceChecks {
-		if !strings.Contains(output, want) {
-			t.Errorf("expected output to contain %q, got:\n%s", want, output)
-		}
-	}
-}
-
-func TestFormatMissing_NoClass(t *testing.T) {
-	missing := []MissingAction{
-		{
-			ResourceType: "aws_backup_vault",
-			ResourceName: "this",
-			Change:       "create",
-			Action:       "backup:CreateBackupVault",
-			Service:      "backup",
-			Class:        "",
-		},
-	}
-
-	output := FormatMissing(missing, nil)
-
-	// Action line should have no class tag, followed by resource
-	if !strings.Contains(output, "  backup:CreateBackupVault\n") {
-		t.Errorf("expected action line without class tag, got:\n%s", output)
-	}
-	if !strings.Contains(output, "    → aws_backup_vault.this (create)\n") {
-		t.Errorf("expected resource line, got:\n%s", output)
 	}
 }

@@ -1,0 +1,9 @@
+--- stdout ---
+--- stderr ---
+Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+  sqs:CreateQueue [required] [unverified: resource scope]
+    → aws_sqs_queue.q (create)
+    → aws_sqs_queue.r["k"] (create) [sqs.tf:7]
+
+
+2 resource changes checked, 0 distinct missing permissions found, 1 unverified (resource scope).

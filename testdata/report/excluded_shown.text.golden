@@ -1,0 +1,18 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (1):
+  s3:PutBucketTagging [required]
+    → aws_s3_bucket.a[0] (create) [s3.tf:3]
+
+
+3 resource changes, 1 declared need checked, 1 distinct missing permissions found.
+Excluded (per config) (3):
+  s3:DeleteBucket
+    reason: bucket is retained
+    → aws_s3_bucket.a[0] (delete)
+    → aws_s3_bucket.b["x"] (delete)
+  kms:TagResource
+    → aws_kms_key.main (create)
+  logs:DeleteLogGroup
+    reason: logs are kept
+    → needs "Logs"

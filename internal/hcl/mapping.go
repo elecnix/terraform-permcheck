@@ -8,8 +8,8 @@ import (
 )
 
 // MapResources walks a terraform root directory, parses all .tf files, and
-// returns a map from "type.name" (e.g. "aws_s3_bucket.cloudtrail") to the
-// file path and line number of the resource declaration. Only "resource"
+// returns the file path and line number of each resource declaration, keyed
+// by iam.KeyOf (e.g. "aws_s3_bucket.cloudtrail"). Only "resource"
 // blocks are included (not "data" blocks). Files inside hidden directories
 // (including .terraform) are skipped. When multiple resources share the same
 // key (e.g. two files with identical type+name), the first one encountered
@@ -18,7 +18,7 @@ import (
 // This is a projection over ParseDir's result, not a second walk: the tree is
 // read and parsed exactly once per run, and the location map is derived from
 // the same ResourceBlocks the plan-mode and static views use.
-func MapResources(dir string) (map[string]iam.FileLocation, error) {
+func MapResources(dir string) (iam.Locations, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve terraform root %q: %w", dir, err)
@@ -32,21 +32,23 @@ func MapResources(dir string) (map[string]iam.FileLocation, error) {
 	return resourceLocations(absDir, blocks), nil
 }
 
-// resourceLocations projects parsed resource blocks into the "type.name" →
+// resourceLocations projects parsed resource blocks into the ResourceKey →
 // FileLocation view. Blocks whose Mode is not "resource" are skipped, and
 // when several blocks share a key the first one (in ParseDir's walk order)
 // wins. Paths are made relative to absDir, the root ParseDir walked.
 //
 // It is a pure function over blocks, so it can be tested without touching
 // the filesystem.
-func resourceLocations(absDir string, blocks []ResourceBlock) map[string]iam.FileLocation {
-	locations := make(map[string]iam.FileLocation)
+func resourceLocations(absDir string, blocks []ResourceBlock) iam.Locations {
+	locations := make(iam.Locations)
 
 	for _, b := range blocks {
 		if b.Mode != "resource" {
 			continue
 		}
-		key := b.Type + "." + b.Name
+		// A block label carries no index, so KeyOf leaves the name as it is.
+		// Readers call KeyOf on plan addresses, which may carry one.
+		key := iam.KeyOf(b.Type, b.Name)
 		if _, exists := locations[key]; exists {
 			continue
 		}

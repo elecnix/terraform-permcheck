@@ -1,0 +1,46 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 3,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "unverified": "resource_scope"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    },
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "r[\"k\"]",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "file": "sqs.tf",
+      "line": 7,
+      "unverified": "resource_scope"
+    },
+    {
+      "resource_type": "aws_backup_vault",
+      "resource_name": "v",
+      "change": "delete",
+      "missing_action": "kms:CreateGrant",
+      "class": "[required]",
+      "condition_attribute": "kms_key_arn",
+      "file": "modules/backup/main.tf",
+      "line": 40
+    }
+  ]
+}
+--- stderr ---
