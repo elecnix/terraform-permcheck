@@ -40,6 +40,9 @@ var knownOperations = map[string]bool{"create": true, "update": true, "delete": 
 // Config is the permcheck config file schema (permcheck.json).
 type Config struct {
 	Exclude []Exclusion `json:"exclude"`
+	// StrictResources turns on --strict-resources. The flag, when given,
+	// overrides it.
+	StrictResources bool `json:"strict_resources,omitempty"`
 }
 
 // ExcludedAction is a MissingAction that a config exclusion suppressed, tagged

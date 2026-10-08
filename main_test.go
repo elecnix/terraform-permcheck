@@ -874,3 +874,115 @@ func TestStaticChanges_CarriesParsedAttributes(t *testing.T) {
 		}
 	}
 }
+
+// strictArgs validates the strict fixture: a queue whose ARN the plan shows
+// and a table whose ARN it does not, against grants scoped to both.
+func strictArgs(extra ...string) []string {
+	return append([]string{"validate",
+		"--plan-file", "testdata/plan_strict.json",
+		"--policy-file", "testdata/policy_strict.json",
+		"--cloud", "aws",
+	}, extra...)
+}
+
+// TestValidate_StrictResourcesReportsUnverified verifies --strict-resources
+// reports the table's scoped grant as unverified and fails the run, while the
+// queue's grant, checked against its derived ARN, stays covered.
+func TestValidate_StrictResourcesReportsUnverified(t *testing.T) {
+	args := strictArgs("--format", "json", "--strict-resources")
+
+	var runErr error
+	out := captureStdout(t, func() { runErr = run(args) })
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound, got %v", runErr)
+	}
+
+	var result iam.FormatJSONResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if result.Status != "gaps_found" || len(result.Missing) == 0 {
+		t.Fatalf("expected unverified gaps, got %+v", result)
+	}
+	for _, m := range result.Missing {
+		if m.ResourceType != "aws_dynamodb_table" || m.Unverified != "resource_scope" {
+			t.Errorf("want only unverified dynamodb findings, got %+v", m)
+		}
+	}
+}
+
+// TestValidate_StrictResourcesOffByDefault verifies the same plan passes
+// without the flag, since an action-only match counts as coverage.
+func TestValidate_StrictResourcesOffByDefault(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := run(strictArgs()); err != nil {
+			t.Fatalf("expected nil without --strict-resources, got %v", err)
+		}
+	})
+	if !strings.Contains(out, "All required permissions covered") {
+		t.Errorf("expected all-clear, got %s", out)
+	}
+}
+
+// TestValidate_StrictResourcesFromConfig verifies strict_resources in the
+// config file turns the check on, and --strict-resources=false turns it off.
+func TestValidate_StrictResourcesFromConfig(t *testing.T) {
+	cfg := writeConfig(t, t.TempDir(), `{"strict_resources": true}`)
+	args := strictArgs("--format", "github-annotations", "--config", cfg)
+
+	var runErr error
+	out := captureStdout(t, func() { runErr = run(args) })
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound from config strict_resources, got %v", runErr)
+	}
+	if !strings.Contains(out, "::warning title=Unverified IAM permission::dynamodb:") ||
+		!strings.Contains(out, "[unverified: resource scope]") {
+		t.Errorf("expected unverified annotations, got %s", out)
+	}
+	if !strings.Contains(out, "unverified (resource scope)") {
+		t.Errorf("expected the summary to count unverified findings, got %s", out)
+	}
+
+	captureStdout(t, func() { runErr = run(append(args, "--strict-resources=false")) })
+	if runErr != nil {
+		t.Errorf("--strict-resources=false must override the config, got %v", runErr)
+	}
+}
+
+// TestStaticHCL_StrictResources verifies static HCL mode, which has no ARNs,
+// reports every scoped grant as unverified under --strict-resources.
+func TestStaticHCL_StrictResources(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(root+"/main.tf", []byte(`
+resource "aws_sqs_queue" "orders" {
+  name = "orders"
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := filepath.Abs("testdata/policy_strict.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var runErr error
+	stderr := captureStderr(t, func() {
+		captureStdout(t, func() {
+			runErr = run([]string{"validate",
+				"--terraform-root", root,
+				"--policy-file", policy,
+				"--cloud", "aws",
+				"--strict-resources",
+			})
+		})
+	})
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound, got %v", runErr)
+	}
+	if !strings.Contains(stderr, "Unverified IAM permissions") || !strings.Contains(stderr, "sqs:DeleteQueue [required] [unverified: resource scope]") {
+		t.Errorf("expected sqs:DeleteQueue unverified, got %s", stderr)
+	}
+	if strings.Contains(stderr, "Missing IAM permissions") {
+		t.Errorf("every finding should be unverified, got %s", stderr)
+	}
+}

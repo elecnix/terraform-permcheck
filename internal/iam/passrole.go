@@ -22,32 +22,44 @@ var passRoleAttributes = map[string][]string{
 
 // passRoleMissing returns iam:PassRole when the policy does not grant it on a
 // role the resource passes. A role whose ARN is not derivable from plan values
-// is skipped, so only provable non-coverage is reported.
-func passRoleMissing(rc *plan.ResourceChange, policy AllowedProvider, all []*plan.ResourceChange) []MissingAction {
+// is skipped, so only provable non-coverage is reported. With strict set, such
+// a role is reported unverified instead when the policy grants PassRole only
+// on some roles.
+func passRoleMissing(rc *plan.ResourceChange, policy AllowedProvider, all []*plan.ResourceChange, strict bool) []MissingAction {
 	if rc.Change == "delete" {
 		return nil
 	}
 	const action = "iam:PassRole"
-	var missing []MissingAction
 	for _, attr := range passRoleAttributes[rc.Type] {
 		targets := roleTargetARNs(rc, attr, all)
+		unverified := false
 		if len(targets) == 0 {
+			if !strict || !passesRole(rc, attr) || !coversAction(policy, action) || !resourceScopeUnverified(policy, action) {
+				continue
+			}
+			unverified = true
+		} else if coversActionOnTargets(policy, action, targets) {
 			continue
 		}
-		if coversActionOnTargets(policy, action, targets) {
-			continue
-		}
-		missing = append(missing, MissingAction{
-			ResourceType: rc.Type,
-			ResourceName: rc.Name,
-			Change:       rc.Change,
-			Action:       action,
-			Service:      "iam",
-			Class:        classTag(ClassManagement),
-		})
-		break // one finding per resource, even when it passes two roles
+		// One finding per resource, even when it passes two roles.
+		return []MissingAction{{
+			ResourceType:            rc.Type,
+			ResourceName:            rc.Name,
+			Change:                  rc.Change,
+			Action:                  action,
+			Service:                 "iam",
+			Class:                   classTag(ClassManagement),
+			ResourceScopeUnverified: unverified,
+		}}
 	}
-	return missing
+	return nil
+}
+
+// passesRole reports whether the resource may set the role attribute attr:
+// the attribute holds a value, references another object, or the plan does
+// not say which attributes are set.
+func passesRole(rc *plan.ResourceChange, attr string) bool {
+	return rc.Attributes == nil || rc.Attributes[attr] || len(rc.References[attr]) > 0
 }
 
 // roleTargetARNs derives the role ARN pattern(s) held by attr: a literal ARN,

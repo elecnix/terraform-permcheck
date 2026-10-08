@@ -262,3 +262,36 @@ func globContains(outer, inner string) bool {
 	}
 	return reach[len(outer)][len(inner)]
 }
+
+// grantsOnlyOnScopedResources reports whether every Allow statement that names
+// action limits it to some resources: a Resource list without a pattern that
+// matches every ARN, or a NotResource list. Such a grant covers the action only
+// for the right target, so without a target ARN the tool cannot confirm it.
+// It returns false when no Allow statement names the action.
+func (d *PolicyDocument) grantsOnlyOnScopedResources(action string) bool {
+	scoped := false
+	for _, s := range d.Statements {
+		if s.Effect != "Allow" || !s.matchesAction(action) {
+			continue
+		}
+		if s.grantsEveryResource() {
+			return false
+		}
+		scoped = true
+	}
+	return scoped
+}
+
+// grantsEveryResource reports whether a Resource pattern matches every ARN,
+// such as "*" or "arn:*".
+func (s Statement) grantsEveryResource() bool {
+	if len(s.NotResource) > 0 {
+		return false
+	}
+	for _, r := range s.Resource {
+		if globContains(r, "arn:*") {
+			return true
+		}
+	}
+	return false
+}

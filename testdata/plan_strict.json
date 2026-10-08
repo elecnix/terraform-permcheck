@@ -1,0 +1,20 @@
+{
+  "resource_changes": [
+    {
+      "type": "aws_sqs_queue",
+      "name": "orders",
+      "change": {
+        "actions": ["create"],
+        "after": {"name": "orders"}
+      }
+    },
+    {
+      "type": "aws_dynamodb_table",
+      "name": "items",
+      "change": {
+        "actions": ["create"],
+        "after": {"name": "items", "hash_key": "id"}
+      }
+    }
+  ]
+}

@@ -130,19 +130,6 @@ func isARN(s string) bool {
 	return len(parts) == 6 && parts[0] == "arn" && parts[1] != ""
 }
 
-// coversResourceAction reports whether the policy covers action for the
-// resource change rc.
-//
-// When the target ARN is derivable from plan values, the coverage check is
-// resource-scoped: see CoversTarget. When the target ARN can't be derived
-// (unknown values, static HCL mode, resource types without a rule) — or the
-// policy isn't a *PolicyDocument — coverage falls back to action-only
-// matching. This preserves today's behavior wherever the target is unknown,
-// per the resource-scope design: only provable non-coverage is reported.
-func coversResourceAction(policy AllowedProvider, action string, rc *plan.ResourceChange, all []*plan.ResourceChange) bool {
-	return coversActionOnTargets(policy, action, resourceTargetARNs(rc, all))
-}
-
 // CoversTarget reports whether the policy grants action for a resource whose
 // ARN matches any of the target patterns.
 //
@@ -313,4 +300,13 @@ func globShareAnyChar(a, b byte) bool {
 		return true
 	}
 	return a == b
+}
+
+// resourceScopeUnverified reports whether strict mode must flag a covered
+// action whose target ARN is unknown: the policy grants the action only on
+// some resources, so coverage depends on a target the tool cannot match.
+// A policy that is not a *PolicyDocument has no statements to read.
+func resourceScopeUnverified(policy AllowedProvider, action string) bool {
+	doc, ok := policy.(*PolicyDocument)
+	return ok && doc.grantsOnlyOnScopedResources(action)
 }

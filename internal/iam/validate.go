@@ -198,6 +198,10 @@ type MissingAction struct {
 	Service      string // extracted service prefix, e.g. "kms"
 	Filtered     bool   // true if this was filtered out (data-plane / optional)
 	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
+	// ResourceScopeUnverified marks an action the policy grants only on some
+	// resources while the target ARN is unknown (--strict-resources). The
+	// grant may or may not apply, so the finding is unverified, not missing.
+	ResourceScopeUnverified bool
 	// ConditionAttribute is the attribute gating this action, e.g.
 	// "kms_key_arn": set in the planned resource (d.GetOk) or changed between
 	// prior and planned state (d.HasChange). Empty for an unconditional action.
@@ -243,6 +247,10 @@ type FilterConfig struct {
 	// (d.GetOk or d.HasChange guard). When true, only unconditional [required]
 	// actions are kept.
 	ExcludeConditional bool
+	// StrictResources reports an action as unverified when the tool cannot
+	// derive its target ARN and the policy grants it only on some resources.
+	// When it is off, an action-only match counts as coverage there.
+	StrictResources bool
 }
 
 // DefaultFilter returns a FilterConfig that excludes data-plane and optional
@@ -310,9 +318,16 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			}
 
 			// Action coverage, resource-scoped when the target ARN is derivable
-			// from the plan and the policy declares per-resource grants.
-			if coversResourceAction(policy, action, rc, changes) {
-				continue
+			// from the plan and the policy declares per-resource grants. In
+			// strict mode, a grant limited to some resources does not count
+			// when the target is unknown.
+			targets := resourceTargetARNs(rc, changes)
+			unverified := false
+			if coversActionOnTargets(policy, action, targets) {
+				if !filter.StrictResources || len(targets) > 0 || !resourceScopeUnverified(policy, action) {
+					continue
+				}
+				unverified = true
 			}
 
 			// Classify and optionally filter
@@ -343,6 +358,8 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				Service:            service,
 				Class:              classTag(class),
 				ConditionAttribute: gateAttr,
+
+				ResourceScopeUnverified: unverified,
 			})
 		}
 	}
@@ -352,7 +369,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
 	// schema/source resolution, so they're checked separately here.
 	for _, rc := range changes {
-		for _, m := range append(crossServiceMissing(rc, policy), passRoleMissing(rc, policy, changes)...) {
+		for _, m := range append(crossServiceMissing(rc, policy, filter.StrictResources), passRoleMissing(rc, policy, changes, filter.StrictResources)...) {
 			if filter.ExcludeConditional && m.ConditionAttribute != "" {
 				continue
 			}
@@ -405,39 +422,77 @@ func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool 
 
 // missingGroupKey is a grouping key for deduplicating missing actions.
 type missingGroupKey struct {
-	action    string
-	class     string
-	condition string
+	action     string
+	class      string
+	condition  string
+	unverified bool
+}
+
+// groupKey returns the key that groups m with identical findings on other
+// resources.
+func groupKey(m MissingAction) missingGroupKey {
+	return missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute, unverified: m.ResourceScopeUnverified}
+}
+
+// unverifiedTag marks a finding whose coverage depends on a resource scope the
+// tool cannot check (--strict-resources).
+const unverifiedTag = "[unverified: resource scope]"
+
+// groupMissing groups missing actions by groupKey, preserving first-seen order.
+func groupMissing(missing []MissingAction) (map[missingGroupKey][]MissingAction, []missingGroupKey) {
+	groups := make(map[missingGroupKey][]MissingAction)
+	order := make([]missingGroupKey, 0, len(missing))
+	for _, m := range missing {
+		k := groupKey(m)
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], m)
+	}
+	return groups, order
 }
 
 // FormatMissing formats a list of missing actions as a human-readable message.
 // Permissions are grouped by (Action, Class, ConditionAttribute) so duplicates
 // across resources are collapsed into a single entry, followed by the list of
-// affected resources. When locations is non-nil and a resource has a matching
-// FileLocation entry (keyed by "type.name"), the file path and line number are
-// appended to the resource line.
+// affected resources. Findings unverified for resource scope get a section of
+// their own after the missing ones. When locations is non-nil and a resource
+// has a matching FileLocation entry (keyed by "type.name"), the file path and
+// line number are appended to the resource line.
 func FormatMissing(missing []MissingAction, locations map[string]FileLocation) string {
 	if len(missing) == 0 {
 		return ""
 	}
 
-	// Group by (Action, Class, ConditionAttribute)
-	groups := make(map[missingGroupKey][]MissingAction)
-	order := make([]missingGroupKey, 0, len(missing))
-	seen := make(map[missingGroupKey]bool)
-	for _, m := range missing {
-		k := missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute}
-		groups[k] = append(groups[k], m)
-		if !seen[k] {
-			seen[k] = true
-			order = append(order, k)
+	groups, order := groupMissing(missing)
+	var plain, unverified []missingGroupKey
+	for _, k := range order {
+		if k.unverified {
+			unverified = append(unverified, k)
+		} else {
+			plain = append(plain, k)
 		}
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(order)))
-	for _, k := range order {
-		items := groups[k]
+	if len(plain) > 0 {
+		b.WriteString(fmt.Sprintf("Missing IAM permissions (%d):\n", len(plain)))
+		writeMissingGroups(&b, plain, groups, locations)
+	}
+	if len(unverified) > 0 {
+		if len(plain) > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(fmt.Sprintf("Unverified IAM permissions (%d), granted only on resources whose ARN the plan does not show:\n", len(unverified)))
+		writeMissingGroups(&b, unverified, groups, locations)
+	}
+	return b.String()
+}
+
+// writeMissingGroups writes one action line per group key, each followed by
+// its affected resources.
+func writeMissingGroups(b *strings.Builder, keys []missingGroupKey, groups map[missingGroupKey][]MissingAction, locations map[string]FileLocation) {
+	for _, k := range keys {
 		// Action line with optional class and condition tags
 		line := k.action
 		if k.condition != "" {
@@ -445,9 +500,12 @@ func FormatMissing(missing []MissingAction, locations map[string]FileLocation) s
 		} else if k.class != "" {
 			line += " " + k.class
 		}
+		if k.unverified {
+			line += " " + unverifiedTag
+		}
 		b.WriteString(fmt.Sprintf("  %s\n", line))
 		// Affected resources
-		for _, m := range items {
+		for _, m := range groups[k] {
 			resourceLine := fmt.Sprintf("    → %s.%s (%s)", m.ResourceType, m.ResourceName, m.Change)
 			if locations != nil {
 				key := m.ResourceType + "." + stripResourceIndex(m.ResourceName)
@@ -458,17 +516,26 @@ func FormatMissing(missing []MissingAction, locations map[string]FileLocation) s
 			b.WriteString(resourceLine + "\n")
 		}
 	}
-	return b.String()
 }
 
 // DistinctCount returns the number of distinct (Action, Class, ConditionAttribute)
-// pairs in the list.
+// groups in the list, unverified ones included.
 func DistinctCount(missing []MissingAction) int {
-	seen := make(map[missingGroupKey]bool)
-	for _, m := range missing {
-		seen[missingGroupKey{action: m.Action, class: m.Class, condition: m.ConditionAttribute}] = true
+	_, order := groupMissing(missing)
+	return len(order)
+}
+
+// UnverifiedCount returns the number of distinct groups that are unverified
+// for resource scope.
+func UnverifiedCount(missing []MissingAction) int {
+	_, order := groupMissing(missing)
+	n := 0
+	for _, k := range order {
+		if k.unverified {
+			n++
+		}
 	}
-	return len(seen)
+	return n
 }
 
 // classTag returns a human-readable classification tag for a PermissionClass.
