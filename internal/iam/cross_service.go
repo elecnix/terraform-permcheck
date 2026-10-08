@@ -97,9 +97,15 @@ func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider) []Miss
 	return missing
 }
 
-// coversAction reports whether the policy grants an action, either directly or
-// via the service wildcard (service:*).
+// coversAction reports whether the policy grants an action when the target
+// resource is unknown. A *PolicyDocument already matches every IAM wildcard
+// and applies Deny statements, so it answers alone: asking it again about
+// "service:*" would let an Allow on the service bypass a Deny on the action.
+// Other providers also get the service wildcard (service:*) check.
 func coversAction(policy AllowedProvider, action string) bool {
+	if doc, ok := policy.(*PolicyDocument); ok {
+		return doc.Covers(action)
+	}
 	if policy.Covers(action) {
 		return true
 	}

@@ -79,14 +79,15 @@ func roleTargetARNs(rc *plan.ResourceChange, attr string, all []*plan.ResourceCh
 	return patterns
 }
 
-// coversActionOnTargets reports whether the policy grants action, by name or
-// service wildcard, on a resource matching any target pattern.
+// coversActionOnTargets reports whether the policy grants action on a
+// resource matching any target pattern. With no targets, or a policy that is
+// not a *PolicyDocument, it checks the action alone.
 func coversActionOnTargets(policy AllowedProvider, action string, targets []string) bool {
 	if !coversAction(policy, action) {
 		return false
 	}
 	doc, ok := policy.(*PolicyDocument)
-	if !ok {
+	if !ok || len(targets) == 0 {
 		return true
 	}
 	return doc.CoversTarget(action, targets)

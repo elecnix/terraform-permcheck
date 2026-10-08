@@ -142,9 +142,37 @@ falls back to today's action-only match rather than risk a false positive.
 
 Resource types without a rule above get an action-name check only. For
 example, a policy that grants `lambda:*` on one function still passes for a
-different function, and the apply then fails with `AccessDenied`. PermCheck
-also ignores `Deny` statements, `NotResource` and `Condition` blocks. A passing
+different function, and the apply then fails with `AccessDenied`. A passing
 report is a lower bound for those cases.
+
+### Policy evaluation
+
+PermCheck reads one policy document. `Statement` may be one object or an
+array. `Action`, `NotAction`, `Resource` and `NotResource` may each be a
+string or a list. `Effect` must be `Allow` or `Deny`, spelled with that case.
+AWS rejects any other value, and so does PermCheck.
+
+Action patterns accept `*` and `?` anywhere, so `secretsmanager:*SecretValue`
+grants `secretsmanager:PutSecretValue`. Action names match without regard to
+case, as in IAM. Resource ARNs match with case.
+
+A `Deny` that matches the action overrides any `Allow`, but only when it
+provably applies:
+
+- The `Deny` has no `Condition`. PermCheck can't evaluate condition keys, so
+  a conditional `Deny` might never apply. PermCheck doesn't report it.
+- The `Deny` covers the whole target. When PermCheck doesn't know the target
+  ARN, only `"Resource": "*"` counts. When it knows the target, a `Resource`
+  pattern must contain the target pattern, or no `NotResource` pattern may
+  overlap it. A `Deny` on one region or account doesn't count against a target
+  that could be in any region or account.
+
+An `Allow` with a `Condition` still counts as a grant. `NotAction` grants or
+denies every action outside its list. A `NotResource` grant covers any target
+outside its list, and doesn't cover a target that a listed pattern contains.
+
+Permission boundaries, service control policies, session policies and
+resource-based policies are out of scope.
 
 ### Excluding known false positives
 
