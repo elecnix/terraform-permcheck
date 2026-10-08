@@ -281,3 +281,46 @@ func TestInstallCheckout_RestoresPreviousOnFailure(t *testing.T) {
 		t.Errorf("stale directory left behind next to the cache: %v", err)
 	}
 }
+
+// TestInstallCheckout_SucceedsWhenOldCheckoutStays checks that a swap that
+// installed the new checkout succeeds even when the previous checkout cannot
+// be deleted. The leftover sibling matches the <ref>.tmp-* pattern, so the
+// next run's cleanup removes it.
+func TestInstallCheckout_SucceedsWhenOldCheckoutStays(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can delete a read-only directory")
+	}
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "v1")
+	locked := filepath.Join(dir, "locked")
+	if err := os.MkdirAll(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "file"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	tmp := filepath.Join(parent, "v1.tmp-new")
+	if err := os.MkdirAll(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "marker"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		// Let t.TempDir remove the leftover old checkout.
+		matches, _ := filepath.Glob(filepath.Join(parent, "*", "locked"))
+		for _, m := range matches {
+			_ = os.Chmod(m, 0o755)
+		}
+	})
+
+	if err := installCheckout(tmp, dir); err != nil {
+		t.Fatalf("installCheckout = %v, want nil once the new checkout is in place", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "marker")); err != nil {
+		t.Errorf("new checkout not installed: %v", err)
+	}
+}

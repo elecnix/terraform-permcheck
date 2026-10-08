@@ -160,7 +160,11 @@ func installCheckout(tmp, dir string) error {
 			}
 			return fmt.Errorf("install provider checkout: %w", err)
 		}
-		return os.RemoveAll(stale)
+		// The new checkout is in place, so a failure to delete the old one
+		// is not a failure to install. The leftover matches <ref>.tmp-*, and
+		// the next run's cleanup removes it.
+		_ = os.RemoveAll(stale)
+		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
