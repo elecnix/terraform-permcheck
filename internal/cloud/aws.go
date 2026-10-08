@@ -66,38 +66,103 @@ func (p *AWSProvider) Resolve(tfType string) (*Schema, error) {
 
 // cfnKeys returns candidate CloudFormation registry keys for a terraform type.
 //
-// Terraform types like aws_backup_vault map to CFN types where the resource
-// name may include the service prefix (BackupVault) or not (Table).
-// We generate both forms and try them in order.
+// A registry key is the CloudFormation type name in lower case with "::"
+// written as "-": AWS::ApiGatewayV2::DomainName is aws-apigatewayv2-domainname.
+// The resource name never holds a hyphen, so the words of the Terraform
+// resource name are joined without one. Some resource names also carry the
+// service prefix (BackupVault rather than Vault), so that form comes second.
 //
-//	aws_backup_vault       → ["aws-backup-vault", "aws-backup-backupvault"]
-//	aws_dynamodb_table     → ["aws-dynamodb-table", "aws-dynamodb-dynamodbtable"]
-//	aws_iam_role           → ["aws-iam-role", "aws-iam-iamrole"]
+//	aws_backup_vault             → ["aws-backup-vault", "aws-backup-backupvault"]
+//	aws_apigatewayv2_domain_name → ["aws-apigatewayv2-domainname", "aws-apigatewayv2-apigatewayv2domainname"]
+//	aws_cloudwatch_log_group     → ["aws-logs-loggroup"]
+//
+// Types whose Terraform name does not follow the CloudFormation one come from
+// cfnTypeOverrides and cfnServicePrefixes.
 func cfnKeys(tfType string) []string {
 	if !strings.HasPrefix(tfType, "aws_") {
 		return nil
 	}
-	rest := strings.TrimPrefix(tfType, "aws_")
-	parts := strings.Split(rest, "_")
+	if key, ok := cfnTypeOverrides[tfType]; ok {
+		return []string{key}
+	}
+	for _, sp := range cfnServicePrefixes {
+		if !strings.HasPrefix(tfType, sp.prefix) {
+			continue
+		}
+		resource := strings.ReplaceAll(strings.TrimPrefix(tfType, sp.prefix), "_", "")
+		if sp.word == "" {
+			return []string{"aws-" + sp.service + "-" + resource}
+		}
+		return []string{
+			"aws-" + sp.service + "-" + sp.word + resource,
+			"aws-" + sp.service + "-" + resource,
+		}
+	}
+
+	parts := strings.Split(strings.TrimPrefix(tfType, "aws_"), "_")
 	if len(parts) < 2 {
 		return nil
 	}
 	service := parts[0]
-	resourceParts := parts[1:]
 
-	// Form 1: hyphenated (matches dynamodb-table, iam-role, s3-bucket)
-	k1 := "aws-" + service + "-" + strings.Join(resourceParts, "-")
+	// Form 1: the resource words joined (backup-vault, apigatewayv2-domainname).
+	k1 := "aws-" + service + "-" + strings.Join(parts[1:], "")
 
-	// Form 2: service prefix + resource, no separators
-	// (matches backup-backupvault, backup-backupplan)
-	allNoSep := strings.Join(parts, "")
-	k2 := "aws-" + service + "-" + allNoSep
+	// Form 2: service prefix + resource (backup-backupvault).
+	k2 := "aws-" + service + "-" + strings.Join(parts, "")
 
-	// Deduplicate
 	if k1 == k2 {
 		return []string{k1}
 	}
 	return []string{k1, k2}
+}
+
+// cfnServicePrefixes maps Terraform type prefixes to the CloudFormation
+// namespace their resources live in, when the two differ. The rest of the
+// type name, joined, is the resource name, tried first with word in front
+// when the prefix swallowed a word some resource names keep: LogGroup, but
+// also EventBus next to Rule.
+var cfnServicePrefixes = []struct{ prefix, service, word string }{
+	{"aws_cloudwatch_event_", "events", "event"},
+	{"aws_cloudwatch_log_", "logs", "log"},
+	{"aws_api_gateway_", "apigateway", ""},
+	{"aws_alb_", "elasticloadbalancingv2", ""},
+	{"aws_lb_", "elasticloadbalancingv2", ""},
+	{"aws_sfn_", "stepfunctions", ""},
+}
+
+// cfnTypeOverrides maps Terraform types whose resource name differs from the
+// CloudFormation one to their registry key. Each key was checked against the
+// registry.
+var cfnTypeOverrides = map[string]string{
+	"aws_alb":                     "aws-elasticloadbalancingv2-loadbalancer",
+	"aws_lb":                      "aws-elasticloadbalancingv2-loadbalancer",
+	"aws_cloudwatch_metric_alarm": "aws-cloudwatch-alarm",
+	"aws_db_instance":             "aws-rds-dbinstance",
+	"aws_db_parameter_group":      "aws-rds-dbparametergroup",
+	"aws_db_subnet_group":         "aws-rds-dbsubnetgroup",
+	"aws_rds_cluster":             "aws-rds-dbcluster",
+	"aws_ebs_volume":              "aws-ec2-volume",
+	"aws_eip":                     "aws-ec2-eip",
+	"aws_elasticache_cluster":     "aws-elasticache-cachecluster",
+	"aws_flow_log":                "aws-ec2-flowlog",
+	"aws_iam_policy":              "aws-iam-managedpolicy",
+	"aws_instance":                "aws-ec2-instance",
+	"aws_internet_gateway":        "aws-ec2-internetgateway",
+	"aws_key_pair":                "aws-ec2-keypair",
+	"aws_launch_template":         "aws-ec2-launchtemplate",
+	"aws_nat_gateway":             "aws-ec2-natgateway",
+	"aws_network_interface":       "aws-ec2-networkinterface",
+	"aws_route":                   "aws-ec2-route",
+	"aws_route53_record":          "aws-route53-recordset",
+	"aws_route53_zone":            "aws-route53-hostedzone",
+	"aws_route_table":             "aws-ec2-routetable",
+	"aws_security_group":          "aws-ec2-securitygroup",
+	"aws_sns_topic_subscription":  "aws-sns-subscription",
+	"aws_subnet":                  "aws-ec2-subnet",
+	"aws_vpc":                     "aws-ec2-vpc",
+	"aws_vpc_endpoint":            "aws-ec2-vpcendpoint",
+	"aws_vpc_peering_connection":  "aws-ec2-vpcpeeringconnection",
 }
 
 // fetch downloads the CloudFormation schema for a registry key.
