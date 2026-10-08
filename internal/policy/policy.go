@@ -4,6 +4,7 @@
 package policy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -30,17 +31,22 @@ type Statement struct {
 // statementList handles a Statement given as one object or as an array.
 type statementList []Statement
 
+// The first byte picks the form, so a malformed statement reports the error
+// of the form it was written in.
 func (l *statementList) UnmarshalJSON(b []byte) error {
-	var one Statement
-	if err := json.Unmarshal(b, &one); err == nil {
-		*l = []Statement{one}
+	if t := bytes.TrimLeft(b, " \t\r\n"); len(t) > 0 && t[0] == '[' {
+		var many []Statement
+		if err := json.Unmarshal(b, &many); err != nil {
+			return err
+		}
+		*l = many
 		return nil
 	}
-	var many []Statement
-	if err := json.Unmarshal(b, &many); err != nil {
+	var one Statement
+	if err := json.Unmarshal(b, &one); err != nil {
 		return err
 	}
-	*l = many
+	*l = []Statement{one}
 	return nil
 }
 
