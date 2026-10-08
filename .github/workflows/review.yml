@@ -6,20 +6,15 @@ permissions:
   pull-requests: write
   checks: write
 concurrency:
-  # Serialised across the whole repository, not per pull request.
-  #
-  # Every run makes one model call per changed file, all against the same
-  # provider key. With a stack of twenty-odd pull requests each started a review
-  # within seconds of the others, that is dozens of concurrent calls against one
-  # key, and the provider answers HTTP 429 for all of them. A run whose every call
-  # is rate limited ends up with no file reviewed, which Cite reports as
-  # COULD_NOT_EVALUATE — indistinguishable from a genuinely empty scope, and red.
-  #
-  # Queued rather than cancelled: cancel-in-progress would make each new pull
-  # request cancel the review already in flight for another, so the top of a stack
-  # would starve it. A superseded run is cheap next to a missing verdict.
+  # One queue for the whole repository. Every review makes one model call per
+  # changed file against one provider key, so reviews started together, as a
+  # pushed stack of pull requests does, get HTTP 429 and evaluate nothing.
+  # queue: max keeps up to 100 pending runs in arrival order. Without it,
+  # GitHub keeps one pending run per group and cancels the older ones.
+  # cancel-in-progress must stay false: GitHub rejects it with queue: max.
   group: cite-global
   cancel-in-progress: false
+  queue: max
 jobs:
   review:
     runs-on: ubuntu-latest
