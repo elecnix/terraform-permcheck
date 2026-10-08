@@ -14,6 +14,11 @@ type Schema struct {
 	// planned state, while an action gated on change is evaluated from the
 	// difference between prior and planned state.
 	ChangeGated map[string]map[string]string
+
+	// ValueConditional marks the conditional actions whose gating attribute is
+	// compared by value, not by presence (op → action → true). The attribute
+	// carries a default, so the call only runs when the author configured it.
+	ValueConditional map[string]map[string]bool
 }
 
 // GetPermissions returns the permission map (implements iam.SchemaLike).
@@ -32,6 +37,12 @@ func (s *Schema) GetConditional() map[string]map[string]string {
 // (implements iam.SchemaLike).
 func (s *Schema) GetChangeGated() map[string]map[string]string {
 	return s.ChangeGated
+}
+
+// GetValueConditional returns the actions whose gating attribute is compared by
+// value (implements iam.SchemaLike).
+func (s *Schema) GetValueConditional() map[string]map[string]bool {
+	return s.ValueConditional
 }
 
 // Provider resolves cloud resource types to their required IAM permissions.

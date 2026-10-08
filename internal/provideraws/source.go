@@ -287,19 +287,22 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		return
 	}
 
-	// Build the cloud.Schema with permissions plus both gate kinds: presence
-	// gates (d.GetOk) and change gates (d.HasChange).
+	// Build the cloud.Schema with permissions plus all three gate kinds:
+	// presence (d.GetOk/d.Get), change (d.HasChange), and value guards (the
+	// attribute's value is tested rather than its presence).
 	schema := &cloud.Schema{
-		TypeName:    tfType,
-		Permissions: make(map[string][]string),
-		Conditional: make(map[string]map[string]string),
-		ChangeGated: make(map[string]map[string]string),
+		TypeName:         tfType,
+		Permissions:      make(map[string][]string),
+		Conditional:      make(map[string]map[string]string),
+		ChangeGated:      make(map[string]map[string]string),
+		ValueConditional: make(map[string]map[string]bool),
 	}
 
 	for op, eas := range actions {
 		perms := make([]string, 0, len(eas))
 		conds := make(map[string]string, len(eas))
 		changes := make(map[string]string, len(eas))
+		valueConds := make(map[string]bool, len(eas))
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
 			if !ea.Conditional || ea.Condition == "" {
@@ -310,6 +313,9 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 				changes[ea.Action] = ea.Condition
 			default:
 				conds[ea.Action] = ea.Condition
+				if ea.ValueGuarded {
+					valueConds[ea.Action] = true
+				}
 			}
 		}
 		schema.Permissions[op] = perms
@@ -318,6 +324,9 @@ func (p *SourceProvider) parseFile(filePath, serviceName, fileName string, tagAc
 		}
 		if len(changes) > 0 {
 			schema.ChangeGated[op] = changes
+		}
+		if len(valueConds) > 0 {
+			schema.ValueConditional[op] = valueConds
 		}
 	}
 
