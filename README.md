@@ -11,8 +11,13 @@ declared IAM policies using each cloud's native schema registry.
 
 ```
 terraform plan -out=plan.tfplan
-terraform show -json plan.tfplan | terraform-permcheck validate
+terraform show -json plan.tfplan | terraform-permcheck validate \
+  --policy-file deploy_policy.json --cloud aws
 ```
+
+`deploy_policy.json` is the IAM policy document of the deploy role. To check a
+policy that the plan itself defines, pass `--policy-from-plan-output NAME` in
+place of `--policy-file`. See [Usage](#usage) for every input mode.
 
 If your deploy role is missing `kms:CreateGrant` for a `aws_backup_vault`, you
 find out at plan time — not 3 failed deploys later.
@@ -73,7 +78,7 @@ Each output format reports unresolved types:
 
 To accept the gap for every unresolved type, pass `--allow-unresolved-types` or set `"allow_unresolved_types": true` in the config file. A flag, `true` or `false`, overrides the config. To accept it for one type, add an exclusion with `"permission": "*"` and a `resource` pattern that matches the type, such as `{"permission": "*", "resource": "aws_example_widget", "reason": "checked by hand"}`. A narrower permission pattern, such as `s3:*`, doesn't match an unresolved type. In both cases PermCheck still reports the type in place of the all-clear line. The summary line ends with `N resource types unresolved (allowed)` for the flag, and with `N resource types unresolved (excluded)` for an exclusion. In `json`, `unresolved_allowed` gives the sum of both counts.
 
-A lookup that fails for another reason, such as a network error, a timeout, or an HTTP 5xx or 429 from the registry, stops the run with exit code 2. PermCheck can't tell whether such a type exists, so it neither checks it nor reports it as unresolved. Run the check again once the registry answers. The registry answers 403 or 404 for a type it doesn't hold, and PermCheck reads both as unresolved.
+PermCheck retries a registry request that fails with an HTTP 5xx, a 429 or a dropped connection, up to three attempts per key. It waits one second, then two, with jitter, and honors the `Retry-After` header of a 429 up to 30 seconds. It doesn't retry a request that hits the 30-second timeout. A lookup that still fails, or fails for another reason, stops the run with exit code 2. PermCheck can't tell whether such a type exists, so it neither checks it nor reports it as unresolved. Run the check again once the registry answers. The registry answers 403 or 404 for a type it doesn't hold, and PermCheck reads both as unresolved.
 
 ### Plan actions
 
@@ -456,40 +461,104 @@ collect the other policies in the plan or evaluate resource-based policies.
 
 ### CLI
 
+```
+terraform-permcheck <command> [flags]
+```
+
+| Command | Purpose |
+|---------|---------|
+| `validate` | Check that an IAM policy grants what a plan or a Terraform root needs |
+| `generate-permissions` | Regenerate the embedded permissions table (see [Embedded permissions table](#embedded-permissions-table)) |
+| `version`, `--version` | Print the version |
+| `help`, `-h`, `--help` | Print the commands. `help validate` or `validate -h` prints the flags of `validate` |
+
+Flags go before any argument. `validate` and `generate-permissions` take no
+arguments, so a stray word such as a file name is a usage error with exit
+code 2. Use `--plan-file` for the plan.
+
+`validate` reads the plan from one of these sources:
+
+- `--plan-file plan.json` reads a file.
+- `--plan-file -` reads stdin.
+- With neither `--plan-file` nor `--terraform-root`, `validate` reads stdin
+  when it isn't a terminal. An empty stdin fails with `no plan input` and
+  exit code 2.
+- `--terraform-root DIR` without `--plan-file` runs static HCL mode. It reads
+  the `.tf` files under `DIR` and ignores stdin. When stdin is a pipe or a
+  non-empty file, it prints a warning to stderr that names `--plan-file -`.
+  It doesn't read stdin, so an open pipe can't hang the run.
+
+To pipe a plan and also get file and line numbers from `--terraform-root`,
+pass `--plan-file -`:
+
 ```bash
-# Pipe the plan JSON directly
+# Pipe the plan JSON
 terraform show -json plan.tfplan | terraform-permcheck validate \
   --policy-file deploy_policy.json \
   --cloud aws
 
-# Or point at files
+# Point at files
 terraform-permcheck validate \
   --plan-file plan.json \
   --policy-file deploy_policy.json \
   --cloud aws
+
+# Pipe the plan and add file and line numbers
+terraform show -json plan.tfplan | terraform-permcheck validate \
+  --plan-file - --terraform-root . \
+  --policy-file deploy_policy.json \
+  --cloud aws --format github-annotations
+
+# Static HCL mode: no plan and no cloud credentials
+terraform-permcheck validate --terraform-root ./terraform \
+  --policy-file deploy_policy.json --cloud aws
 ```
 
-### Flags
+The policy comes from exactly one of `--policy-file`,
+`--policy-from-plan-output` and `--policy-from-state-output`. Static HCL mode
+accepts `--policy-file` only.
+
+### Flags of `validate`
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--cloud` | none, required | Cloud provider. Only `aws` is supported |
+| `--plan-file` | stdin | Path to the plan JSON from `terraform show -json`, or `-` for stdin |
+| `--policy-file` | none | Path to the IAM policy JSON to check |
+| `--policy-from-plan-output` | none | Read the policy from the plan output with this name. The output may be a JSON string or an object |
+| `--policy-from-state-output` | none | Read the policy from the state output with this name |
+| `--state-file` | stdin | Path to the state JSON from `terraform show -json`, or `-` for stdin. Used with `--policy-from-state-output`. The plan and the state can't both come from stdin |
+| `--terraform-root` | none | Terraform root directory. Adds file and line numbers to `github-annotations` and `json` findings. Without `--plan-file`, it turns on static HCL mode |
 | `--format` | `text` | Output format: `text`, `github-annotations`, or `json` |
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
+| `--only-required` | `false` | Report only unconditional `[required]` permissions, and drop `[conditional: ...]` ones |
+| `--no-filter` | `false` | Report every permission the schema sources list, including `[optional]` ones |
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 | `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
-
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 | `--allow-unresolved-types` | `false` | Report resource types that no schema source knows, but don't fail the run on them (see [Unresolved resource types](#unresolved-resource-types)). The config key `allow_unresolved_types` sets the default |
+
+### Output streams
+
+| Format | stdout | stderr |
+|--------|--------|--------|
+| `text` | The all-clear line | Findings and the summary line |
+| `github-annotations` | Annotations, the summary line and the all-clear line | Nothing |
+| `json` | The JSON report | Nothing |
+
+Error messages, usage errors and warnings, such as a file map that
+`--terraform-root` can't build, go to stderr in every format. `help` and `-h`
+print to stdout.
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | All permissions covered (or `--exit-zero` was set) |
-| 1 | Permission gaps found, unverified findings under `--strict-resources` and unresolved resource types included (details printed to stderr) |
-| 2 | Invalid input or configuration error, or a schema lookup that failed (network error, timeout, HTTP 5xx) |
+| 0 | All permissions covered, `--exit-zero` was set, or help was printed |
+| 1 | Permission gaps found, including unverified findings under `--strict-resources` and unresolved resource types. The findings go to the stream that [Output streams](#output-streams) gives for the format |
+| 2 | Usage error, invalid input or configuration, or a schema lookup that still failed after retries (network error, timeout, HTTP 5xx or 429) |
 
 ### Embedded permissions table
 
@@ -511,7 +580,7 @@ The first live run makes a shallow clone of the pinned tag from GitHub. Later ru
 
 The clone goes in a directory named after the tag, under `terraform-permcheck/provider-aws` in your user cache directory. On Linux that is `$XDG_CACHE_HOME`, or `~/.cache` when it is unset. On macOS it is `~/Library/Caches`. Set `PERMCHECK_PROVIDER_CACHE_DIR` to use another base directory. The clone still goes in a subdirectory named after the tag.
 
-Concurrent runs can share one cache. Each run locks a file next to the clone before it reads or writes the clone, so runs take turns. If a clone is incomplete or at the wrong commit, the run replaces it.
+Concurrent runs can share one cache. Each run locks a file next to the clone before it reads or writes the clone, so runs take turns. A run that waits more than two seconds for the lock prints the path of the lock file to stderr. On Windows a run that crashed leaves the lock file behind, and the next run waits until the file is 30 minutes old. Delete the file to go on sooner. If a clone is incomplete or at the wrong commit, the run replaces it.
 
 To free space, delete the clones that older versions made, unless you use the live source. Older versions cloned into the cache directory above, or into `~/.cache/terraform-permcheck/provider-aws` for the oldest.
 
@@ -531,8 +600,9 @@ data "tf-permcheck_iam_check" "deploy_role" {
 ## Install
 
 Download a binary for Linux, macOS or Windows from the
-[releases page](https://github.com/elecnix/terraform-permcheck/releases), or
-build from source with Go:
+[releases page](https://github.com/elecnix/terraform-permcheck/releases).
+Each release lists the SHA-256 of its archives in `checksums.txt`. Or build
+from source with Go 1.26 or later:
 
 ```bash
 go install github.com/elecnix/terraform-permcheck@latest
@@ -542,8 +612,8 @@ go install github.com/elecnix/terraform-permcheck@latest
 
 ### GitHub Action
 
-The repository is also a GitHub Action. It builds the tool from the tagged
-source and runs `validate`. Pin it to a release tag:
+The repository is also a GitHub Action that runs `validate`. Pin it to a
+release tag:
 
 ```yaml
 - name: Plan
@@ -559,12 +629,33 @@ source and runs `validate`. Pin it to a release tag:
     terraform-root: .   # adds file and line to each annotation
 ```
 
+For a release tag, the action downloads that release's archive for the
+runner and checks its SHA-256 against the release's `checksums.txt`. For any
+other ref, such as a commit SHA or a branch, it builds the tool from the
+action's source. It uses the `go` on `PATH` when the runner has one, and
+otherwise downloads Go into `$RUNNER_TEMP`. It doesn't change `PATH`, so your
+later steps keep the tools they had.
+
 Without `plan-file`, a `terraform-root` input runs static HCL mode, so a fork
 PR can run the check with no cloud credentials. The action reports gaps as
 `::warning` annotations by default and fails the step when permissions are
-missing. Set `exit-zero: "true"` to warn and pass. The other inputs match the
-CLI flags, as listed in [`action.yml`](action.yml). The `exit-code` output is 0 when
-covered, 1 when permissions are missing and 2 on bad input.
+missing. Set `exit-zero: "true"` to warn and pass, or `fail-on-gaps: "false"`
+to pass while the `exit-code` output still says 1. The other inputs match the
+CLI flags, as listed in [`action.yml`](action.yml). The `args` input passes
+extra flags. The action splits its value on whitespace without shell quoting,
+so a flag value in `args` can't contain a space.
+
+| Output | Content |
+|--------|---------|
+| `exit-code` | 0 when covered, 1 when permissions are missing, 2 on bad input |
+| `report-file` | Path to the tool's stdout. With `format: json` this file is the JSON report, ready for `jq` |
+| `log-file` | Path to the tool's stderr: the `text` findings, and any error message |
+
+GitHub drops every output of a composite action that fails. When the action
+fails the step, read the same values in a later step from the
+`PERMCHECK_EXIT_CODE`, `PERMCHECK_REPORT_FILE` and `PERMCHECK_LOG_FILE`
+environment variables. A step with `if: failure()` can then upload the
+report.
 
 ### Shell step
 
