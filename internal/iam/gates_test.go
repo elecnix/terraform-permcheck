@@ -32,7 +32,7 @@ func TestValidate_AnyGateHolds(t *testing.T) {
 				Type: "aws_dynamodb_table", Name: "items", Change: "create",
 				Attributes: c.attrs, Configured: c.configured,
 			}}
-			missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+			missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,7 +57,7 @@ func TestValidate_AnyGateUngatedPath(t *testing.T) {
 		{Action: "apigateway:POST"},
 	}}
 	changes := []*plan.ResourceChange{{Type: "aws_apigatewayv2_domain_name", Name: "api", Change: "create", Attributes: map[string]bool{}}}
-	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{ExcludeConditional: true})
+	missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{ExcludeConditional: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestValidate_AnyGateRequiredPathDecidesTag(t *testing.T) {
 		{map[string]bool{}, "[optional]", ""},
 	} {
 		changes := []*plan.ResourceChange{{Type: "aws_widget", Name: "w", Change: "create", Attributes: c.attrs}}
-		missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+		missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func TestValidate_AnyGateChangeAndBestEffort(t *testing.T) {
 				Type: "aws_iam_role", Name: "r", Change: "update",
 				Attributes: map[string]bool{"tags": true}, ChangedAttributes: c.changed,
 			}}
-			missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+			missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -131,7 +131,7 @@ func TestValidate_AnyGateChangeAndBestEffort(t *testing.T) {
 		Type: "aws_iam_role", Name: "r", Change: "update",
 		Attributes: map[string]bool{}, ChangedAttributes: map[string]bool{"policy": false},
 	}}
-	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+	missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

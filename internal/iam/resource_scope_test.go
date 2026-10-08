@@ -314,7 +314,7 @@ func TestValidate_ResourceScopedCoverage_ActionUncoveredUnaltered(t *testing.T) 
 		{Type: "aws_secretsmanager_secret_version", Name: "b", Change: "create"},
 	}
 
-	missing, err := Validate(changes, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

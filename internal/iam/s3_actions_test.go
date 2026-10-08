@@ -236,7 +236,7 @@ func TestValidate_BareS3Bucket(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.change, func(t *testing.T) {
 			changes := []*plan.ResourceChange{{Type: "aws_s3_bucket", Name: "logs", Change: tt.change}}
-			missing, err := Validate(changes, denyAll{}, resolver, DefaultFilter())
+			missing, err := Validate(changes, grantNothing(), resolver, DefaultFilter())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -261,7 +261,7 @@ func TestValidate_S3SubresourceKeepsItsOwnAction(t *testing.T) {
 		"update": {"s3:PutBucketVersioning"},
 	})}
 	changes := []*plan.ResourceChange{{Type: "aws_s3_bucket_versioning", Name: "logs", Change: "update"}}
-	missing, err := Validate(changes, denyAll{}, resolver, DefaultFilter())
+	missing, err := Validate(changes, grantNothing(), resolver, DefaultFilter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestValidate_S3SubresourcesAbsorbParentSchemaNames(t *testing.T) {
 	for subType := range s3SubresourcePermissions {
 		changes = append(changes, &plan.ResourceChange{Type: subType, Name: "logs", Change: "update"})
 	}
-	missing, err := Validate(changes, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

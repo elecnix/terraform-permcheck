@@ -6,11 +6,6 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-// allowSet covers only the actions in the set.
-type allowSet map[string]bool
-
-func (a allowSet) Covers(action string) bool { return a[action] }
-
 func TestArnService(t *testing.T) {
 	cases := []struct {
 		arn  string
@@ -40,7 +35,7 @@ func TestCrossServiceMissing_KnownALBTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, denyAll{}, false)
+	missing := crossServiceMissing(rc, grantNothing(), false)
 
 	// Known ALB target → exactly one unconditional callback action.
 	if len(missing) != 1 {
@@ -68,7 +63,7 @@ func TestCrossServiceMissing_KnownAPIGatewayTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, denyAll{}, false)
+	missing := crossServiceMissing(rc, grantNothing(), false)
 	if len(missing) != 1 || missing[0].Action != "apigateway:SetWebACL" {
 		t.Fatalf("expected single apigateway:SetWebACL, got %+v", missing)
 	}
@@ -84,7 +79,7 @@ func TestCrossServiceMissing_UnknownTargetOverApproximates(t *testing.T) {
 		Change: "create",
 	}
 
-	missing := crossServiceMissing(rc, denyAll{}, false)
+	missing := crossServiceMissing(rc, grantNothing(), false)
 	if len(missing) < 2 {
 		t.Fatalf("expected multiple candidate callbacks when target unknown, got %+v", missing)
 	}
@@ -112,13 +107,13 @@ func TestCrossServiceMissing_CoveredByWildcard(t *testing.T) {
 	}
 
 	// elasticloadbalancing:* covers the callback → nothing missing.
-	missing := crossServiceMissing(rc, allowSet{"elasticloadbalancing:*": true}, false)
+	missing := crossServiceMissing(rc, grantActions("elasticloadbalancing:*"), false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by service wildcard, got %+v", missing)
 	}
 
 	// Exact action grant also covers it.
-	missing = crossServiceMissing(rc, allowSet{"elasticloadbalancing:SetWebACL": true}, false)
+	missing = crossServiceMissing(rc, grantActions("elasticloadbalancing:SetWebACL"), false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by exact action, got %+v", missing)
 	}
@@ -134,14 +129,14 @@ func TestCrossServiceMissing_KnownUnmappedTarget(t *testing.T) {
 			"resource_arn": "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_abc",
 		},
 	}
-	if missing := crossServiceMissing(rc, denyAll{}, false); len(missing) != 0 {
+	if missing := crossServiceMissing(rc, grantNothing(), false); len(missing) != 0 {
 		t.Errorf("expected no callback for unmapped target service, got %+v", missing)
 	}
 }
 
 func TestCrossServiceMissing_NonCallbackResource(t *testing.T) {
 	rc := &plan.ResourceChange{Type: "aws_s3_bucket", Name: "b", Change: "create"}
-	if missing := crossServiceMissing(rc, denyAll{}, false); missing != nil {
+	if missing := crossServiceMissing(rc, grantNothing(), false); missing != nil {
 		t.Errorf("expected nil for non-callback resource, got %+v", missing)
 	}
 }
@@ -166,7 +161,7 @@ func TestValidate_CrossServiceCallback(t *testing.T) {
 	}
 
 	// Policy grants every wafv2 action but nothing in elasticloadbalancing.
-	missing, err := Validate(changes, allowSet{"wafv2:*": true}, resolver, FilterConfig{})
+	missing, err := Validate(changes, grantActions("wafv2:*"), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +178,7 @@ func TestValidate_CrossServiceCallback_ExcludeConditional(t *testing.T) {
 	changes := []*plan.ResourceChange{
 		{Type: "aws_wafv2_web_acl_association", Name: "this", Change: "create"},
 	}
-	missing, err := Validate(changes, denyAll{}, resolver, FilterConfig{ExcludeConditional: true})
+	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{ExcludeConditional: true})
 	if err != nil {
 		t.Fatal(err)
 	}

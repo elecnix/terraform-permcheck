@@ -63,28 +63,30 @@ var crossServiceRules = map[string]crossServiceRule{
 // gated on the ARN attribute so the over-approximation can be suppressed with
 // --only-required.
 //
-// The callback acts on the target resource, but coverage is checked on the
-// action alone. With strict set, a callback the policy grants only on some
-// resources is returned as unverified.
-func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider, strict bool) []MissingAction {
+// The callback acts on the target resource, so a known target ARN scopes the
+// coverage check. With strict set and the target unknown, a callback the
+// policy grants only on some resources is returned as unverified.
+func crossServiceMissing(rc *plan.ResourceChange, policy *PolicyDocument, strict bool) []MissingAction {
 	rule, ok := crossServiceRules[rc.Type]
 	if !ok {
 		return nil
 	}
 
-	targetService := arnService(rc.AttributeValues[rule.arnAttribute])
+	targetARN := rc.AttributeValues[rule.arnAttribute]
+	targetService := arnService(targetARN)
+	var targets []string
+	if isARN(targetARN) {
+		targets = []string{targetARN}
+	}
 
 	var missing []MissingAction
 	for _, cb := range rule.callbacks {
 		if targetService != "" && cb.targetService != targetService {
 			continue
 		}
-		unverified := false
-		if coversAction(policy, cb.action) {
-			if !strict || !resourceScopeUnverified(policy, cb.action) {
-				continue
-			}
-			unverified = true
+		verdict := policy.Coverage(cb.action, targets, strict)
+		if verdict == Covered {
+			continue
 		}
 		condAttr := ""
 		if targetService == "" {
@@ -101,26 +103,10 @@ func crossServiceMissing(rc *plan.ResourceChange, policy AllowedProvider, strict
 			Class:              classTag(ClassManagement),
 			ConditionAttribute: condAttr,
 
-			ResourceScopeUnverified: unverified,
+			ResourceScopeUnverified: verdict == Unverified,
 		})
 	}
 	return missing
-}
-
-// coversAction reports whether the policy grants an action when the target
-// resource is unknown. A *PolicyDocument already matches every IAM wildcard
-// and applies Deny statements, so it answers alone: asking it again about
-// "service:*" would let an Allow on the service bypass a Deny on the action.
-// Other providers also get the service wildcard (service:*) check.
-func coversAction(policy AllowedProvider, action string) bool {
-	if doc, ok := policy.(*PolicyDocument); ok {
-		return doc.Covers(action)
-	}
-	if policy.Covers(action) {
-		return true
-	}
-	service := strings.Split(action, ":")[0]
-	return policy.Covers(service + ":*")
 }
 
 // arnService extracts the service prefix from an AWS ARN
