@@ -31,6 +31,12 @@ var targetRules = map[string]func(rc *plan.ResourceChange, all []*plan.ResourceC
 	"aws_secretsmanager_secret": secretTargetARNs,
 	// aws_sqs_queue is its own target; the queue name is the last ARN segment.
 	"aws_sqs_queue": sqsQueueTargetARNs,
+	// aws_cloudwatch_log_group is its own target; the group name carries into
+	// its ARN.
+	"aws_cloudwatch_log_group": logGroupTargetARNs,
+	// aws_cloudwatch_log_stream acts on the group named in log_group_name,
+	// either a known value or a reference to a managed log group.
+	"aws_cloudwatch_log_stream": logStreamTargetARNs,
 }
 
 // resourceTargetARNs returns the ARN patterns a resource change acts on,
@@ -65,7 +71,17 @@ func secretVersionTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange
 	}
 
 	var patterns []string
-	for _, ref := range rc.References["secret_id"] {
+	for _, name := range referencedNames(rc, all, "secret_id") {
+		patterns = append(patterns, secretARPattern(name))
+	}
+	return patterns
+}
+
+// referencedNames returns the configured name of each managed resource that
+// attribute attr of rc references, for those whose name is known in the plan.
+func referencedNames(rc *plan.ResourceChange, all []*plan.ResourceChange, attr string) []string {
+	var names []string
+	for _, ref := range rc.References[attr] {
 		resType, resName := targetFromReference(ref)
 		if resType == "" {
 			continue
@@ -82,11 +98,11 @@ func secretVersionTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange
 				continue
 			}
 			if name := c.AttributeValues["name"]; name != "" {
-				patterns = append(patterns, secretARPattern(name))
+				names = append(names, name)
 			}
 		}
 	}
-	return patterns
+	return names
 }
 
 // sqsQueueTargetARNs derives the ARN pattern of an SQS queue from its
@@ -97,6 +113,42 @@ func sqsQueueTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []str
 		return nil
 	}
 	return []string{"arn:*:sqs:*:*:" + name}
+}
+
+// logGroupTargetARNs derives the ARN patterns of a CloudWatch Logs group from
+// its configured name.
+func logGroupTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []string {
+	name := rc.AttributeValues["name"]
+	if name == "" {
+		return nil
+	}
+	return logGroupARNPatterns(name)
+}
+
+// logStreamTargetARNs derives the ARN patterns a CloudWatch Logs stream acts
+// on: its group, in both log-group forms, and the stream itself.
+func logStreamTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) []string {
+	stream := rc.AttributeValues["name"]
+	groups := referencedNames(rc, all, "log_group_name")
+	if group := rc.AttributeValues["log_group_name"]; group != "" {
+		groups = []string{group}
+	}
+	var patterns []string
+	for _, group := range groups {
+		patterns = append(patterns, logGroupARNPatterns(group)...)
+		if stream != "" {
+			patterns = append(patterns, "arn:*:logs:*:*:log-group:"+group+":log-stream:"+stream)
+		}
+	}
+	return patterns
+}
+
+// logGroupARNPatterns builds the two ARN forms of a log group named name.
+// IAM evaluates CreateLogGroup against log-group:<name>, and most other
+// log-group actions against log-group:<name>:*, so policies grant either.
+func logGroupARNPatterns(name string) []string {
+	arn := "arn:*:logs:*:*:log-group:" + name
+	return []string{arn, arn + ":*"}
 }
 
 // secretARPattern builds the ARN pattern for a secretsmanager secret named
@@ -142,16 +194,22 @@ func isARN(s string) bool {
 // provably applies to the whole target pattern and has no Condition. A Deny
 // that only overlaps the target, or whose Condition the tool cannot evaluate,
 // does not count: we only fail on provable non-coverage.
+//
+// A rule can list several ARN forms of one target, such as log-group:<name>
+// and log-group:<name>:*. An Allow Resource pattern with as many segments as
+// one of those forms is compared with the forms of that length only. Compared
+// with a form of another length, the overlap is undecidable and would always
+// count as coverage.
 func (d *PolicyDocument) CoversTarget(action string, targets []string) bool {
 	for _, t := range targets {
-		if d.coversOneTarget(action, t) {
+		if d.coversOneTarget(action, t, targets) {
 			return true
 		}
 	}
 	return false
 }
 
-func (d *PolicyDocument) coversOneTarget(action, target string) bool {
+func (d *PolicyDocument) coversOneTarget(action, target string, forms []string) bool {
 	allowed := false
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
@@ -163,12 +221,28 @@ func (d *PolicyDocument) coversOneTarget(action, target string) bool {
 				return false
 			}
 		case "Allow":
-			if s.mayApplyTo(target) {
+			if s.mayApplyTo(target, forms) {
 				allowed = true
 			}
 		}
 	}
 	return allowed
+}
+
+// targetsLike returns the targets with as many ARN segments as pattern, or
+// every target when none has that many.
+func targetsLike(pattern string, targets []string) []string {
+	n := strings.Count(pattern, ":")
+	var like []string
+	for _, t := range targets {
+		if strings.Count(t, ":") == n {
+			like = append(like, t)
+		}
+	}
+	if len(like) == 0 {
+		return targets
+	}
+	return like
 }
 
 // arnIntersect reports whether two ARN patterns can match a common ARN.

@@ -1,0 +1,76 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "resource_changes": [
+    {
+      "address": "aws_cloudwatch_log_group.x",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_group",
+      "name": "x",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "kms_key_id": null,
+          "log_group_class": "STANDARD",
+          "name": "/aws/kinesisfirehose/example-stream",
+          "retention_in_days": 400,
+          "skip_destroy": false,
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "name_prefix": true,
+          "tags_all": true
+        }
+      }
+    },
+    {
+      "address": "aws_cloudwatch_log_stream.y",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_stream",
+      "name": "y",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "log_group_name": "/aws/kinesisfirehose/example-stream",
+          "name": "delivery"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_cloudwatch_log_group.x",
+          "mode": "managed",
+          "type": "aws_cloudwatch_log_group",
+          "name": "x",
+          "expressions": {
+            "name": {"constant_value": "/aws/kinesisfirehose/example-stream"},
+            "retention_in_days": {"constant_value": 400}
+          }
+        },
+        {
+          "address": "aws_cloudwatch_log_stream.y",
+          "mode": "managed",
+          "type": "aws_cloudwatch_log_stream",
+          "name": "y",
+          "expressions": {
+            "log_group_name": {"references": ["aws_cloudwatch_log_group.x.name", "aws_cloudwatch_log_group.x"]},
+            "name": {"constant_value": "delivery"}
+          }
+        }
+      ]
+    }
+  }
+}

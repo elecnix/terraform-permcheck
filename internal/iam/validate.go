@@ -74,10 +74,6 @@ var s3OptionalPrefixes = []string{
 // classifyPermission categorizes a single IAM action string.
 func classifyPermission(action string) PermissionClass {
 	service := strings.Split(action, ":")[0]
-	verb := ""
-	if idx := strings.Index(action, ":"); idx >= 0 {
-		verb = action[idx+1:]
-	}
 
 	// Full-action patterns that are clearly data-plane
 	dataPlaneActions := map[string]bool{
@@ -101,6 +97,13 @@ func classifyPermission(action string) PermissionClass {
 		// SQS data-plane
 		"sqs:SendMessage": true, "sqs:ReceiveMessage": true,
 		"sqs:DeleteMessage": true, "sqs:ChangeMessageVisibility": true,
+		// CloudWatch Logs data-plane: writing, reading and querying log
+		// events. Creating a log stream is provisioning, since the provider
+		// calls it for aws_cloudwatch_log_stream.
+		"logs:PutLogEvents": true, "logs:GetLogEvents": true,
+		"logs:FilterLogEvents": true, "logs:GetLogRecord": true,
+		"logs:StartQuery": true, "logs:StopQuery": true,
+		"logs:GetQueryResults": true, "logs:StartLiveTail": true,
 	}
 
 	if dataPlaneActions[action] {
@@ -111,15 +114,9 @@ func classifyPermission(action string) PermissionClass {
 	dataPlaneServices := map[string]bool{
 		"s3tables":       true, // S3 Tables is a data-plane service
 		"backup-storage": true, // backup-storage is the AWS Backup data-plane
-		"logs":           true, // CloudWatch Logs data-plane (CreateLogStream, PutLogEvents)
 	}
 
 	if dataPlaneServices[service] {
-		// exceptions: logs management-plane operations
-		if strings.HasPrefix(verb, "CreateLogGroup") || strings.HasPrefix(verb, "DeleteLogGroup") ||
-			strings.HasPrefix(verb, "DescribeLogGroups") || strings.HasPrefix(verb, "PutRetentionPolicy") {
-			return ClassManagement
-		}
 		return ClassDataPlane
 	}
 

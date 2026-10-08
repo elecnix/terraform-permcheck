@@ -167,6 +167,16 @@ func TestClassifyPermission(t *testing.T) {
 		{"logs:DeleteLogGroup", ClassManagement},
 		{"logs:DescribeLogGroups", ClassManagement},
 		{"logs:PutRetentionPolicy", ClassManagement},
+		// Managing an aws_cloudwatch_log_stream or a log group's tags and KMS
+		// key is provisioning work (issue #54).
+		{"logs:CreateLogStream", ClassManagement},
+		{"logs:DeleteLogStream", ClassManagement},
+		{"logs:DescribeLogStreams", ClassManagement},
+		{"logs:TagResource", ClassManagement},
+		{"logs:UntagResource", ClassManagement},
+		{"logs:AssociateKmsKey", ClassManagement},
+		{"logs:DeleteRetentionPolicy", ClassManagement},
+		{"logs:PutSubscriptionFilter", ClassManagement},
 
 		// Data-plane
 		{"dynamodb:PutItem", ClassDataPlane},
@@ -180,8 +190,11 @@ func TestClassifyPermission(t *testing.T) {
 		{"kms:Decrypt", ClassDataPlane},
 		{"kinesis:PutRecords", ClassDataPlane},
 		{"sqs:SendMessage", ClassDataPlane},
-		{"logs:CreateLogStream", ClassDataPlane},
 		{"logs:PutLogEvents", ClassDataPlane},
+		{"logs:GetLogEvents", ClassDataPlane},
+		{"logs:FilterLogEvents", ClassDataPlane},
+		{"logs:StartQuery", ClassDataPlane},
+		{"logs:GetQueryResults", ClassDataPlane},
 		{"backup-storage:MountCapsule", ClassDataPlane},
 		{"s3tables:CreateTable", ClassDataPlane},
 
