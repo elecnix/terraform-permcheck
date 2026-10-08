@@ -80,7 +80,7 @@ func TestRun_PlanReportsMissingActions(t *testing.T) {
 	// kms:Decrypt is data-plane and dropped by the default filter.
 	want := []string{"aws_kms_key.create:kms:TagResource"}
 	if got := actions(res.Missing); !reflect.DeepEqual(got, want) {
-		t.Errorf("missing = %v, want %v", got, want)
+		t.Fatalf("missing = %v, want %v", got, want)
 	}
 	if res.Missing[0].ConditionAttribute != "tags" {
 		t.Errorf("ConditionAttribute = %q, want tags", res.Missing[0].ConditionAttribute)
