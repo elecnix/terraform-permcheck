@@ -18,174 +18,6 @@ const (
 	ClassOptional                    // actions for optional sub-resources (access policy, notifications, etc.)
 )
 
-// s3OptionalPrefixes lists the S3 bucket features that aws_s3_bucket only
-// configures when the matching attribute is set (website, cors, replication,
-// logging, tags, and so on). Each row is a prefix of an action name.
-//
-// Two name spaces reach classifyPermission, and they spell some actions
-// differently. The CloudFormation schema for AWS::S3::Bucket resolves
-// aws_s3_bucket when the provider checkout is unavailable. The provider-source
-// parser resolves the aws_s3_bucket_* sub-resources from their SDK calls. Where
-// the two disagree, both spellings are listed. Tests check every row against
-// golden copies of both under testdata/.
-var s3OptionalPrefixes = []string{
-	// Website, CORS, logging
-	"s3:PutBucketWebsite", "s3:GetBucketWebsite", "s3:DeleteBucketWebsite",
-	"s3:PutBucketCORS", "s3:GetBucketCORS", "s3:DeleteBucketCors",
-	"s3:PutBucketLogging", "s3:GetBucketLogging",
-	// Replication
-	"s3:PutBucketReplication", "s3:DeleteBucketReplication",
-	"s3:PutReplicationConfiguration", "s3:GetReplicationConfiguration",
-	// Transfer acceleration
-	"s3:PutAccelerateConfiguration", "s3:GetAccelerateConfiguration",
-	// Analytics, inventory, metrics, intelligent tiering
-	"s3:PutAnalyticsConfiguration", "s3:GetAnalyticsConfiguration",
-	"s3:DeleteBucketAnalyticsConfiguration",
-	"s3:PutInventoryConfiguration", "s3:GetInventoryConfiguration",
-	"s3:PutMetricsConfiguration", "s3:GetMetricsConfiguration",
-	"s3:DeleteBucketMetricsConfiguration",
-	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
-	// Object lock
-	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
-	"s3:PutObjectLockConfiguration",
-	// Server-side encryption
-	"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
-	"s3:DeleteBucketEncryption",
-	// Lifecycle
-	"s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration", "s3:DeleteBucketLifecycle",
-	// Notifications, versioning, ownership controls, public access block
-	"s3:PutBucketNotification", "s3:GetBucketNotification",
-	"s3:PutBucketVersioning", "s3:GetBucketVersioning",
-	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls",
-	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock",
-	// Tags
-	"s3:PutBucketTagging", "s3:GetBucketTagging",
-	"s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource",
-	// Bucket policy and requester pays
-	"s3:PutBucketPolicy", "s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
-	"s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment",
-	// Attribute-based access control
-	"s3:PutBucketAbac", "s3:GetBucketAbac",
-	// Metadata tables (Update covers the journal, inventory and annotation tables)
-	"s3:CreateBucketMetadataTableConfiguration", "s3:GetBucketMetadataTableConfiguration",
-	"s3:DeleteBucketMetadataTableConfiguration", "s3:UpdateBucketMetadata",
-}
-
-// classifyPermission categorizes a single IAM action string.
-func classifyPermission(action string) PermissionClass {
-	service := strings.Split(action, ":")[0]
-
-	// Full-action patterns that are clearly data-plane
-	dataPlaneActions := map[string]bool{
-		// DynamoDB data-plane
-		"dynamodb:PutItem": true, "dynamodb:GetItem": true, "dynamodb:UpdateItem": true,
-		"dynamodb:DeleteItem": true, "dynamodb:Query": true, "dynamodb:Scan": true,
-		"dynamodb:BatchWriteItem": true, "dynamodb:BatchGetItem": true,
-		// S3 object-level operations
-		"s3:GetObject": true, "s3:GetObjectMetadata": true,
-		"s3:PutObject": true, "s3:PutObjectAcl": true,
-		"s3:DeleteObject": true, "s3:AbortMultipartUpload": true,
-		// Listing the versions to delete when force_destroy empties a bucket
-		"s3:ListBucketVersions": true,
-		// KMS data-plane (encrypt/decrypt at object level)
-		"kms:Encrypt": true, "kms:Decrypt": true,
-		"kms:GenerateDataKey": true, "kms:GenerateDataKeyWithoutPlaintext": true,
-		"kms:ReEncryptFrom": true, "kms:ReEncryptTo": true,
-		// Kinesis data-plane
-		"kinesis:PutRecords": true, "kinesis:GetRecords": true,
-		"kinesis:DescribeStream": true,
-		// SQS data-plane
-		"sqs:SendMessage": true, "sqs:ReceiveMessage": true,
-		"sqs:DeleteMessage": true, "sqs:ChangeMessageVisibility": true,
-		// CloudWatch Logs data-plane: writing, reading and querying log
-		// events. Creating a log stream is provisioning, since the provider
-		// calls it for aws_cloudwatch_log_stream.
-		"logs:PutLogEvents": true, "logs:GetLogEvents": true,
-		"logs:FilterLogEvents": true, "logs:GetLogRecord": true,
-		"logs:StartQuery": true, "logs:StopQuery": true,
-		"logs:GetQueryResults": true, "logs:StartLiveTail": true,
-	}
-
-	if dataPlaneActions[action] {
-		return ClassDataPlane
-	}
-
-	// Service-level prefix checks for data-plane services
-	dataPlaneServices := map[string]bool{
-		"s3tables":       true, // S3 Tables is a data-plane service
-		"backup-storage": true, // backup-storage is the AWS Backup data-plane
-	}
-
-	if dataPlaneServices[service] {
-		return ClassDataPlane
-	}
-
-	// Optional sub-resource permissions — only needed when the terraform config
-	// sets the corresponding attribute block (access_policy, notifications, lock_configuration, etc.)
-	optionalActions := map[string]bool{
-		"backup:PutBackupVaultAccessPolicy":         true,
-		"backup:PutBackupVaultNotifications":        true,
-		"backup:PutBackupVaultLockConfiguration":    true,
-		"backup:DeleteBackupVaultAccessPolicy":      true,
-		"backup:DeleteBackupVaultNotifications":     true,
-		"backup:DeleteBackupVaultLockConfiguration": true,
-		"backup:GetBackupVaultAccessPolicy":         true,
-		"backup:GetBackupVaultNotifications":        true,
-	}
-
-	if optionalActions[action] {
-		return ClassOptional
-	}
-
-	for _, p := range s3OptionalPrefixes {
-		if strings.HasPrefix(action, p) {
-			return ClassOptional
-		}
-	}
-
-	// DynamoDB optional features (import/export, Kinesis streaming, contributor insights)
-	dynamoDBOptionalPrefixes := []string{
-		"dynamodb:ImportTable", "dynamodb:DescribeImport",
-		"dynamodb:EnableKinesisStreamingDestination", "dynamodb:DisableKinesisStreamingDestination",
-		"dynamodb:UpdateContributorInsights", "dynamodb:DescribeContributorInsights",
-		"dynamodb:GetResourcePolicy", "dynamodb:PutResourcePolicy",
-		"dynamodb:CreateTableReplica", "dynamodb:AssociateTableReplica",
-	}
-	for _, p := range dynamoDBOptionalPrefixes {
-		if strings.HasPrefix(action, p) {
-			return ClassOptional
-		}
-	}
-
-	// IAM policy sub-types that the deploy role doesn't manage
-	iamOptionalActions := map[string]bool{
-		"iam:GetUserPolicy": true, "iam:GetGroupPolicy": true,
-		"iam:PutUserPolicy": true, "iam:PutGroupPolicy": true,
-	}
-	if iamOptionalActions[action] {
-		return ClassOptional
-	}
-
-	// Secrets Manager optional
-	if action == "secretsmanager:GetRandomPassword" || action == "secretsmanager:ReplicateSecretToRegions" {
-		return ClassOptional
-	}
-
-	return ClassManagement
-}
-
-// classifyResourcePermission classifies an action for one resource type. An
-// S3 bucket feature is optional on aws_s3_bucket, which only configures it when
-// the matching attribute is set. A dedicated aws_s3_bucket_* resource exists to
-// configure that feature, so there the same action is required.
-func classifyResourcePermission(tfType, action string) PermissionClass {
-	class := classifyPermission(action)
-	if class == ClassOptional && strings.HasPrefix(tfType, "aws_s3_bucket_") && strings.HasPrefix(action, "s3:") {
-		return ClassManagement
-	}
-	return class
-}
-
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
 	ResourceType string // terraform resource type, e.g. "aws_backup_vault"
@@ -238,6 +70,11 @@ func DefaultFilter() FilterConfig {
 func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
+	inPlan := make(map[string]bool, len(changes))
+	for _, rc := range changes {
+		inPlan[rc.Type] = true
+	}
+
 	for _, rc := range changes {
 		schema, err := resolver.Resolve(rc.Type)
 		if err != nil {
@@ -254,7 +91,6 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 		for _, paths := range pathsByAction(required) {
 			action := paths.action
-			service := strings.Split(action, ":")[0]
 			// An action is needed when the gate of any path that reaches it
 			// holds. A gate holds when its presence test and its change test
 			// both pass. When the plan does not show presence (static HCL
@@ -265,6 +101,12 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 				continue
 			}
 
+			// A sub-resource in the plan that owns the action reports it.
+			d := decide(rc.Type, action, bestEffort, inPlan)
+			if d.absorbedBy != "" {
+				continue
+			}
+
 			// Action coverage, resource-scoped when the target ARN is derivable
 			// from the plan.
 			verdict := policy.Coverage(action, resourceTargetARNs(rc, changes), filter.StrictResources)
@@ -272,13 +114,8 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 				continue
 			}
 
-			// Classify and optionally filter
-			class := classifyResourcePermission(rc.Type, action)
-			// A call whose failure the provider ignores cannot fail the
-			// apply, so it is optional whatever its action.
-			if bestEffort && class == ClassManagement {
-				class = ClassOptional
-			}
+			// Filter by class
+			class := d.class
 			if filter.ExcludeDataPlane && class == ClassDataPlane {
 				continue
 			}
@@ -297,7 +134,7 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 				ResourceName:       rc.Name,
 				Change:             rc.Change,
 				Action:             action,
-				Service:            service,
+				Service:            actionService(action),
 				Class:              classTag(class),
 				ConditionAttribute: gateAttr,
 
@@ -318,9 +155,6 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 			missing = append(missing, m)
 		}
 	}
-
-	// Post-process: remove permissions absorbed by S3 sub-resource configs
-	missing = filterS3Subresources(missing, changes)
 
 	return missing, nil
 }

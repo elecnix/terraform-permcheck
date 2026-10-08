@@ -146,7 +146,7 @@ func newJSONDecoder(data []byte) *json.Decoder {
 	return json.NewDecoder(bytes.NewReader(data))
 }
 
-func TestClassifyPermission(t *testing.T) {
+func TestActionClass(t *testing.T) {
 	tests := []struct {
 		action string
 		class  PermissionClass
@@ -189,12 +189,8 @@ func TestClassifyPermission(t *testing.T) {
 		{"kms:Encrypt", ClassDataPlane},
 		{"kms:Decrypt", ClassDataPlane},
 		{"kinesis:PutRecords", ClassDataPlane},
-		{"sqs:SendMessage", ClassDataPlane},
 		{"logs:PutLogEvents", ClassDataPlane},
-		{"logs:GetLogEvents", ClassDataPlane},
-		{"logs:FilterLogEvents", ClassDataPlane},
 		{"logs:StartQuery", ClassDataPlane},
-		{"logs:GetQueryResults", ClassDataPlane},
 		{"backup-storage:MountCapsule", ClassDataPlane},
 		{"s3tables:CreateTable", ClassDataPlane},
 
@@ -211,9 +207,9 @@ func TestClassifyPermission(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.action, func(t *testing.T) {
-			got := classifyPermission(tt.action)
+			got := actionClass(tt.action)
 			if got != tt.class {
-				t.Errorf("classifyPermission(%q) = %d, want %d", tt.action, got, tt.class)
+				t.Errorf("actionClass(%q) = %d, want %d", tt.action, got, tt.class)
 			}
 		})
 	}

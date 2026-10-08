@@ -7,138 +7,95 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-func TestFilterS3Subresources(t *testing.T) {
-	changes := []*plan.ResourceChange{
-		{Type: "aws_s3_bucket", Name: "logs", Change: "create"},
-		{Type: "aws_s3_bucket_server_side_encryption_configuration", Name: "logs_enc", Change: "create"},
+// bucketMissing validates an aws_s3_bucket that needs actions, in a plan that
+// also changes the types in others, against an empty policy with no filter.
+// It returns the actions reported on the bucket and on other resources.
+func bucketMissing(t *testing.T, actions []string, others ...string) (bucket, rest []string) {
+	t.Helper()
+	resolver := typeKeyedResolver{
+		"aws_s3_bucket":    actionsSchema(map[string][]string{"create": actions}),
+		"aws_backup_vault": actionsSchema(map[string][]string{"create": {"backup:CreateBackupVault"}}),
 	}
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketVersioning", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:DeleteBucket", Service: "s3"},
+	changes := []*plan.ResourceChange{{Type: "aws_s3_bucket", Name: "logs", Change: "create"}}
+	for _, typ := range others {
+		changes = append(changes, &plan.ResourceChange{Type: typ, Name: "other", Change: "create"})
 	}
-
-	result := filterS3Subresources(missing, changes)
-
-	if len(result) != 3 {
-		t.Fatalf("expected 3 missing after filtering, got %d: %v", len(result), result)
+	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// s3:CreateBucket should remain (not absorbed)
-	if !hasAction(result, "s3:CreateBucket") {
-		t.Error("expected s3:CreateBucket to remain")
-	}
-	// s3:PutEncryptionConfiguration should be absorbed by the SSE config sub-resource
-	if hasAction(result, "s3:PutEncryptionConfiguration") {
-		t.Error("expected s3:PutEncryptionConfiguration to be filtered (absorbed by sub-resource)")
-	}
-	// s3:PutBucketVersioning should remain (no versioning sub-resource present)
-	if !hasAction(result, "s3:PutBucketVersioning") {
-		t.Error("expected s3:PutBucketVersioning to remain (no versioning sub-resource in plan)")
-	}
-	// s3:DeleteBucket should remain (not absorbed)
-	if !hasAction(result, "s3:DeleteBucket") {
-		t.Error("expected s3:DeleteBucket to remain")
-	}
-}
-
-func TestFilterS3Subresources_NoSubs(t *testing.T) {
-	// When no S3 sub-resources are present, nothing should be filtered
-	changes := []*plan.ResourceChange{
-		{Type: "aws_s3_bucket", Name: "logs", Change: "create"},
-		{Type: "aws_dynamodb_table", Name: "data", Change: "create"},
-	}
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-	}
-
-	result := filterS3Subresources(missing, changes)
-
-	if len(result) != 2 {
-		t.Fatalf("expected 2 missing (no subs present), got %d", len(result))
-	}
-}
-
-func TestFilterS3Subresources_MultipleSubs(t *testing.T) {
-	// Multiple sub-resources: each absorbs its own permissions
-	changes := []*plan.ResourceChange{
-		{Type: "aws_s3_bucket", Name: "logs", Change: "create"},
-		{Type: "aws_s3_bucket_server_side_encryption_configuration", Name: "logs_enc", Change: "create"},
-		{Type: "aws_s3_bucket_versioning", Name: "logs_ver", Change: "create"},
-		{Type: "aws_s3_bucket_logging", Name: "logs_log", Change: "create"},
-	}
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketVersioning", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketLogging", Service: "s3"},
-	}
-
-	result := filterS3Subresources(missing, changes)
-
-	if len(result) != 1 {
-		t.Fatalf("expected 1 missing after filtering all subs, got %d: %v", len(result), result)
-	}
-	if result[0].Action != "s3:CreateBucket" {
-		t.Errorf("expected only s3:CreateBucket to remain, got %s", result[0].Action)
-	}
-}
-
-func TestFilterS3Subresources_OnlyParent(t *testing.T) {
-	// When only aws_s3_bucket exists (no sub-resources), all its permissions should remain
-	changes := []*plan.ResourceChange{
-		{Type: "aws_s3_bucket", Name: "logs", Change: "create"},
-	}
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
-	}
-
-	result := filterS3Subresources(missing, changes)
-
-	if len(result) != 2 {
-		t.Fatalf("expected 2 missing (only parent, no subs), got %d", len(result))
-	}
-}
-
-func TestFilterS3Subresources_NonS3Unaffected(t *testing.T) {
-	// Non-S3 resources should not be affected by S3 sub-resource filtering
-	changes := []*plan.ResourceChange{
-		{Type: "aws_s3_bucket", Name: "logs", Change: "create"},
-		{Type: "aws_s3_bucket_server_side_encryption_configuration", Name: "logs_enc", Change: "create"},
-		{Type: "aws_backup_vault", Name: "main", Change: "create"},
-	}
-	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
-		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "backup:CreateBackupVault", Service: "backup"},
-	}
-
-	result := filterS3Subresources(missing, changes)
-
-	if len(result) != 1 {
-		t.Fatalf("expected 1 missing (s3 encryption absorbed, backup vault remains), got %d", len(result))
-	}
-	if result[0].Action != "backup:CreateBackupVault" {
-		t.Errorf("expected backup:CreateBackupVault to remain, got %s", result[0].Action)
-	}
-}
-
-func TestS3SubresourceAbsorbed(t *testing.T) {
-	// SSE config absorbs the encryption actions in both spellings: the
-	// schema's DeleteBucketEncryption and the IAM action it needs
-	absorbed := s3SubresourceAbsorbed("aws_s3_bucket_server_side_encryption_configuration")
-	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration", "s3:DeleteBucketEncryption"} {
-		if !absorbed[a] {
-			t.Errorf("expected %s to be absorbed, got %v", a, absorbed)
+	for _, m := range missing {
+		if m.ResourceType == "aws_s3_bucket" {
+			bucket = append(bucket, m.Action)
+		} else {
+			rest = append(rest, m.Action)
 		}
 	}
+	return bucket, rest
+}
 
-	// Unknown type returns nil
-	absorbed = s3SubresourceAbsorbed("aws_nonexistent")
-	if absorbed != nil {
-		t.Errorf("expected nil for unknown type, got %v", absorbed)
+func TestValidate_S3SubresourceAbsorbsItsActions(t *testing.T) {
+	bucket, _ := bucketMissing(t,
+		[]string{"s3:CreateBucket", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:DeleteBucket"},
+		"aws_s3_bucket_server_side_encryption_configuration")
+	// The encryption sub-resource takes over its action; versioning has no
+	// sub-resource in the plan, and the bucket's own actions stay.
+	want := []string{"s3:CreateBucket", "s3:PutBucketVersioning", "s3:DeleteBucket"}
+	if strings.Join(bucket, ",") != strings.Join(want, ",") {
+		t.Errorf("bucket actions = %v, want %v", bucket, want)
+	}
+}
+
+func TestValidate_S3AbsorptionNeedsTheSubresource(t *testing.T) {
+	bucket, _ := bucketMissing(t, []string{"s3:PutEncryptionConfiguration", "s3:CreateBucket"}, "aws_dynamodb_table")
+	if len(bucket) != 2 {
+		t.Errorf("bucket actions = %v, want both kept with no sub-resource in the plan", bucket)
+	}
+}
+
+func TestValidate_S3SubresourcesEachAbsorbTheirOwn(t *testing.T) {
+	bucket, _ := bucketMissing(t,
+		[]string{"s3:CreateBucket", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutBucketLogging"},
+		"aws_s3_bucket_server_side_encryption_configuration", "aws_s3_bucket_versioning", "aws_s3_bucket_logging")
+	if strings.Join(bucket, ",") != "s3:CreateBucket" {
+		t.Errorf("bucket actions = %v, want only s3:CreateBucket", bucket)
+	}
+}
+
+func TestValidate_S3AbsorptionLeavesOtherResources(t *testing.T) {
+	bucket, rest := bucketMissing(t, []string{"s3:PutEncryptionConfiguration"},
+		"aws_s3_bucket_server_side_encryption_configuration", "aws_backup_vault")
+	if len(bucket) != 0 {
+		t.Errorf("bucket actions = %v, want the encryption call absorbed", bucket)
+	}
+	if strings.Join(rest, ",") != "backup:CreateBackupVault" {
+		t.Errorf("other actions = %v, want backup:CreateBackupVault", rest)
+	}
+}
+
+// The parser emits PutBucketPolicy and the request payment calls for
+// aws_s3_bucket too. The sub-resource that makes the same call owns it.
+func TestValidate_S3PolicyAndRequestPaymentAbsorbed(t *testing.T) {
+	bucket, _ := bucketMissing(t,
+		[]string{"s3:CreateBucket", "s3:PutBucketPolicy", "s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment"},
+		"aws_s3_bucket_policy", "aws_s3_bucket_request_payment_configuration")
+	if strings.Join(bucket, ",") != "s3:CreateBucket" {
+		t.Errorf("bucket actions = %v, want only s3:CreateBucket", bucket)
+	}
+}
+
+// The encryption sub-resource absorbs the encryption calls in both spellings:
+// the schema's DeleteBucketEncryption and the IAM action it needs.
+func TestDecide_EncryptionSpellingsAbsorbed(t *testing.T) {
+	inPlan := map[string]bool{"aws_s3_bucket_server_side_encryption_configuration": true}
+	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration", "s3:DeleteBucketEncryption"} {
+		if got := decide("aws_s3_bucket", a, false, inPlan).absorbedBy; got == "" {
+			t.Errorf("decide(aws_s3_bucket, %s) not absorbed", a)
+		}
+	}
+	// Only aws_s3_bucket hands actions over.
+	if got := decide("aws_s3_bucket_versioning", "s3:PutEncryptionConfiguration", false, inPlan).absorbedBy; got != "" {
+		t.Errorf("decide on a sub-resource absorbed by %s", got)
 	}
 }
 

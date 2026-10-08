@@ -10,7 +10,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-// The two S3 name spaces that reach classifyPermission. The CloudFormation
+// The two S3 name spaces that reach the rules. The CloudFormation
 // registry resolves aws_s3_bucket when the provider checkout is unavailable,
 // and the provider-source parser resolves the aws_s3_bucket_* sub-resources.
 // Both fixtures are golden copies, so these tests stay hermetic.
@@ -110,58 +110,23 @@ func sortedKeys(set map[string]bool) []string {
 	return keys
 }
 
-func TestS3OptionalPrefixes_EveryRowClassifiesOptional(t *testing.T) {
-	for _, p := range s3OptionalPrefixes {
-		if got := classifyPermission(p); got != ClassOptional {
-			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", p, got)
+// subresourceTypes returns the types that own an S3 action.
+func subresourceTypes() []string {
+	set := make(map[string]bool)
+	for _, r := range rules {
+		if r.ownedBy != "" {
+			set[r.ownedBy] = true
 		}
 	}
+	return sortedKeys(set)
 }
 
-// The table matches by prefix, so a longer name that starts with a row is
-// optional too.
-func TestS3OptionalPrefixes_PrefixMatchesSuffix(t *testing.T) {
-	for _, p := range s3OptionalPrefixes {
-		if got := classifyPermission(p + "SomethingElse"); got != ClassOptional {
-			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", p+"SomethingElse", got)
-		}
-	}
-}
-
-// A row that matches no emitted name is a misspelling: it can never fire.
-func TestS3OptionalPrefixes_EveryRowMatchesAnEmittedName(t *testing.T) {
-	emitted := sortedKeys(emittedS3Actions(t))
-	for _, p := range s3OptionalPrefixes {
-		found := false
-		for _, a := range emitted {
-			if strings.HasPrefix(a, p) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("s3OptionalPrefixes row %q matches no action the schema or the parser emits", p)
-		}
-	}
-}
-
-// classifyPermission returns on the first row that matches, so a row another
-// row already covers is dead: it reads as coverage but can never be the reason
-// an action is optional.
-func TestS3OptionalPrefixes_NoRowIsShadowedByAnEarlierRow(t *testing.T) {
-	for i, p := range s3OptionalPrefixes {
-		first := ""
-		for _, q := range s3OptionalPrefixes {
-			if strings.HasPrefix(p, q) {
-				first = q
-				break
-			}
-		}
-		if first != p {
-			t.Errorf("s3OptionalPrefixes[%d] %q is shadowed by the earlier row %q", i, p, first)
-		}
-		if got := classifyPermission(p); got != ClassOptional {
-			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", p, got)
+// A rule matches its exact name only, so a longer name is not optional by
+// accident.
+func TestS3Rules_MatchExactNames(t *testing.T) {
+	for _, a := range []string{"s3:GetBucketPolicyStatus", "s3:PutBucketTaggingSomethingElse"} {
+		if got := actionClass(a); got != ClassManagement {
+			t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
 		}
 	}
 }
@@ -171,13 +136,13 @@ func TestS3OptionalPrefixes_NoRowIsShadowedByAnEarlierRow(t *testing.T) {
 func TestSchemaEmittedS3Actions_AreClassified(t *testing.T) {
 	for _, a := range sortedKeys(emittedS3Actions(t)) {
 		if s3RequiredActions[a] {
-			if got := classifyPermission(a); got != ClassManagement {
-				t.Errorf("classifyPermission(%q) = %d, want ClassManagement", a, got)
+			if got := actionClass(a); got != ClassManagement {
+				t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
 			}
 			continue
 		}
-		if got := classifyPermission(a); got != ClassOptional && got != ClassDataPlane {
-			t.Errorf("classifyPermission(%q) = %d, want ClassOptional or ClassDataPlane", a, got)
+		if got := actionClass(a); got != ClassOptional && got != ClassDataPlane {
+			t.Errorf("actionClass(%q) = %d, want ClassOptional or ClassDataPlane", a, got)
 		}
 	}
 }
@@ -197,9 +162,9 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 			if tfType == "aws_s3_bucket_object" {
 				continue
 			}
-			got := classifyResourcePermission(tfType, a)
+			got := decide(tfType, a, false, nil).class
 			if got != ClassManagement {
-				t.Errorf("classifyResourcePermission(%q, %q) = %s, want ClassManagement",
+				t.Errorf("decide(%q, %q).class = %s, want ClassManagement",
 					tfType, a, classTag(got))
 			}
 		}
@@ -207,16 +172,36 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 }
 
 // Absorption removes a parent action because a sub-resource owns it, so each
-// row must be a name the parent schema emits or that the sub-resource itself
-// emits (the parser's spelling of the same call).
-func TestS3SubresourcePermissions_EveryRowMatchesASchemaName(t *testing.T) {
+// owned name must be one the parent schema emits or that the sub-resource
+// itself emits (the parser's spelling of the same call).
+func TestS3OwnedRules_MatchASchemaName(t *testing.T) {
 	parent := actionSet(cfnS3BucketHandlers(t))
 	parser := parserS3BucketResources(t)
-	for subType, actions := range s3SubresourcePermissions {
-		own := actionSet(parser[subType])
-		for _, a := range actions {
-			if !parent[a] && !own[a] {
-				t.Errorf("s3SubresourcePermissions[%q] has %q, which neither the parent schema nor the sub-resource emits", subType, a)
+	for _, r := range rules {
+		if r.ownedBy == "" {
+			continue
+		}
+		if !parent[r.action] && !actionSet(parser[r.ownedBy])[r.action] {
+			t.Errorf("rule %q is owned by %s, but neither the parent schema nor the sub-resource emits it", r.action, r.ownedBy)
+		}
+	}
+}
+
+// A sub-resource that emits a bucket feature's action configures that
+// feature, so it owns the action: with the sub-resource in the plan,
+// aws_s3_bucket leaves the action to it.
+func TestS3OptionalRules_OwnedByTheSubresourceThatEmitsThem(t *testing.T) {
+	for tfType, perms := range parserS3BucketResources(t) {
+		if tfType == parserS3ParentFixtureID {
+			continue
+		}
+		for _, a := range sortedKeys(actionSet(perms)) {
+			r, ok := ruleIndex[a]
+			if !ok || r.class != ClassOptional {
+				continue
+			}
+			if r.ownedBy != tfType {
+				t.Errorf("%s emits %q, which is owned by %q", tfType, a, r.ownedBy)
 			}
 		}
 	}
@@ -276,7 +261,7 @@ func TestValidate_S3SubresourceKeepsItsOwnAction(t *testing.T) {
 func TestValidate_S3SubresourcesAbsorbParentSchemaNames(t *testing.T) {
 	resolver := typeKeyedResolver{"aws_s3_bucket": actionsSchema(cfnS3BucketHandlers(t))}
 	changes := []*plan.ResourceChange{{Type: "aws_s3_bucket", Name: "logs", Change: "update"}}
-	for subType := range s3SubresourcePermissions {
+	for _, subType := range subresourceTypes() {
 		changes = append(changes, &plan.ResourceChange{Type: subType, Name: "logs", Change: "update"})
 	}
 	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{})
