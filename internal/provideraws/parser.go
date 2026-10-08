@@ -497,45 +497,6 @@ func extractGuardAttribute(expr ast.Expr) condGuard {
 	return condGuard{Attribute: strings.Trim(bl.Value, "\""), Kind: kind}
 }
 
-// extractGetOkAttribute checks if an expression is d.GetOk("attr") or
-// d.Get("attr") and returns the attribute name. It is the presence-only reader
-// the value-guard helpers use; extractGuardAttribute above performs the same
-// inspection but also reports which kind of gate the call applies.
-func extractGetOkAttribute(expr ast.Node) string {
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		return ""
-	}
-
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return ""
-	}
-
-	// Must be a method call on something named "d"
-	ident, ok := sel.X.(*ast.Ident)
-	if !ok || ident.Name != "d" {
-		return ""
-	}
-
-	// Method must be GetOk or Get
-	if sel.Sel.Name != "GetOk" && sel.Sel.Name != "Get" {
-		return ""
-	}
-
-	// First argument must be a string literal
-	if len(call.Args) < 1 {
-		return ""
-	}
-
-	bl, ok := call.Args[0].(*ast.BasicLit)
-	if !ok || bl.Kind != token.STRING {
-		return ""
-	}
-
-	return strings.Trim(bl.Value, "\"")
-}
-
 // unwrapExpr strips parentheses from an expression, so a guard written as
 // `(d.HasChange("attr"))` is recognized. It does not strip a negation: the body
 // of `if !d.HasChange("attr")` runs when the attribute did NOT change, so
@@ -902,6 +863,11 @@ func s3SDKMethodNormalization(original string) string {
 		"PutBucketTagging":                   "PutBucketTagging",
 		"GetBucketTagging":                   "GetBucketTagging",
 		"DeleteBucketTagging":                "DeleteBucketTagging",
+		// The encryption calls name the operation, not the resource, so S3
+		// spells them ...EncryptionConfiguration in IAM.
+		"GetBucketEncryption":    "GetEncryptionConfiguration",
+		"PutBucketEncryption":    "PutEncryptionConfiguration",
+		"DeleteBucketEncryption": "DeleteEncryptionConfiguration",
 	}
 	if canonical, ok := s3Names[original]; ok {
 		return canonical
@@ -1263,4 +1229,43 @@ func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]Extrac
 	}
 
 	return resolved
+}
+
+// extractGetOkAttribute checks if an expression is d.GetOk("attr") or
+// d.Get("attr") and returns the attribute name. It is the presence-only reader
+// the value-guard helpers use; extractGuardAttribute performs the same
+// inspection but also reports which kind of gate the call applies.
+func extractGetOkAttribute(expr ast.Node) string {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+
+	// Must be a method call on something named "d"
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok || ident.Name != "d" {
+		return ""
+	}
+
+	// Method must be GetOk or Get
+	if sel.Sel.Name != "GetOk" && sel.Sel.Name != "Get" {
+		return ""
+	}
+
+	// First argument must be a string literal
+	if len(call.Args) < 1 {
+		return ""
+	}
+
+	bl, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || bl.Kind != token.STRING {
+		return ""
+	}
+
+	return strings.Trim(bl.Value, "\"")
 }

@@ -11,7 +11,7 @@ import "github.com/elecnix/terraform-permcheck/internal/plan"
 // aws_s3_bucket_server_side_encryption_configuration appear in the same plan.
 var s3SubresourcePermissions = map[string][]string{
 	"aws_s3_bucket_server_side_encryption_configuration": {
-		"s3:PutBucketEncryption",
+		"s3:PutEncryptionConfiguration",
 	},
 	"aws_s3_bucket_versioning": {
 		"s3:PutBucketVersioning",
