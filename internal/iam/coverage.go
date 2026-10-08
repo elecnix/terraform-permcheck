@@ -5,10 +5,10 @@ import "strings"
 // Coverage.
 //
 // Every check of the form "does the policy grant this action for this
-// resource change?" goes through Coverage: the schema actions in Validate,
-// cross-service callbacks, and iam:PassRole. Each caller derives the target
-// ARN patterns its action acts on, or passes none when the plan does not show
-// them. Coverage then applies one rule set, so the callers cannot drift apart.
+// resource change?" goes through Coverage: each requirement Validate checks,
+// schema and implied alike, and each declared need. A requirement carries the
+// target ARN patterns its action acts on, or none when the plan does not show
+// them. Coverage then applies one rule set, so the checks cannot drift apart.
 
 // Verdict is the answer to one coverage question.
 type Verdict int

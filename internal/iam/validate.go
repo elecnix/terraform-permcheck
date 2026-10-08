@@ -93,6 +93,10 @@ func DefaultFilter() FilterConfig {
 // referencing it can derive its target. A change whose type the resolver
 // does not know becomes an Unresolved finding. A lookup that fails with ErrLookupFailed stops validation with
 // that error, since the tool cannot say whether the type is covered.
+//
+// Each change's requirements are the schema's requirements for its operation
+// plus the ones AWS implies (see impliedRequirements). checkChange decides
+// each of them the same way.
 func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
@@ -112,92 +116,96 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 		if errors.Is(err, ErrLookupFailed) {
 			return nil, err
 		}
+		var reqs []Requirement
 		if err != nil {
-			missing = append(missing, MissingAction{
-				ModuleAddress: rc.ModuleAddress,
-				ResourceType:  rc.Type,
-				ResourceName:  rc.InstanceName(),
-				Change:        rc.Change,
-				Unresolved:    true,
-			})
-			continue
+			missing = append(missing, MissingAction{Unresolved: true}.on(rc))
+		} else {
+			reqs = operationRequirements(schema, rc.Change)
 		}
-
-		required, ok := schema.Requirements(rc.Change)
-		if !ok {
-			required, ok = schema.Requirements("create")
-		}
-		if !ok {
-			continue
-		}
-		dedicated := isDedicated(schema)
-
-		for _, paths := range pathsByAction(required) {
-			action := paths.action
-			// An action is needed when the gate of any path that reaches it
-			// holds. A gate holds when its presence test and its change test
-			// both pass. When the plan does not show presence (static HCL
-			// mode) or change (static mode, or a delete with no planned
-			// state), that test passes, so the permission is kept.
-			needed, gateAttr, bestEffort := evaluateGates(paths.gates, rc)
-			if !needed {
-				continue
-			}
-
-			// A sub-resource in the plan that owns the action reports it.
-			d := decide(rc.Type, action, bestEffort, dedicated, inPlan)
-			if d.absorbedBy != "" {
-				continue
-			}
-
-			// Action coverage, resource-scoped when the target ARN is derivable
-			// from the plan.
-			verdict := policy.worstVerdict(action, resourceTargets(rc, set), filter.StrictResources)
-			if verdict == Covered {
-				continue
-			}
-
-			// Filter by class
-			class := d.class
-			if filter.ExcludeDataPlane && class == classDataPlane {
-				continue
-			}
-			if filter.ExcludeOptional && class == classOptional {
-				continue
-			}
-			if filter.ExcludeConditional && gateAttr != "" {
-				continue
-			}
-
-			missing = append(missing, MissingAction{
-				ModuleAddress:      rc.ModuleAddress,
-				ResourceType:       rc.Type,
-				ResourceName:       rc.InstanceName(),
-				Change:             rc.Change,
-				Action:             action,
-				Service:            actionService(action),
-				Class:              classTag(class),
-				ConditionAttribute: gateAttr,
-
-				ResourceScopeUnverified: verdict == Unverified,
-			})
-		}
-	}
-
-	// Cross-service callback permissions: actions in a different service that
-	// AWS invokes at apply time (e.g. elasticloadbalancing:SetWebACL for an
-	// aws_wafv2_web_acl_association targeting an ALB). These are invisible to
-	// schema/source resolution, so they're checked separately here.
-	for _, rc := range checked {
-		for _, m := range append(crossServiceMissing(rc, policy, filter.StrictResources), passRoleMissing(rc, policy, set, filter.StrictResources)...) {
-			if filter.ExcludeConditional && m.ConditionAttribute != "" {
-				continue
-			}
-			missing = append(missing, m)
-		}
+		paths := append(withTargets(reqs, resourceTargets(rc, set)), impliedRequirements(rc, set)...)
+		missing = append(missing, checkChange(rc, paths, policy, isDedicated(schema), inPlan, filter)...)
 	}
 
 	return missing, nil
+}
+
+// operationRequirements returns the schema's requirements for op, or for
+// create when the schema does not know op.
+func operationRequirements(schema Schema, op string) []Requirement {
+	if reqs, ok := schema.Requirements(op); ok {
+		return reqs
+	}
+	reqs, _ := schema.Requirements("create")
+	return reqs
+}
+
+// checkChange returns a finding for each action of reqs that resource change
+// rc needs and the policy does not grant, after the filter. dedicated and
+// inPlan feed decide.
+func checkChange(rc *plan.ResourceChange, reqs []targeted, policy *PolicyDocument, dedicated bool, inPlan map[string]bool, filter FilterConfig) []MissingAction {
+	var missing []MissingAction
+	for _, paths := range pathsByAction(reqs) {
+		action := paths.action
+		// An action is needed when the gate of any path that reaches it
+		// holds. A gate holds when its presence test and its change test
+		// both pass. When the plan does not show presence (static HCL
+		// mode) or change (static mode, or a delete with no planned
+		// state), that test passes, so the permission is kept.
+		needed, gateAttr, bestEffort := evaluateGates(paths.gates(), rc)
+		if !needed {
+			continue
+		}
+
+		// A sub-resource in the plan that owns the action reports it.
+		d := decide(rc.Type, action, bestEffort, dedicated, inPlan)
+		if d.absorbedBy != "" {
+			continue
+		}
+
+		// Action coverage, resource-scoped when the target ARN is derivable
+		// from the plan.
+		verdict := paths.verdict(rc, policy, filter.StrictResources)
+		if verdict == Covered {
+			continue
+		}
+
+		// Filter by class
+		class := d.class
+		if filter.ExcludeDataPlane && class == classDataPlane {
+			continue
+		}
+		if filter.ExcludeOptional && class == classOptional {
+			continue
+		}
+		if filter.ExcludeConditional && gateAttr != "" {
+			continue
+		}
+
+		m := newFinding(action, class, verdict).on(rc)
+		m.ConditionAttribute = gateAttr
+		missing = append(missing, m)
+	}
+	return missing
+}
+
+// newFinding returns the finding that the policy does not grant action, of
+// class class. A verdict of Unverified marks it unverified.
+func newFinding(action string, class permissionClass, verdict Verdict) MissingAction {
+	return MissingAction{
+		Action:                  action,
+		Service:                 actionService(action),
+		Class:                   classTag(class),
+		ResourceScopeUnverified: verdict == Unverified,
+	}
+}
+
+// on returns m as a finding on resource change rc.
+func (m MissingAction) on(rc *plan.ResourceChange) MissingAction {
+	m.ModuleAddress = rc.ModuleAddress
+	m.ResourceType = rc.Type
+	m.ResourceName = rc.InstanceName()
+	m.Change = rc.Change
+	return m
 }
 
 // gateAttribute names the attributes gating an action, for the

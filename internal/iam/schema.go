@@ -57,26 +57,3 @@ var ErrUnknownType = errors.New("resource type unknown to every schema source")
 // such as a network failure, an HTTP 5xx or a timeout. The type may exist,
 // so Validate stops with the error rather than report it as unknown.
 var ErrLookupFailed = errors.New("schema lookup failed")
-
-// actionPaths is an action with the gates of every path that reaches it.
-type actionPaths struct {
-	action string
-	gates  []Gate
-}
-
-// pathsByAction groups requirements by action, in the order each action first
-// appears.
-func pathsByAction(reqs []Requirement) []actionPaths {
-	var out []actionPaths
-	index := make(map[string]int, len(reqs))
-	for _, r := range reqs {
-		i, ok := index[r.Action]
-		if !ok {
-			i = len(out)
-			index[r.Action] = i
-			out = append(out, actionPaths{action: r.Action})
-		}
-		out[i].gates = append(out[i].gates, r.Gate)
-	}
-	return out
-}

@@ -173,11 +173,18 @@ provider source, so PermCheck adds them explicitly:
 
 - When the target's `resource_arn` is a known ARN, only the callback for that
   ARN's service is required.
-- When `resource_arn` is computed at apply time (it references a resource
-  created in the same plan) or you're in static HCL mode, PermCheck can't tell
-  which target applies, so it over-approximates and reports every candidate
-  callback tagged `[conditional: resource_arn]`. Use `--only-required` to
-  suppress that over-approximation.
+- When terraform computes `resource_arn` at apply time from a reference such
+  as `aws_lb.web.arn`, PermCheck reads the target's service from the
+  referenced type. It accepts `aws_lb`, `aws_alb`, `aws_api_gateway_stage`,
+  `aws_appsync_graphql_api`, `aws_cognito_user_pool`, `aws_apprunner_service`
+  and `aws_verifiedaccess_instance`, as resources or data sources. It then
+  requires only the callback for that service. Cognito, App Runner and Verified
+  Access have no callback in PermCheck's table yet, so they require none.
+- When the reference does not tell the type (a variable or a module output,
+  say) or you're in static HCL mode, PermCheck can't tell which target
+  applies. It over-approximates and reports every candidate callback tagged
+  `[conditional: resource_arn]`. Use `--only-required` to suppress that
+  over-approximation.
 
 ### Resource-scoped grants
 
@@ -206,7 +213,9 @@ rather than only the action name:
   with a known `name`.
 - PermCheck checks cross-service callbacks, such as
   `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
-  `aws_wafv2_web_acl_association` when that value is a literal ARN.
+  `aws_wafv2_web_acl_association`. The target is a literal ARN, or the
+  referenced resource's ARN: its known `arn`, the `name` of an `aws_lb`, or
+  the `rest_api_id` and `stage_name` of an `aws_api_gateway_stage`.
 
 A grant whose `Resource` provably cannot apply to the target is reported
 missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).

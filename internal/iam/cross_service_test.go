@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -35,7 +36,7 @@ func TestCrossServiceMissing_KnownALBTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 
 	// Known ALB target → exactly one unconditional callback action.
 	if len(missing) != 1 {
@@ -63,7 +64,7 @@ func TestCrossServiceMissing_KnownAPIGatewayTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 	if len(missing) != 1 || missing[0].Action != "apigateway:SetWebACL" {
 		t.Fatalf("expected single apigateway:SetWebACL, got %+v", missing)
 	}
@@ -79,7 +80,7 @@ func TestCrossServiceMissing_UnknownTargetOverApproximates(t *testing.T) {
 		Change: "create",
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 	if len(missing) < 2 {
 		t.Fatalf("expected multiple candidate callbacks when target unknown, got %+v", missing)
 	}
@@ -107,13 +108,13 @@ func TestCrossServiceMissing_CoveredByWildcard(t *testing.T) {
 	}
 
 	// elasticloadbalancing:* covers the callback → nothing missing.
-	missing := crossServiceMissing(rc, grantActions("elasticloadbalancing:*"), false)
+	missing := impliedMissing(rc, grantActions("elasticloadbalancing:*"), nil, false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by service wildcard, got %+v", missing)
 	}
 
 	// Exact action grant also covers it.
-	missing = crossServiceMissing(rc, grantActions("elasticloadbalancing:SetWebACL"), false)
+	missing = impliedMissing(rc, grantActions("elasticloadbalancing:SetWebACL"), nil, false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by exact action, got %+v", missing)
 	}
@@ -129,14 +130,14 @@ func TestCrossServiceMissing_KnownUnmappedTarget(t *testing.T) {
 			"resource_arn": "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_abc",
 		},
 	}
-	if missing := crossServiceMissing(rc, grantNothing(), false); len(missing) != 0 {
+	if missing := impliedMissing(rc, grantNothing(), nil, false); len(missing) != 0 {
 		t.Errorf("expected no callback for unmapped target service, got %+v", missing)
 	}
 }
 
 func TestCrossServiceMissing_NonCallbackResource(t *testing.T) {
 	rc := &plan.ResourceChange{Type: "aws_s3_bucket", Name: "b", Change: "create"}
-	if missing := crossServiceMissing(rc, grantNothing(), false); missing != nil {
+	if missing := impliedMissing(rc, grantNothing(), nil, false); missing != nil {
 		t.Errorf("expected nil for non-callback resource, got %+v", missing)
 	}
 }
@@ -184,5 +185,96 @@ func TestValidate_CrossServiceCallback_ExcludeConditional(t *testing.T) {
 	}
 	if hasAction(missing, "elasticloadbalancing:SetWebACL") {
 		t.Errorf("ExcludeConditional should drop over-approximated callbacks, got %+v", missing)
+	}
+}
+
+// TestValidate_CrossServiceReferencedTarget checks that a resource_arn the
+// plan computes at apply time still selects one callback when the
+// configuration references the target resource. An ALB's ARN is unknown until
+// it exists, but the reference names the ALB, so only
+// elasticloadbalancing:SetWebACL applies.
+func TestValidate_CrossServiceReferencedTarget(t *testing.T) {
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"wafv2:AssociateWebACL"}})}
+	association := func(refs ...string) *plan.ResourceChange {
+		return &plan.ResourceChange{
+			Type: "aws_wafv2_web_acl_association", Name: "this", Change: "create",
+			AttributeValues: map[string]string{},
+			References:      map[string][]string{"resource_arn": refs},
+		}
+	}
+	lb := &plan.ResourceChange{
+		Type: "aws_lb", Name: "web", Change: "create",
+		AttributeValues: map[string]string{"name": "example-web"},
+	}
+
+	cases := []struct {
+		name    string
+		changes []*plan.ResourceChange
+		want    []string
+	}{
+		{"managed ALB", []*plan.ResourceChange{lb, association("aws_lb.web.arn", "aws_lb.web")}, []string{"elasticloadbalancing:SetWebACL"}},
+		{"aws_alb alias", []*plan.ResourceChange{association("aws_alb.web.arn", "aws_alb.web")}, []string{"elasticloadbalancing:SetWebACL"}},
+		{"ALB data source", []*plan.ResourceChange{association("data.aws_lb.web.arn", "data.aws_lb.web")}, []string{"elasticloadbalancing:SetWebACL"}},
+		{"REST API stage", []*plan.ResourceChange{association("aws_api_gateway_stage.prod.arn", "aws_api_gateway_stage.prod")}, []string{"apigateway:SetWebACL"}},
+		{"GraphQL API", []*plan.ResourceChange{association("aws_appsync_graphql_api.api.arn", "aws_appsync_graphql_api.api")}, []string{"appsync:SetWebACL"}},
+		{"Cognito user pool", []*plan.ResourceChange{association("aws_cognito_user_pool.pool.arn", "aws_cognito_user_pool.pool")}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			missing, err := Validate(c.changes, grantActions("wafv2:*"), resolver, FilterConfig{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, m := range missing {
+				got = append(got, m.Action)
+				if m.ConditionAttribute != "" {
+					t.Errorf("%s: a referenced target makes the callback unconditional, got gate %q", m.Action, m.ConditionAttribute)
+				}
+			}
+			if strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestValidate_CrossServiceReferencedALBScope checks that a planned ALB's
+// name scopes the callback: a grant on another load balancer does not cover
+// it, and a grant on this one does.
+func TestValidate_CrossServiceReferencedALBScope(t *testing.T) {
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"wafv2:AssociateWebACL"}})}
+	changes := []*plan.ResourceChange{
+		{
+			Type: "aws_lb", Name: "web", Change: "create",
+			AttributeValues: map[string]string{"name": "example-web"},
+		},
+		{
+			Type: "aws_wafv2_web_acl_association", Name: "this", Change: "create",
+			AttributeValues: map[string]string{},
+			References:      map[string][]string{"resource_arn": {"aws_lb.web.arn", "aws_lb.web"}},
+		},
+	}
+	grant := func(resource string) *PolicyDocument {
+		return &PolicyDocument{Statements: []Statement{
+			{Effect: "Allow", Action: []string{"wafv2:*"}, Resource: []string{"*"}},
+			{Effect: "Allow", Action: []string{"elasticloadbalancing:SetWebACL"}, Resource: []string{resource}},
+		}}
+	}
+
+	missing, err := Validate(changes, grant("arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/example-other/*"), resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "elasticloadbalancing:SetWebACL") {
+		t.Errorf("a grant on another load balancer must not cover, got %+v", missing)
+	}
+
+	missing, err = Validate(changes, grant("arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/example-web/*"), resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Errorf("a grant on the referenced load balancer must cover, got %+v", missing)
 	}
 }

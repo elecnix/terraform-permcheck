@@ -109,6 +109,16 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			present: []string{"aws_secretsmanager_secret.s secretsmanager:CreateSecret"},
 		},
 		{
+			// A web ACL association whose resource_arn references an ALB
+			// needs the load balancer callback only. The ARN is unknown at
+			// plan time, but the reference names the target type.
+			name: "callback of a referenced target", plan: "waf_alb_plan.json", policy: "waf_alb_policy.json",
+			absent: []string{
+				"aws_wafv2_web_acl_association.this apigateway:SetWebACL",
+				"aws_wafv2_web_acl_association.this appsync:SetWebACL",
+			},
+		},
+		{
 			// A PassRole grant on role/myapp does not reach the role app.
 			name: "role ARN from path and name", plan: "passrole_name_plan.json", policy: "passrole_name_policy.json",
 			present: []string{"aws_lambda_function.f iam:PassRole"},

@@ -1,0 +1,5 @@
+{"resource_changes":[
+{"address":"aws_lb.web","mode":"managed","type":"aws_lb","name":"web","change":{"actions":["create"],"before":null,"after":{"name":"web","load_balancer_type":"application"},"after_unknown":{"arn":true}}},
+{"address":"aws_wafv2_web_acl_association.this","mode":"managed","type":"aws_wafv2_web_acl_association","name":"this","change":{"actions":["create"],"before":null,"after":{"resource_arn":null,"web_acl_arn":"arn:aws:wafv2:us-east-1:111111111111:regional/webacl/acl/abc"},"after_unknown":{"resource_arn":true}}}
+],
+"configuration":{"root_module":{"resources":[{"address":"aws_wafv2_web_acl_association.this","mode":"managed","type":"aws_wafv2_web_acl_association","name":"this","expressions":{"resource_arn":{"references":["aws_lb.web.arn","aws_lb.web"]},"web_acl_arn":{"constant_value":"arn:aws:wafv2:us-east-1:111111111111:regional/webacl/acl/abc"}}}]}}}

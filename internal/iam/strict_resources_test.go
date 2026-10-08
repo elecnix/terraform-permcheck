@@ -153,10 +153,10 @@ func TestPassRoleMissing_StrictUnknownRole(t *testing.T) {
 		References: map[string][]string{"role": {"data.aws_iam_role.app.arn", "data.aws_iam_role.app"}},
 	}
 
-	if m := passRoleMissing(rc, policy, nil, false); len(m) != 0 {
+	if m := impliedMissing(rc, policy, nil, false); len(m) != 0 {
 		t.Errorf("without strict mode an unknown role is skipped, got %+v", m)
 	}
-	m := passRoleMissing(rc, policy, nil, true)
+	m := impliedMissing(rc, policy, nil, true)
 	if len(m) != 1 || !m[0].ResourceScopeUnverified || m[0].Action != "iam:PassRole" {
 		t.Errorf("strict mode must report PassRole unverified, got %+v", m)
 	}
@@ -166,12 +166,12 @@ func TestPassRoleMissing_StrictUnknownRole(t *testing.T) {
 		Type: "aws_ecs_task_definition", Name: "td", Change: "create",
 		Attributes: map[string]bool{"family": true},
 	}
-	if m := passRoleMissing(unset, policy, nil, true); len(m) != 0 {
+	if m := impliedMissing(unset, policy, nil, true); len(m) != 0 {
 		t.Errorf("an unset role attribute needs no PassRole, got %+v", m)
 	}
 
 	star := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"*"}]}`)
-	if m := passRoleMissing(rc, star, nil, true); len(m) != 0 {
+	if m := impliedMissing(rc, star, nil, true); len(m) != 0 {
 		t.Errorf("a PassRole grant on every role covers, got %+v", m)
 	}
 }
@@ -182,11 +182,11 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 
 	// The target is unknown, so the scoped grant may apply.
 	unknown := &plan.ResourceChange{Type: "aws_wafv2_web_acl_association", Name: "a", Change: "create"}
-	if hasAction(crossServiceMissing(unknown, policy, false), "elasticloadbalancing:SetWebACL") {
+	if hasAction(impliedMissing(unknown, policy, nil, false), "elasticloadbalancing:SetWebACL") {
 		t.Error("without strict mode the scoped grant covers a callback on an unknown target")
 	}
 	var found bool
-	for _, m := range crossServiceMissing(unknown, policy, true) {
+	for _, m := range impliedMissing(unknown, policy, nil, true) {
 		if m.Action == "elasticloadbalancing:SetWebACL" {
 			found = true
 			if !m.ResourceScopeUnverified {
@@ -205,7 +205,7 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 		AttributeValues: map[string]string{"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/web/1"},
 	}
 	for _, strict := range []bool{false, true} {
-		m := crossServiceMissing(known, policy, strict)
+		m := impliedMissing(known, policy, nil, strict)
 		if len(m) != 1 || m[0].ResourceScopeUnverified {
 			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
 		}
