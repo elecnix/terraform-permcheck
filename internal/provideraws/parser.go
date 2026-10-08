@@ -13,6 +13,8 @@ import (
 	"go/token"
 	"sort"
 	"strings"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // ConditionKind says what a gated SDK call needs from its gating attribute.
@@ -50,6 +52,81 @@ type ExtractedAction struct {
 	// discards the error, or makes the call only on the path that handles an
 	// earlier failure. A denied best-effort call does not fail the apply.
 	BestEffort bool
+
+	// Gates lists every path when the action is reached on more than one with
+	// different gates. The action is needed when any gate holds. The fields
+	// above then describe no single path: Conditional is true and the rest
+	// are zero.
+	Gates []iam.Gate
+}
+
+// paths returns the gate of each path that reaches the action.
+func (ea ExtractedAction) paths() []iam.Gate {
+	if len(ea.Gates) > 0 {
+		return ea.Gates
+	}
+	g := iam.Gate{BestEffort: ea.BestEffort}
+	if ea.Conditional && ea.Condition != "" {
+		if ea.ConditionKind == ConditionChange {
+			g.Changed = ea.Condition
+		} else {
+			g.Attribute = ea.Condition
+			g.ValueGuarded = ea.ValueGuarded
+		}
+	}
+	return []iam.Gate{g}
+}
+
+// withPaths returns the action reached on the given paths. A path with no
+// gate whose failure counts makes the action required whatever the others
+// say. One distinct path sets the single-path fields, and several set Gates.
+func withPaths(action string, paths []iam.Gate) ExtractedAction {
+	distinct := essentialGates(paths)
+	if len(distinct) > 1 {
+		return ExtractedAction{Action: action, Conditional: true, Gates: distinct}
+	}
+	g := distinct[0]
+	ea := ExtractedAction{Action: action, BestEffort: g.BestEffort}
+	switch {
+	case g.Attribute != "":
+		ea.Conditional, ea.Condition, ea.ConditionKind = true, g.Attribute, ConditionPresence
+		ea.ValueGuarded = g.ValueGuarded
+	case g.Changed != "":
+		ea.Conditional, ea.Condition, ea.ConditionKind = true, g.Changed, ConditionChange
+	}
+	return ea
+}
+
+// essentialGates drops the repeated paths and the paths another one
+// subsumes. A path with no gate runs whenever a gated path runs, so it
+// subsumes every gated path that is best-effort when it is.
+func essentialGates(paths []iam.Gate) []iam.Gate {
+	var always *iam.Gate
+	for i, g := range paths {
+		if g.Ungated() && (always == nil || !g.BestEffort) {
+			always = &paths[i]
+		}
+	}
+	var out []iam.Gate
+	for _, g := range paths {
+		if always != nil && (!always.BestEffort || g.BestEffort) && g != *always {
+			continue
+		}
+		if !containsGate(out, g) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// containsGate reports whether gates already lists g.
+func containsGate(gates []iam.Gate, g iam.Gate) bool {
+	for _, h := range gates {
+		if h == g {
+			return true
+		}
+	}
+	return false
 }
 
 // discardKind says how a call site drops the error its callee returns.
@@ -547,15 +624,20 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 		bestEffort := hc.BestEffort || hc.Discard == discardAlways ||
 			(hc.Discard == discardIfError && target.errResult[hc.Name])
 		for _, ea := range target.resolve(hc.Name) {
-			if bestEffort {
-				ea.BestEffort = true
+			paths := append([]iam.Gate(nil), ea.paths()...)
+			for i := range paths {
+				if bestEffort {
+					paths[i].BestEffort = true
+				}
+				if hc.CondReason != "" && paths[i].Ungated() {
+					if hc.CondKind == ConditionChange {
+						paths[i].Changed = hc.CondReason
+					} else {
+						paths[i].Attribute = hc.CondReason
+					}
+				}
 			}
-			if hc.CondReason != "" && ea.Condition == "" {
-				ea.Conditional = true
-				ea.Condition = hc.CondReason
-				ea.ConditionKind = hc.CondKind
-			}
-			resolved = append(resolved, ea)
+			resolved = append(resolved, withPaths(ea.Action, paths))
 		}
 	}
 	resolved = dedupActions(resolved)
@@ -1626,42 +1708,21 @@ func dedup(s []string) []string {
 }
 
 // dedupActions removes duplicate ExtractedActions (by Action string) while
-// preserving order. When deduplicating, marks the action as unconditional
-// if any occurrence was unconditional (union).
+// preserving order. An action reached on several paths is needed when any of
+// them runs, so the merged entry keeps the gate of each path (see withPaths).
 func dedupActions(actions []ExtractedAction) []ExtractedAction {
-	seen := make(map[string]bool)
+	index := make(map[string]int)
 	var out []ExtractedAction
 	for _, ea := range actions {
-		if !seen[ea.Action] {
-			seen[ea.Action] = true
+		i, seen := index[ea.Action]
+		if !seen {
+			index[ea.Action] = len(out)
 			out = append(out, ea)
-		} else {
-			// If a duplicate exists and this one is unconditional, upgrade
-			for i := range out {
-				if out[i].Action != ea.Action {
-					continue
-				}
-				// A path whose failure counts decides the action: its gates
-				// replace those of best-effort paths, which a best-effort
-				// path never loosens.
-				if out[i].BestEffort != ea.BestEffort {
-					if out[i].BestEffort {
-						out[i] = ea
-					}
-					continue
-				}
-				// A path that is not value-guarded needs the attribute's
-				// configuration, so the default no longer covers the action.
-				if !ea.ValueGuarded {
-					out[i].ValueGuarded = false
-				}
-				if !ea.Conditional {
-					out[i].Conditional = false
-					out[i].Condition = ""
-					out[i].ConditionKind = ""
-				}
-			}
+			continue
 		}
+		// The action is needed when any path that reaches it runs, so the
+		// paths' gates add up.
+		out[i] = withPaths(ea.Action, append(append([]iam.Gate(nil), out[i].paths()...), ea.paths()...))
 	}
 	return out
 }

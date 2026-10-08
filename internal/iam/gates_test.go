@@ -69,6 +69,37 @@ func TestValidate_AnyGateUngatedPath(t *testing.T) {
 	}
 }
 
+// TestValidate_AnyGateRequiredPathDecidesTag covers an action that a
+// best-effort path always reaches and a checked path reaches when an
+// attribute is set. With the attribute set, the action is required and the
+// tag names that attribute.
+func TestValidate_AnyGateRequiredPathDecidesTag(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{"create": {"widget:PutWidgetNote"}},
+		gates: map[string]map[string][]Gate{"create": {"widget:PutWidgetNote": {
+			{BestEffort: true},
+			{Attribute: "note"},
+		}}},
+	}
+	for _, c := range []struct {
+		attrs     map[string]bool
+		wantClass string
+		wantAttr  string
+	}{
+		{map[string]bool{"note": true}, "[required]", "note"},
+		{map[string]bool{}, "[optional]", ""},
+	} {
+		changes := []*plan.ResourceChange{{Type: "aws_widget", Name: "w", Change: "create", Attributes: c.attrs}}
+		missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(missing) != 1 || missing[0].Class != c.wantClass || missing[0].ConditionAttribute != c.wantAttr {
+			t.Errorf("attrs %v: got %+v, want one %s finding tagged %q", c.attrs, missing, c.wantClass, c.wantAttr)
+		}
+	}
+}
+
 // TestValidate_AnyGateChangeAndBestEffort covers a change gate and a
 // best-effort path. The action is optional when only best-effort paths hold,
 // and required when a path whose failure counts holds.

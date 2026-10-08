@@ -62,34 +62,37 @@ func schemaGates(schema SchemaLike, op string) map[string][]Gate {
 }
 
 // evaluateGates checks an action reached on several paths. It reports whether
-// any path runs for rc, the attributes of the paths that run for the
-// [conditional: <attr>] tag (empty when an ungated path runs), and whether
-// every path that runs is best-effort.
+// any path runs for rc, and whether every path that runs is best-effort. It
+// also returns the attributes of the paths that decide the action, for the
+// [conditional: <attr>] tag: the paths whose failure counts when one of them
+// runs, or else the best-effort ones. The tag is empty when one of those
+// paths has no gate.
 func evaluateGates(gates []Gate, rc *plan.ResourceChange) (needed bool, gateAttr string, bestEffort bool) {
-	var attrs []string
-	ungated := false
-	bestEffort = true
+	var running, required []Gate
 	for _, g := range gates {
 		if !g.holds(rc) {
 			continue
 		}
-		needed = true
+		running = append(running, g)
 		if !g.BestEffort {
-			bestEffort = false
+			required = append(required, g)
 		}
+	}
+	if len(running) == 0 {
+		return false, "", false
+	}
+	deciding := running
+	if len(required) > 0 {
+		deciding = required
+	}
+	var attrs []string
+	for _, g := range deciding {
 		if g.Ungated() {
-			ungated = true
-			continue
+			return true, "", len(required) == 0
 		}
 		attrs = appendUnique(attrs, gateAttribute(g.Attribute, g.Changed))
 	}
-	if !needed {
-		return false, "", false
-	}
-	if ungated {
-		return true, "", bestEffort
-	}
-	return true, strings.Join(attrs, "|"), bestEffort
+	return true, strings.Join(attrs, "|"), len(required) == 0
 }
 
 func appendUnique(list []string, s string) []string {

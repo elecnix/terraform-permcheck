@@ -296,6 +296,10 @@ func (r resourceFile) schema() *cloud.Schema {
 		bestEffort := make(map[string]bool)
 		for _, ea := range eas {
 			perms = append(perms, ea.Action)
+			if len(ea.Gates) > 0 {
+				setNested(&schema.Gates, op, ea.Action, ea.Gates)
+				continue
+			}
 			if ea.BestEffort {
 				bestEffort[ea.Action] = true
 			}
@@ -417,21 +421,13 @@ func actionGates(schema *cloud.Schema, op, action string) []iam.Gate {
 	}}
 }
 
-// setGates records the gates of an action. A path that always runs and whose
-// failure counts makes the action required whatever the other paths do, so
-// the action is left ungated. One gate goes in the single-valued maps, and
-// several go in the gate list.
+// setGates records the gates of an action, without the paths another path
+// subsumes. One gate goes in the single-valued maps, and several go in the
+// gate list. A path that always runs and whose failure counts leaves the
+// action ungated.
 func setGates(schema *cloud.Schema, op, action string, gates []iam.Gate) {
 	clearGates(schema, op, action)
-	var distinct []iam.Gate
-	for _, g := range gates {
-		if g.Ungated() && !g.BestEffort {
-			return
-		}
-		if !containsGate(distinct, g) {
-			distinct = append(distinct, g)
-		}
-	}
+	distinct := essentialGates(gates)
 	if len(distinct) > 1 {
 		setNested(&schema.Gates, op, action, distinct)
 		return
@@ -458,15 +454,6 @@ func clearGates(schema *cloud.Schema, op, action string) {
 	delete(schema.ChangeGated[op], action)
 	delete(schema.BestEffort[op], action)
 	delete(schema.Gates[op], action)
-}
-
-func containsGate(gates []iam.Gate, g iam.Gate) bool {
-	for _, h := range gates {
-		if h == g {
-			return true
-		}
-	}
-	return false
 }
 
 // setNested sets m[op][action], creating the maps it needs.
