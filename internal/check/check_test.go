@@ -138,14 +138,19 @@ func TestRun_StaticChecksEachTypeOnce(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// Static mode checks the first block of each type, for every operation
-	// that adds an action create does not cover.
+	// Static mode checks every block of a type, for every operation that
+	// adds an action create does not cover, but counts the type once.
 	want := []string{
+		"aws_kms_key.update:kms:EnableKeyRotation",
+		"aws_kms_key.delete:kms:ScheduleKeyDeletion",
 		"aws_kms_key.update:kms:EnableKeyRotation",
 		"aws_kms_key.delete:kms:ScheduleKeyDeletion",
 	}
 	if got := actions(res.Missing); !reflect.DeepEqual(got, want) {
 		t.Errorf("missing = %v, want %v", got, want)
+	}
+	if got, want := addresses(res.Missing), []string{"aws_kms_key.a", "aws_kms_key.a", "aws_kms_key.b", "aws_kms_key.b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("missing on %v, want %v", got, want)
 	}
 	if res.Checked != 1 || res.Label != "resource types (static HCL mode)" {
 		t.Errorf("Checked, Label = %d, %q; want 1, static label", res.Checked, res.Label)
