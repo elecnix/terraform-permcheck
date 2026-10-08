@@ -203,6 +203,14 @@ package s3`,
 package ec2`,
 			want: "aws_vpc_ipam_preview_next_cidr",
 		},
+		{
+			// The quote that closes the type name is the one the pattern
+			// accepts when the annotation carries no further argument.
+			name: "annotation with no trailing arguments",
+			src: `// @SDKResource("aws_thing_widget")
+package thing`,
+			want: "aws_thing_widget",
+		},
 	}
 
 	for _, tt := range tests {

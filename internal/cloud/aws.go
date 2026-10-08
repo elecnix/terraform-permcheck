@@ -77,14 +77,40 @@ func (p *AWSProvider) Resolve(tfType string) (*Schema, error) {
 //	aws_cloudwatch_log_group     → ["aws-logs-loggroup"]
 //
 // Types whose Terraform name does not follow the CloudFormation one come from
-// cfnTypeOverrides and cfnServicePrefixes.
+// cfnTypeOverrides and cfnServicePrefixes. Both are consulted below, and they
+// are disjoint, so no entry of either can shadow the other.
+//
+// cfnKeys returns the candidate CloudFormation registry keys for a terraform
+// type, in the order Resolve should try them.
+//
+// Three tables supply the candidates and a type is covered by exactly one:
+// cfnTypeOverrides holds the exact types whose Terraform name does not follow
+// the CloudFormation one, cfnServicePrefixes holds the families whose
+// CloudFormation namespace differs, and cfnGenericKeys derives the rest from
+// the name. The tables are disjoint — an override key is a bare type name and
+// a prefix row ends in "_" — so neither can make an entry of the other dead;
+// TestCfnKeys_EveryTableEntryIsReachable checks that.
 func cfnKeys(tfType string) []string {
 	if !strings.HasPrefix(tfType, "aws_") {
 		return nil
 	}
+	var keys []string
 	if key, ok := cfnTypeOverrides[tfType]; ok {
-		return []string{key}
+		keys = append(keys, key)
 	}
+	keys = append(keys, cfnPrefixKeys(tfType)...)
+	if len(keys) == 0 {
+		keys = cfnGenericKeys(tfType)
+	}
+	return keys
+}
+
+// cfnPrefixKeys returns the keys of the service-prefix row that covers tfType,
+// or nothing when no row does. A row ends in "_", so it covers a family
+// (aws_lb_listener) and never a bare type (aws_lb, which has an override entry
+// instead). No row is a prefix of another, so the first match is the only
+// match.
+func cfnPrefixKeys(tfType string) []string {
 	for _, sp := range cfnServicePrefixes {
 		if !strings.HasPrefix(tfType, sp.prefix) {
 			continue
@@ -98,7 +124,14 @@ func cfnKeys(tfType string) []string {
 			"aws-" + sp.service + "-" + resource,
 		}
 	}
+	return nil
+}
 
+// cfnGenericKeys derives the candidates from the Terraform name itself: the
+// resource words joined (backup-vault, apigatewayv2-domainname) first, then
+// the service prefix repeated (backup-backupvault) for the resource names that
+// carry it.
+func cfnGenericKeys(tfType string) []string {
 	parts := strings.Split(strings.TrimPrefix(tfType, "aws_"), "_")
 	if len(parts) < 2 {
 		return nil
@@ -118,10 +151,12 @@ func cfnKeys(tfType string) []string {
 }
 
 // cfnServicePrefixes maps Terraform type prefixes to the CloudFormation
-// namespace their resources live in, when the two differ. The rest of the
-// type name, joined, is the resource name, tried first with word in front
-// when the prefix swallowed a word some resource names keep: LogGroup, but
-// also EventBus next to Rule.
+// namespace their resources live in, when the two differ. A row's prefix ends
+// in "_" and covers a family of types; the bare type of that family, if its
+// registry key differs too, is an exact entry in cfnTypeOverrides instead. The
+// rest of the type name, joined, is the resource name, tried first with word
+// in front when the prefix swallowed a word some resource names keep: LogGroup,
+// but also EventBus next to Rule.
 var cfnServicePrefixes = []struct{ prefix, service, word string }{
 	{"aws_cloudwatch_event_", "events", "event"},
 	{"aws_cloudwatch_log_", "logs", "log"},
@@ -132,8 +167,10 @@ var cfnServicePrefixes = []struct{ prefix, service, word string }{
 }
 
 // cfnTypeOverrides maps Terraform types whose resource name differs from the
-// CloudFormation one to their registry key. Each key was checked against the
-// registry.
+// CloudFormation one to their registry key, and each key was checked against
+// the registry. A key here is an exact type name, never a prefix: the types
+// without an entry of their own are derived, and the families whose namespace
+// differs are in cfnServicePrefixes.
 var cfnTypeOverrides = map[string]string{
 	"aws_alb":                     "aws-elasticloadbalancingv2-loadbalancer",
 	"aws_lb":                      "aws-elasticloadbalancingv2-loadbalancer",

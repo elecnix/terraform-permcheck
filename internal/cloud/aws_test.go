@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -161,5 +162,45 @@ func TestCfnKeys_IncludeTheRegistryKey(t *testing.T) {
 		if !found {
 			t.Errorf("cfnKeys(%q) = %v, want %q among them", tfType, keys, want)
 		}
+	}
+}
+
+// TestCfnKeys_EveryTableEntryIsReachable checks that no entry of the two
+// lookup tables is dead. An entry is dead when another table already covers
+// every type it could serve, which would read as coverage while changing
+// nothing.
+//
+// The tables are disjoint by shape: cfnTypeOverrides holds exact type names
+// (aws_lb, aws_db_instance) and every cfnServicePrefixes row holds a prefix
+// that ends in "_" (aws_lb_, aws_cloudwatch_log_). A bare type therefore never
+// matches a prefix row, and no override key is covered by a prefix row.
+func TestCfnKeys_EveryTableEntryIsReachable(t *testing.T) {
+	// No override key is matched by a prefix row, so cfnKeys consults both.
+	for key := range cfnTypeOverrides {
+		if keys := cfnPrefixKeys(key); keys != nil {
+			t.Errorf("override %q is also covered by the prefix table: %v", key, keys)
+		}
+		if got := cfnKeys(key); len(got) == 0 || got[0] != cfnTypeOverrides[key] {
+			t.Errorf("cfnKeys(%q) = %v, want %q first", key, got, cfnTypeOverrides[key])
+		}
+	}
+
+	// Every prefix row covers at least one type, and no row is a prefix of
+	// another, so the first match is the only match.
+	for i, row := range cfnServicePrefixes {
+		if got := cfnPrefixKeys(row.prefix + "example"); got == nil {
+			t.Errorf("prefix row %d (%q) covers no type", i, row.prefix)
+		}
+		for j, other := range cfnServicePrefixes {
+			if i != j && strings.HasPrefix(other.prefix, row.prefix) {
+				t.Errorf("prefix row %d (%q) shadows row %d (%q)", j, other.prefix, i, row.prefix)
+			}
+		}
+	}
+
+	// The generic derivation is what the tables fall back to, so a type with
+	// no override and no prefix still gets candidates.
+	if got := cfnKeys("aws_backup_vault"); len(got) == 0 || got[0] != "aws-backup-vault" {
+		t.Errorf("cfnKeys(aws_backup_vault) = %v, want the generic derivation", got)
 	}
 }
