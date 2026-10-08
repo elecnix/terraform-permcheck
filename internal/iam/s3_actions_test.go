@@ -125,8 +125,8 @@ func subresourceTypes() []string {
 // accident.
 func TestS3Rules_MatchExactNames(t *testing.T) {
 	for _, a := range []string{"s3:GetBucketPolicyStatus", "s3:PutBucketTaggingSomethingElse"} {
-		if got := actionClass(a); got != ClassManagement {
-			t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
+		if got := actionClass(a); got != classManagement {
+			t.Errorf("actionClass(%q) = %d, want classManagement", a, got)
 		}
 	}
 }
@@ -136,13 +136,13 @@ func TestS3Rules_MatchExactNames(t *testing.T) {
 func TestSchemaEmittedS3Actions_AreClassified(t *testing.T) {
 	for _, a := range sortedKeys(emittedS3Actions(t)) {
 		if s3RequiredActions[a] {
-			if got := actionClass(a); got != ClassManagement {
-				t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
+			if got := actionClass(a); got != classManagement {
+				t.Errorf("actionClass(%q) = %d, want classManagement", a, got)
 			}
 			continue
 		}
-		if got := actionClass(a); got != ClassOptional && got != ClassDataPlane {
-			t.Errorf("actionClass(%q) = %d, want ClassOptional or ClassDataPlane", a, got)
+		if got := actionClass(a); got != classOptional && got != classDataPlane {
+			t.Errorf("actionClass(%q) = %d, want classOptional or classDataPlane", a, got)
 		}
 	}
 }
@@ -163,8 +163,8 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 				continue
 			}
 			got := decide(tfType, a, false, nil).class
-			if got != ClassManagement {
-				t.Errorf("decide(%q, %q).class = %s, want ClassManagement",
+			if got != classManagement {
+				t.Errorf("decide(%q, %q).class = %s, want classManagement",
 					tfType, a, classTag(got))
 			}
 		}
@@ -197,7 +197,7 @@ func TestS3OptionalRules_OwnedByTheSubresourceThatEmitsThem(t *testing.T) {
 		}
 		for _, a := range sortedKeys(actionSet(perms)) {
 			r, ok := ruleIndex[a]
-			if !ok || r.class != ClassOptional {
+			if !ok || r.class != classOptional {
 				continue
 			}
 			if r.ownedBy != tfType {

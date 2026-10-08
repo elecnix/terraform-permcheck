@@ -48,7 +48,7 @@ func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, all []*pla
 			Change:                  rc.Change,
 			Action:                  action,
 			Service:                 "iam",
-			Class:                   classTag(ClassManagement),
+			Class:                   classTag(classManagement),
 			ResourceScopeUnverified: verdict == Unverified,
 		}}
 	}

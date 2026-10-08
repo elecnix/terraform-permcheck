@@ -41,7 +41,7 @@ func sample() map[string]*cloud.Schema {
 // the same schemas.
 func TestEncodeDecode_RoundTrip(t *testing.T) {
 	want := sample()
-	data, err := Encode("v1.2.3", want)
+	data, err := encode("v1.2.3", want)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,12 +58,12 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 // TestEncode_Deterministic checks that the same table always encodes to the
 // same bytes, whatever order the maps were built in.
 func TestEncode_Deterministic(t *testing.T) {
-	first, err := Encode("v1", sample())
+	first, err := encode("v1", sample())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 20; i++ {
-		again, err := Encode("v1", sample())
+		again, err := encode("v1", sample())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestDecode_RejectsOtherFormat(t *testing.T) {
 }
 
 // TestGateFields fails when iam.Gate gains a field, because the format must
-// then store it too. Add the field to requirement, bump FormatVersion, and
+// then store it too. Add the field to requirement, bump formatVersion, and
 // regenerate permissions.json.
 func TestGateFields(t *testing.T) {
 	if n := reflect.TypeOf(iam.Gate{}).NumField(); n != 4 {
@@ -130,7 +130,7 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 	}
 	assertSameSchemas(t, tbl.Schemas, want)
 
-	p := NewProvider(data)
+	p := newProvider(data)
 	for tfType, w := range want {
 		got, err := p.Resolve(tfType)
 		if err != nil {
@@ -143,14 +143,14 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 // TestProvider_UnknownType checks that a type the table lacks is an error, so
 // the chain falls back to the next provider.
 func TestProvider_UnknownType(t *testing.T) {
-	data, err := Encode("v1", sample())
+	data, err := encode("v1", sample())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewProvider(data).Resolve("aws_nothing"); err == nil {
+	if _, err := newProvider(data).Resolve("aws_nothing"); err == nil {
 		t.Error("Resolve(aws_nothing): want an error")
 	}
-	if _, err := NewProvider([]byte("not json")).Resolve("aws_widget"); err == nil {
+	if _, err := newProvider([]byte("not json")).Resolve("aws_widget"); err == nil {
 		t.Error("Resolve on a broken table: want an error")
 	}
 }
@@ -159,14 +159,14 @@ func TestProvider_UnknownType(t *testing.T) {
 // pinned provider ref, and holds the requirements of common resource types.
 func TestEmbedded_KeyTypes(t *testing.T) {
 	p := Embedded()
-	ref, err := p.Ref()
+	tbl, err := p.decoded()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ref != provideraws.DefaultProviderRef {
-		t.Errorf("embedded table is for %s, DefaultProviderRef is %s; regenerate it with generate-permissions", ref, provideraws.DefaultProviderRef)
+	if tbl.Ref != provideraws.DefaultProviderRef {
+		t.Errorf("embedded table is for %s, DefaultProviderRef is %s; regenerate it with generate-permissions", tbl.Ref, provideraws.DefaultProviderRef)
 	}
-	if n, _ := p.Len(); n < 1000 {
+	if n := len(tbl.Schemas); n < 1000 {
 		t.Errorf("embedded table has %d resource types, want over 1000", n)
 	}
 	for tfType, ops := range map[string]map[string]string{

@@ -93,21 +93,6 @@ func ParsePolicy(raw []byte) (*PolicyDocument, error) {
 	return &doc, nil
 }
 
-// AllowedActions returns the set of actions allowed by this policy
-// (all "Allow" statements flattened, with wildcard expansion noted).
-func (d *PolicyDocument) AllowedActions() map[string]bool {
-	allowed := make(map[string]bool)
-	for _, s := range d.Statements {
-		if s.Effect != "Allow" {
-			continue
-		}
-		for _, a := range s.Action {
-			allowed[a] = true
-		}
-	}
-	return allowed
-}
-
 // Covers reports whether the policy allows action when the target resource is
 // unknown. An Allow statement that names the action counts, whatever its
 // Resource or Condition, because the tool reports only provable gaps. A Deny

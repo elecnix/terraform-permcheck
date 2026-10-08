@@ -21,9 +21,9 @@ data "aws_iam_role" "admin" {
   name = "admin"
 }
 `
-	blocks, err := ParseFile("main.tf", src)
+	blocks, err := parseFile("main.tf", src)
 	if err != nil {
-		t.Fatalf("ParseFile failed: %v", err)
+		t.Fatalf("parseFile failed: %v", err)
 	}
 
 	if len(blocks) != 3 {
@@ -79,9 +79,9 @@ resource "aws_iam_role" "block_commented" {
 }
 */
 `
-	blocks, err := ParseFile("main.tf", src)
+	blocks, err := parseFile("main.tf", src)
 	if err != nil {
-		t.Fatalf("ParseFile failed: %v", err)
+		t.Fatalf("parseFile failed: %v", err)
 	}
 
 	if len(blocks) != 1 {
@@ -106,9 +106,9 @@ variable "region" {
   default = "us-east-1"
 }
 `
-	blocks, err := ParseFile("main.tf", src)
+	blocks, err := parseFile("main.tf", src)
 	if err != nil {
-		t.Fatalf("ParseFile failed: %v", err)
+		t.Fatalf("parseFile failed: %v", err)
 	}
 
 	// random_string is not aws_*, so the regex won't match it.
@@ -151,20 +151,6 @@ data "aws_iam_role" "admin" {
 
 	if len(blocks) != 3 {
 		t.Fatalf("expected 3 blocks, got %d: %+v", len(blocks), blocks)
-	}
-}
-
-func TestStripComments(t *testing.T) {
-	src := `resource "aws_s3_bucket" "main" {
-  # this is a comment
-  bucket = "my-bucket" // inline comment
-  /*
-    block comment
-  */
-}`
-	clean := stripComments(src)
-	if strings.Contains(clean, "comment") {
-		t.Errorf("comments not stripped: %q", clean)
 	}
 }
 
@@ -348,9 +334,9 @@ func TestParseFile_Attributes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			blocks, err := ParseFile("test.tf", tt.src)
+			blocks, err := parseFile("test.tf", tt.src)
 			if err != nil {
-				t.Fatalf("ParseFile: %v", err)
+				t.Fatalf("parseFile: %v", err)
 			}
 			if len(blocks) != 1 {
 				t.Fatalf("expected 1 block, got %d", len(blocks))
@@ -386,9 +372,9 @@ resource "aws_s3_bucket" "b" {
   }
 }
 `
-	blocks, err := ParseFile("test.tf", src)
+	blocks, err := parseFile("test.tf", src)
 	if err != nil {
-		t.Fatalf("ParseFile: %v", err)
+		t.Fatalf("parseFile: %v", err)
 	}
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 blocks, got %d", len(blocks))

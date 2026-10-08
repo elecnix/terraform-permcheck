@@ -107,7 +107,7 @@ func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingActi
 				missing = append(missing, MissingAction{
 					Action:                  action,
 					Service:                 strings.Split(action, ":")[0],
-					Class:                   classTag(ClassManagement),
+					Class:                   classTag(classManagement),
 					Need:                    n.Sid,
 					NeedResource:            resource,
 					ResourceScopeUnverified: unverified,

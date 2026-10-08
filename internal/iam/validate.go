@@ -6,15 +6,14 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-// PermissionClass categorizes an IAM permission as management-plane or data-plane.
-type PermissionClass int
+// permissionClass categorizes an IAM permission as management-plane or data-plane.
+type permissionClass int
 
 const (
-	ClassUnknown     PermissionClass = iota
-	ClassManagement                  // provisioning/configuration actions (needed by deploy role)
-	ClassDataPlane                   // data access actions (belongs to application roles)
-	ClassServiceRole                 // actions only AWS service roles need
-	ClassOptional                    // actions for optional sub-resources (access policy, notifications, etc.)
+	classUnknown    permissionClass = iota
+	classManagement                 // provisioning/configuration actions (needed by deploy role)
+	classDataPlane                  // data access actions (belongs to application roles)
+	classOptional                   // actions for optional sub-resources (access policy, notifications, etc.)
 )
 
 // MissingAction is a single required permission found to be absent from the policy.
@@ -24,8 +23,7 @@ type MissingAction struct {
 	Change       string // "create", "update", or "delete"
 	Action       string // required IAM action, e.g. "kms:CreateGrant"
 	Service      string // extracted service prefix, e.g. "kms"
-	Filtered     bool   // true if this was filtered out (data-plane / optional)
-	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
+	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", or ""
 	// ResourceScopeUnverified marks an action the policy grants only on some
 	// resources while the target ARN is unknown (--strict-resources). The
 	// grant may or may not apply, so the finding is unverified, not missing.
@@ -53,8 +51,6 @@ type FilterConfig struct {
 	ExcludeDataPlane bool
 	// ExcludeOptional excludes optional sub-resource permissions (vault access policy, S3 website, etc.)
 	ExcludeOptional bool
-	// ExcludeServiceRole excludes permissions only AWS service roles need (backup-storage, etc.)
-	ExcludeServiceRole bool
 	// ExcludeConditional excludes permissions gated on a schema attribute
 	// (d.GetOk or d.HasChange guard). When true, only unconditional [required]
 	// actions are kept.
@@ -66,12 +62,11 @@ type FilterConfig struct {
 }
 
 // DefaultFilter returns a FilterConfig that excludes data-plane and optional
-// permissions but keeps management-plane and service-role permissions.
+// permissions but keeps management-plane permissions.
 func DefaultFilter() FilterConfig {
 	return FilterConfig{
-		ExcludeDataPlane:   true,
-		ExcludeOptional:    true,
-		ExcludeServiceRole: false, // keep these — they might be needed
+		ExcludeDataPlane: true,
+		ExcludeOptional:  true,
 	}
 }
 
@@ -138,13 +133,10 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 			// Filter by class
 			class := d.class
-			if filter.ExcludeDataPlane && class == ClassDataPlane {
+			if filter.ExcludeDataPlane && class == classDataPlane {
 				continue
 			}
-			if filter.ExcludeOptional && class == ClassOptional {
-				continue
-			}
-			if filter.ExcludeServiceRole && class == ClassServiceRole {
+			if filter.ExcludeOptional && class == classOptional {
 				continue
 			}
 			if filter.ExcludeConditional && gateAttr != "" {
@@ -218,16 +210,14 @@ func conditionMet(attr string, valueGuarded bool, rc *plan.ResourceChange) bool 
 	return rc.Attributes[attr]
 }
 
-// classTag returns a human-readable classification tag for a PermissionClass.
-func classTag(c PermissionClass) string {
+// classTag returns a human-readable classification tag for a permissionClass.
+func classTag(c permissionClass) string {
 	switch c {
-	case ClassOptional:
+	case classOptional:
 		return "[optional]"
-	case ClassDataPlane:
+	case classDataPlane:
 		return "[data-plane]"
-	case ClassServiceRole:
-		return "[service-role]"
-	case ClassManagement:
+	case classManagement:
 		return "[required]"
 	default:
 		return "[unknown]"

@@ -24,7 +24,7 @@ var (
 // caller shares it, so the table is decoded once per process.
 func Embedded() *Provider {
 	embeddedOnce.Do(func() {
-		embeddedProvider = NewProvider(embedded)
+		embeddedProvider = newProvider(embedded)
 	})
 	return embeddedProvider
 }

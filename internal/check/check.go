@@ -48,13 +48,6 @@ func ParseProviderSource(s string) (ProviderSource, error) {
 	return "", fmt.Errorf("unknown provider source %q (supported: %s, %s)", s, SourceEmbedded, SourceLive)
 }
 
-// DefaultResolver resolves schemas from the embedded provider-source table
-// and falls back to the CloudFormation schema registry. It is
-// ResolverFor(SourceEmbedded).
-func DefaultResolver() iam.Resolver {
-	return ResolverFor(SourceEmbedded)
-}
-
 // ResolverFor returns the resolver chain of a provider source. Each chain is
 // built on the first call and shared for the life of the process, so the
 // table is decoded, or the provider source parsed, once however many checks
@@ -105,10 +98,10 @@ type Filter struct {
 	StrictResources bool
 }
 
-// Config maps the settings onto an iam.FilterConfig. OnlyRequired and
+// config maps the settings onto an iam.FilterConfig. OnlyRequired and
 // StrictResources apply on top of NoFilter, so both flags together still
 // drop conditional permissions.
-func (f Filter) Config() iam.FilterConfig {
+func (f Filter) config() iam.FilterConfig {
 	cfg := iam.DefaultFilter()
 	if f.NoFilter {
 		cfg = iam.FilterConfig{} // all zero values = no filtering
@@ -158,7 +151,8 @@ type Options struct {
 	// Exclusions are the config exclusions. Matching gaps move from
 	// Result.Missing to Result.Excluded.
 	Exclusions []iam.Exclusion
-	// Resolver supplies schemas. Nil means DefaultResolver.
+	// Resolver supplies schemas. Nil means ResolverFor(SourceEmbedded): the
+	// embedded provider-source table, then the CloudFormation schema registry.
 	Resolver iam.Resolver
 	// Needs are the declared needs from the config. Run checks the ones that
 	// Principal selects (see iam.SelectNeeds).
@@ -224,7 +218,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 
 	resolver := opts.Resolver
 	if resolver == nil {
-		resolver = DefaultResolver()
+		resolver = ResolverFor(SourceEmbedded)
 	}
 	resolver = newMemoResolver(resolver)
 
@@ -237,7 +231,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 		}
 	}
 
-	missing, err := iam.Validate(changes, policy, resolver, opts.Filter.Config())
+	missing, err := iam.Validate(changes, policy, resolver, opts.Filter.config())
 	if err != nil {
 		return Result{}, err
 	}

@@ -133,8 +133,8 @@ func TestRules_OwnerIsAnS3Subresource(t *testing.T) {
 
 func TestActionClass_UnknownIsManagement(t *testing.T) {
 	for _, a := range []string{"ec2:RunInstances", "nosuchservice:Thing", "noservice"} {
-		if got := actionClass(a); got != ClassManagement {
-			t.Errorf("actionClass(%q) = %d, want ClassManagement", a, got)
+		if got := actionClass(a); got != classManagement {
+			t.Errorf("actionClass(%q) = %d, want classManagement", a, got)
 		}
 	}
 }
@@ -142,11 +142,11 @@ func TestActionClass_UnknownIsManagement(t *testing.T) {
 func TestDecide_BestEffortDowngradesOnlyManagement(t *testing.T) {
 	tests := []struct {
 		action string
-		want   PermissionClass
+		want   permissionClass
 	}{
-		{"s3:CreateBucket", ClassOptional},
-		{"s3:GetObject", ClassDataPlane},
-		{"s3:PutBucketVersioning", ClassOptional},
+		{"s3:CreateBucket", classOptional},
+		{"s3:GetObject", classDataPlane},
+		{"s3:PutBucketVersioning", classOptional},
 	}
 	for _, tt := range tests {
 		if got := decide("aws_s3_bucket", tt.action, true, nil).class; got != tt.want {

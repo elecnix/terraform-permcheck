@@ -69,26 +69,26 @@ func resourceVaultDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 }
 `
 
-	actions, err := ParseResourceFile(src, "aws_backup_vault", "vault")
+	actions, err := ParseResourceFileStructured(src, "aws_backup_vault", "vault")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	// Create should find CreateBackupVault and follow the return to resourceVaultRead
 	createActions := actions["create"]
-	if !containsAction(createActions, "backup:CreateBackupVault") {
+	if !containsExtractedAction(createActions, "backup:CreateBackupVault") {
 		t.Errorf("create: expected backup:CreateBackupVault, got %v", createActions)
 	}
 
 	// Delete should find DeleteBackupVault
 	deleteActions := actions["delete"]
-	if !containsAction(deleteActions, "backup:DeleteBackupVault") {
+	if !containsExtractedAction(deleteActions, "backup:DeleteBackupVault") {
 		t.Errorf("delete: expected backup:DeleteBackupVault, got %v", deleteActions)
 	}
 
 	// Update should find TagResource
 	updateActions := actions["update"]
-	if !containsAction(updateActions, "backup:TagResource") {
+	if !containsExtractedAction(updateActions, "backup:TagResource") {
 		t.Errorf("update: expected backup:TagResource, got %v", updateActions)
 	}
 }
@@ -127,18 +127,18 @@ func resourceTableRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	return nil
 }
 `
-	actions, err := ParseResourceFile(src, "aws_dynamodb_table", "table")
+	actions, err := ParseResourceFileStructured(src, "aws_dynamodb_table", "table")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "dynamodb:CreateTable") {
+	if !containsExtractedAction(createActions, "dynamodb:CreateTable") {
 		t.Errorf("create: expected dynamodb:CreateTable, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsAction(readActions, "dynamodb:DescribeContinuousBackups") {
+	if !containsExtractedAction(readActions, "dynamodb:DescribeContinuousBackups") {
 		t.Errorf("read: expected dynamodb:DescribeContinuousBackups, got %v", readActions)
 	}
 }
@@ -180,23 +180,23 @@ func resourceRoleDelete(ctx context.Context, d *schema.ResourceData, meta any) d
 	return nil
 }
 `
-	actions, err := ParseResourceFile(src, "aws_iam_role", "role")
+	actions, err := ParseResourceFileStructured(src, "aws_iam_role", "role")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "iam:CreateRole") {
+	if !containsExtractedAction(createActions, "iam:CreateRole") {
 		t.Errorf("create: expected iam:CreateRole, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsAction(readActions, "iam:GetRole") {
+	if !containsExtractedAction(readActions, "iam:GetRole") {
 		t.Errorf("read: expected iam:GetRole, got %v", readActions)
 	}
 
 	deleteActions := actions["delete"]
-	if !containsAction(deleteActions, "iam:DeleteRole") {
+	if !containsExtractedAction(deleteActions, "iam:DeleteRole") {
 		t.Errorf("delete: expected iam:DeleteRole, got %v", deleteActions)
 	}
 }
@@ -226,17 +226,17 @@ func resourceBucketCreate(ctx context.Context, d *schema.ResourceData, meta any)
 	return append(diags, resourceBucketRead(ctx, d, meta)...)
 }
 `
-	actions, err := ParseResourceFile(src, "aws_s3_bucket", "bucket")
+	actions, err := ParseResourceFileStructured(src, "aws_s3_bucket", "bucket")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "s3:CreateBucket") {
+	if !containsExtractedAction(createActions, "s3:CreateBucket") {
 		t.Errorf("create: expected s3:CreateBucket, got %v", createActions)
 	}
 	// PutBucketVersioning is conditional and should still be found
-	if !containsAction(createActions, "s3:PutBucketVersioning") {
+	if !containsExtractedAction(createActions, "s3:PutBucketVersioning") {
 		t.Errorf("create: expected s3:PutBucketVersioning (conditional), got %v", createActions)
 	}
 }
@@ -355,13 +355,13 @@ func resourceBucketServerSideEncryptionConfigurationDelete(ctx context.Context, 
 // The encryption actions are the canonical IAM names, so a policy that grants
 // them must cover every action the resource needs.
 func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
-	actions, err := ParseResourceFile(
+	actions, err := ParseResourceFileStructured(
 		s3EncryptionConfigurationSource,
 		"aws_s3_bucket_server_side_encryption_configuration",
 		"ServerSideEncryptionConfiguration",
 	)
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	policy, err := iam.ParsePolicy([]byte(`{
@@ -391,8 +391,8 @@ func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
 			continue
 		}
 		for _, action := range changeActions {
-			if !policy.Covers(action) {
-				t.Errorf("%s: policy does not cover %s", change, action)
+			if !policy.Covers(action.Action) {
+				t.Errorf("%s: policy does not cover %s", change, action.Action)
 			}
 		}
 	}
@@ -461,6 +461,16 @@ func containsAction(actions []string, want string) bool {
 	return false
 }
 
+// containsExtractedAction reports whether actions holds an action named want.
+func containsExtractedAction(actions []ExtractedAction, want string) bool {
+	for _, a := range actions {
+		if a.Action == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestResourceTypeFromFile(t *testing.T) {
 	tests := []struct {
 		service string
@@ -485,7 +495,7 @@ func TestResourceTypeFromFile(t *testing.T) {
 	}
 }
 
-func TestResourceNameFromSource(t *testing.T) {
+func TestResourceNameFromFile(t *testing.T) {
 	tests := []struct {
 		src  string
 		want string
@@ -502,9 +512,12 @@ func resourceBucketCreate(ctx context.Context, d *schema.ResourceData, meta any)
 
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			got := resourceNameFromSource([]byte(tt.src))
-			if got != tt.want {
-				t.Errorf("resourceNameFromSource() = %q, want %q", got, tt.want)
+			f, err := parser.ParseFile(token.NewFileSet(), "source.go", tt.src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := resourceNameFromFile(f); got != tt.want {
+				t.Errorf("resourceNameFromFile() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -694,17 +707,17 @@ func findRole(ctx context.Context, conn *iam.Client, id string) (*iam.Role, erro
 	return conn.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(id)})
 }
 `
-	actions, err := ParseResourceFile(src, "aws_iam_role", "Role")
+	actions, err := ParseResourceFileStructured(src, "aws_iam_role", "Role")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "iam:CreateRole") {
+	if !containsExtractedAction(createActions, "iam:CreateRole") {
 		t.Errorf("create: expected iam:CreateRole (followed through retryCreateRole helper), got %v", createActions)
 	}
 	// Create returns resourceRoleRead → should include GetRole from read chain
-	if !containsAction(createActions, "iam:GetRole") {
+	if !containsExtractedAction(createActions, "iam:GetRole") {
 		t.Errorf("create: expected iam:GetRole (followed through findRoleByName → findRole → GetRole chain + return following), got %v", createActions)
 	}
 	t.Logf("IAM role create actions: %v", createActions)
@@ -763,18 +776,18 @@ func deleteCacheCluster(ctx context.Context, conn *elasticache.Client, partition
 	return err
 }
 `
-	actions, err := ParseResourceFile(src, "aws_elasticache_cluster", "Cluster")
+	actions, err := ParseResourceFileStructured(src, "aws_elasticache_cluster", "Cluster")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "elasticache:CreateCacheCluster") {
+	if !containsExtractedAction(createActions, "elasticache:CreateCacheCluster") {
 		t.Errorf("create: expected elasticache:CreateCacheCluster (followed through createCacheCluster helper), got %v", createActions)
 	}
 
 	deleteActions := actions["delete"]
-	if !containsAction(deleteActions, "elasticache:DeleteCacheCluster") {
+	if !containsExtractedAction(deleteActions, "elasticache:DeleteCacheCluster") {
 		t.Errorf("delete: expected elasticache:DeleteCacheCluster (followed through deleteCacheCluster helper), got %v", deleteActions)
 	}
 
@@ -1266,25 +1279,25 @@ func resourceRuleRead(ctx context.Context, conn *eventbridge.Client, d *schema.R
 }
 `
 
-	actions, err := ParseResourceFile(src, "aws_cloudwatch_event_rule", "rule")
+	actions, err := ParseResourceFileStructured(src, "aws_cloudwatch_event_rule", "rule")
 	if err != nil {
-		t.Fatalf("ParseResourceFile failed: %v", err)
+		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
 	createActions := actions["create"]
-	if !containsAction(createActions, "events:PutRule") {
+	if !containsExtractedAction(createActions, "events:PutRule") {
 		t.Errorf("create: expected events:PutRule, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsAction(readActions, "events:DescribeRule") {
+	if !containsExtractedAction(readActions, "events:DescribeRule") {
 		t.Errorf("read: expected events:DescribeRule, got %v", readActions)
 	}
 
 	for op, as := range actions {
 		for _, a := range as {
-			if strings.HasPrefix(a, "eventbridge:") {
-				t.Errorf("%s: action %q uses non-existent IAM prefix \"eventbridge\", want \"events\"", op, a)
+			if strings.HasPrefix(a.Action, "eventbridge:") {
+				t.Errorf("%s: action %q uses non-existent IAM prefix \"eventbridge\", want \"events\"", op, a.Action)
 			}
 		}
 	}
