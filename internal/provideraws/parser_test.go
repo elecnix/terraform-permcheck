@@ -1367,6 +1367,11 @@ func TestExtractValueGuardAttribute(t *testing.T) {
 			want: "targets",
 		},
 		{
+			name: "length call on a local bound through a type assertion",
+			src:  `func f() { if v := d.Get("replica").(*schema.Set); v.Len() > 0 { foo() } }`,
+			want: "replica",
+		},
+		{
 			name: "scalar comparison keeps presence gating",
 			src:  `func f() { if d.Get("bucket").(string) != "" { foo() } }`,
 			want: "",

@@ -1400,7 +1400,8 @@ func attributeUnder(collection ast.Expr, bindings map[string]string) string {
 
 // localAttrBindings maps the locals an if-statement's init assigns from a
 // d.Get/d.GetOk call to their attribute names, e.g. the "v" of
-// `if v, ok := d.GetOk("version_stages"); ok`.
+// `if v, ok := d.GetOk("version_stages"); ok`, or of
+// `if v := d.Get("replica").(*schema.Set); v.Len() > 0`.
 func localAttrBindings(init ast.Stmt) map[string]string {
 	bindings := make(map[string]string)
 	assign, ok := init.(*ast.AssignStmt)
@@ -1408,6 +1409,9 @@ func localAttrBindings(init ast.Stmt) map[string]string {
 		return bindings
 	}
 	for i, rhs := range assign.Rhs {
+		if ta, ok := rhs.(*ast.TypeAssertExpr); ok {
+			rhs = ta.X
+		}
 		attr := extractGetOkAttribute(rhs)
 		if attr == "" || i >= len(assign.Lhs) {
 			continue
