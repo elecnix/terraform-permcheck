@@ -45,6 +45,14 @@ or parse the provider (see [Embedded permissions table](#embedded-permissions-ta
 When a type is missing from the table, PermCheck uses the CloudFormation
 schema.
 
+The parser reads both kinds of provider resource. An `@SDKResource` binds its
+functions in a `schema.Resource` literal. An `@FrameworkResource`, such as
+`aws_s3_bucket_lifecycle_configuration`, implements `Create`, `Read`, `Update`
+and `Delete` as methods of the type its constructor builds. For those methods,
+a guard such as `!data.Policy.IsNull()` gates a call on the attribute that the
+field's `tfsdk` tag gives, and `!new.X.Equal(old.X)` gates it on a change.
+PermCheck reports a call under any other guard as required.
+
 Sometimes the source parse comes back incomplete. A create or delete function
 uses an SDK client, yet the parser finds no call that changes anything. A read
 function finds no call at all. PermCheck then adds the CloudFormation

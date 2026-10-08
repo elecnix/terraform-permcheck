@@ -430,6 +430,20 @@ type pkgIndex struct {
 	// others resolves calls into other service packages, by package
 	// directory name. It is nil until the packages are linked.
 	others map[string]*pkgIndex
+
+	// models maps the package's tfsdk-tagged struct types to the attribute
+	// each field holds, for the guards of framework resources.
+	models modelTable
+
+	// embeds maps each struct type to the struct types of the package it
+	// embeds, whose methods it gets.
+	embeds map[string][]string
+
+	// virtual maps each method to the methods it calls on its receiver that
+	// neither its type nor an embedded one declares, as create in
+	// r.securityGroupRule.create(...). The type that embeds the method's
+	// type supplies them.
+	virtual map[string][]string
 }
 
 func newPkgIndex(files []*ast.File) *pkgIndex {
@@ -443,6 +457,9 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 		errResult:  make(map[string]bool),
 		clients:    make(map[string]bool),
 		reach:      make(map[string]bool),
+		models:     newModelTable(files),
+		embeds:     newEmbedTable(files),
+		virtual:    make(map[string][]string),
 	}
 
 	// A plain function wins over a method of the same name, since call sites
@@ -458,6 +475,14 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 			fd, ok := decl.(*ast.FuncDecl)
 			if !ok || fd.Body == nil {
 				continue
+			}
+			// A method is also indexed under its receiver type, so the
+			// Create methods of two framework resources stay apart.
+			if recv := receiverType(fd); recv != "" {
+				key := methodKey(recv, fd.Name.Name)
+				decls[key] = declared{fd, imports}
+				idx.funcs[key] = true
+				idx.errResult[key] = lastResultIsError(fd.Type.Results)
 			}
 			if prev, ok := decls[fd.Name.Name]; ok && (prev.fd.Recv == nil || fd.Recv != nil) {
 				continue
@@ -481,11 +506,15 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 		}
 	}
 	for name, d := range decls {
-		if calls := extractSDKCallsWithConnInfo(d.fd); len(calls) > 0 {
+		if calls := extractSDKCalls(d.fd, idx.models); len(calls) > 0 {
 			idx.direct[name] = calls
 		}
-		if helpers := findHelperCalls(d.fd, idx, d.imports); len(helpers) > 0 {
+		helpers, virtual := findCalls(d.fd, idx, d.imports)
+		if len(helpers) > 0 {
 			idx.calls[name] = helpers
+		}
+		if len(virtual) > 0 {
+			idx.virtual[name] = virtual
 		}
 		if touchesClient(d.fd) {
 			idx.clients[name] = true
@@ -675,6 +704,11 @@ type walkContext struct {
 
 	// results are the result types of the function or closure being walked.
 	results *ast.FieldList
+
+	// structs are the package's model types, and models maps each variable
+	// in scope that holds one to its type. Copied on write, like conns.
+	structs modelTable
+	models  map[string]string
 }
 
 // withDiscard walks call as a call whose error its statement drops.
@@ -780,6 +814,13 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		// reason and kind, except under a value guard: its default already
 		// satisfies the guard, so a nested guard decides the call instead.
 		guard := extractConditionGuard(n)
+		// A framework guard reads the model, and its else branch runs when
+		// the guard does not hold, so the branch never inherits it.
+		fwGuard := false
+		if guard.Attribute == "" {
+			guard = frameworkGuard(n.Cond, ctx)
+			fwGuard = guard.Attribute != ""
+		}
 		valueAttr := extractValueGuardAttribute(n)
 		if guard.Attribute != "" || valueAttr != "" {
 			ctx.condDepth++
@@ -812,7 +853,7 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		// context, except after a d.HasChange guard: that branch runs when the
 		// attribute did NOT change, so inheriting the change gate would drop the
 		// call exactly when it runs. It takes the context from before the guard.
-		if guard.Kind == ConditionChange {
+		if guard.Kind == ConditionChange || fwGuard {
 			*ctx = saved
 		}
 		walkBody(n.Else, ctx, obs)
@@ -838,6 +879,12 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 
 	case *ast.BlockStmt:
 		walkStmts(n.List, ctx, obs)
+
+	case *ast.DeclStmt:
+		// var data resourceModel: the guards on data's fields name
+		// attributes.
+		bindModelDecl(n, ctx)
+		walkChildren(n, ctx, obs)
 
 	case *ast.CaseClause:
 		for _, expr := range n.List {
@@ -895,22 +942,27 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		// variables it binds stay inside it.
 		saved := *ctx
 		bindConnParams(n.Type, ctx)
+		bindModelParams(n.Type, ctx)
 		ctx.results = n.Type.Results
 		walkBody(n.Body, ctx, obs)
 		*ctx = saved
 
 	default:
-		// Every other node: walk its direct children in order.
-		ast.Inspect(node, func(child ast.Node) bool {
-			if child == node {
-				return true
-			}
-			if child != nil {
-				walkBody(child, ctx, obs)
-			}
-			return false
-		})
+		walkChildren(node, ctx, obs)
 	}
+}
+
+// walkChildren walks the direct children of node in order.
+func walkChildren(node ast.Node, ctx *walkContext, obs walker) {
+	ast.Inspect(node, func(child ast.Node) bool {
+		if child == node {
+			return true
+		}
+		if child != nil {
+			walkBody(child, ctx, obs)
+		}
+		return false
+	})
 }
 
 // walkAssign walks an assignment, binding the client it assigns, if any.
@@ -1732,14 +1784,28 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 // (conn := meta.(*conns.AWSClient).XxxClient(ctx)), from typed parameters
 // (func helper(ctx, conn *iam.Client)), and from inline accessor calls.
 func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) []ExtractedAction {
+	return extractSDKCalls(fd, nil)
+}
+
+// extractSDKCalls is extractSDKCallsWithConnInfo with the package's model
+// types, so the guards of framework resources gate the calls they guard.
+func extractSDKCalls(fd *ast.FuncDecl, models modelTable) []ExtractedAction {
 	if fd.Body == nil {
 		return nil
 	}
-	ctx := &walkContext{results: fd.Type.Results}
-	bindConnParams(fd.Type, ctx)
+	ctx := newWalkContext(fd, models)
 	obs := &sdkCallObserver{}
 	walkBody(fd.Body, ctx, obs)
 	return dedupActions(obs.actions)
+}
+
+// newWalkContext is the context a traversal of fd's body starts in, with its
+// client and model parameters bound.
+func newWalkContext(fd *ast.FuncDecl, models modelTable) *walkContext {
+	ctx := &walkContext{results: fd.Type.Results, structs: models}
+	bindConnParams(fd.Type, ctx)
+	bindModelParams(fd.Type, ctx)
+	return ctx
 }
 
 // bindConnParams binds every parameter typed as an SDK client, such as
@@ -1794,14 +1860,21 @@ func sdkPackageToIAMService(pkg string) string {
 // the package, or to functions of the service packages in imports, tracking
 // the conditional context at each call site.
 func findHelperCalls(fd *ast.FuncDecl, idx *pkgIndex, imports map[string]string) []helperCall {
+	helpers, _ := findCalls(fd, idx, imports)
+	return helpers
+}
+
+// findCalls is findHelperCalls that also returns the methods a method calls
+// on its receiver that the package does not declare for the receiver's type
+// (see pkgIndex.virtual).
+func findCalls(fd *ast.FuncDecl, idx *pkgIndex, imports map[string]string) ([]helperCall, []string) {
 	if fd.Body == nil {
-		return nil
+		return nil, nil
 	}
-	ctx := &walkContext{results: fd.Type.Results}
-	bindConnParams(fd.Type, ctx)
-	obs := &helperCallObserver{idx: idx, imports: imports}
+	ctx := newWalkContext(fd, idx.models)
+	obs := &helperCallObserver{idx: idx, imports: imports, recvName: receiverName(fd), recvType: receiverType(fd)}
 	walkBody(fd.Body, ctx, obs)
-	return obs.helpers
+	return obs.helpers, dedup(obs.virtual)
 }
 
 // helperCallObserver collects the calls to functions of the same package, each
@@ -1812,6 +1885,14 @@ type helperCallObserver struct {
 	idx     *pkgIndex
 	imports map[string]string // import name → service package directory
 	helpers []helperCall
+
+	// recvName and recvType are the receiver of the method walked, as r and
+	// dataLakeResource; both are "" for a plain function.
+	recvName, recvType string
+
+	// virtual are the receiver methods the package does not declare for
+	// recvType.
+	virtual []string
 }
 
 // onCall records a helper call but never consumes it: its arguments may hold
@@ -1819,8 +1900,30 @@ type helperCallObserver struct {
 func (o *helperCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	if pkg, name := o.callee(call, ctx); name != "" {
 		o.record(pkg, name, ctx.discardOf(call), ctx)
+	} else if name := o.receiverCall(call); name != "" {
+		o.virtual = append(o.virtual, name)
 	}
 	return false
+}
+
+// receiverCall returns the method a call makes on the receiver, or on a field
+// of it, as create in r.securityGroupRule.create(...), or "".
+func (o *helperCallObserver) receiverCall(call *ast.CallExpr) string {
+	if o.recvName == "" {
+		return ""
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	x := sel.X
+	if field, ok := x.(*ast.SelectorExpr); ok {
+		x = field.X
+	}
+	if id, ok := x.(*ast.Ident); ok && id.Name == o.recvName {
+		return sel.Sel.Name
+	}
+	return ""
 }
 
 // onFuncRef records a package function used as a value, as in
@@ -1854,6 +1957,12 @@ func (o *helperCallObserver) callee(call *ast.CallExpr, ctx *walkContext) (strin
 		}
 	case *ast.SelectorExpr:
 		if x, ok := fn.X.(*ast.Ident); ok {
+			// A method of the receiver, as r.putPolicy(...).
+			if x.Name == o.recvName && o.recvType != "" {
+				if key := o.idx.method(o.recvType, fn.Sel.Name); key != "" {
+					return "", key
+				}
+			}
 			if pkg, ok := o.imports[x.Name]; ok {
 				return pkg, fn.Sel.Name
 			}

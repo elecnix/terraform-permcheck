@@ -161,14 +161,34 @@ func runGit(dir string, buf *bytes.Buffer, args ...string) error {
 
 // parseAll discovers all AWS resource Go files and extracts permissions.
 func (p *SourceProvider) parseAll() error {
-	serviceDir := filepath.Join(p.repoPath, "internal", "service")
+	resources, err := parseResources(p.repoPath)
+	if err != nil {
+		return err
+	}
+	for _, r := range resources {
+		// A framework resource none of whose methods makes a call the
+		// parser reads, such as aws_simpledb_domain on the v1 SDK, is left
+		// to the next provider in the chain rather than reported as needing
+		// nothing.
+		if r.framework && len(r.pkg.actionsFor(r.funcs)) == 0 {
+			continue
+		}
+		p.schemas[r.tfType] = r.schema()
+	}
+	return nil
+}
+
+// parseResources indexes every service package of the provider checkout at
+// repoPath and returns the resources they declare, with the packages linked.
+func parseResources(repoPath string) ([]resourceFile, error) {
+	serviceDir := filepath.Join(repoPath, "internal", "service")
 	if _, err := os.Stat(serviceDir); err != nil {
-		return fmt.Errorf("service directory not found at %s: %w", serviceDir, err)
+		return nil, fmt.Errorf("service directory not found at %s: %w", serviceDir, err)
 	}
 
 	entries, err := os.ReadDir(serviceDir)
 	if err != nil {
-		return fmt.Errorf("read service directory: %w", err)
+		return nil, fmt.Errorf("read service directory: %w", err)
 	}
 
 	// Pass 1 indexes each service package and records its resource files.
@@ -189,14 +209,11 @@ func (p *SourceProvider) parseAll() error {
 	}
 
 	// Pass 2 links the packages, so a call such as tfiam.FindRoleByName
-	// resolves, and builds each resource's schema.
+	// resolves when the caller builds each resource's schema.
 	for _, idx := range indexes {
 		idx.others = indexes
 	}
-	for _, r := range resources {
-		p.schemas[r.tfType] = r.schema()
-	}
-	return nil
+	return resources, nil
 }
 
 // resourceFile is one resource found in a service package, with what pass 2
@@ -207,6 +224,7 @@ type resourceFile struct {
 	funcs      map[string][]string // operation → bound functions
 	tagged     bool                // the file carries a @Tags annotation
 	tagActions TagActions          // the service's transparent tagging actions
+	framework  bool                // a @FrameworkResource, whose operations are methods
 }
 
 // indexService parses every non-test Go file of one service directory as a
@@ -254,6 +272,21 @@ func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
 	var found []resourceFile
 	for _, name := range names {
 		src := sources[name]
+		// A Terraform Plugin Framework resource implements its operations
+		// as methods of the type its annotated constructor builds.
+		if tfType := frameworkResourceType(string(src)); tfType != "" {
+			if typeName := frameworkResourceStruct(parsed[name]); typeName != "" {
+				found = append(found, resourceFile{
+					pkg:        pkg,
+					tfType:     tfType,
+					funcs:      pkg.frameworkFuncs(typeName),
+					tagged:     hasTagsAnnotation(src),
+					tagActions: tagActions,
+					framework:  true,
+				})
+			}
+			continue
+		}
 		// Prefer the @SDKResource annotation (canonical), fall back to
 		// file-path derivation.
 		tfType := resourceTypeFromAnnotation(src)
