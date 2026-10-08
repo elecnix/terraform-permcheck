@@ -1,0 +1,123 @@
+package iam
+
+import (
+	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/plan"
+)
+
+func mustPolicy(t *testing.T, doc string) *PolicyDocument {
+	t.Helper()
+	p, err := ParsePolicy([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestValidate_SQSGrantOnOtherQueueIsMissing(t *testing.T) {
+	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+		"create": {"sqs:CreateQueue", "sqs:ListQueueTags"},
+	}}}
+	changes := []*plan.ResourceChange{{
+		Type: "aws_sqs_queue", Name: "new", Change: "create",
+		AttributeValues: map[string]string{"name": "example-new-queue"},
+	}}
+
+	other := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:us-east-1:111122223333:example-other-queue"}]}`)
+	missing, err := Validate(changes, other, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasActionOn(missing, "sqs:ListQueueTags", "aws_sqs_queue", "new") {
+		t.Errorf("expected sqs:ListQueueTags missing, got %+v", missing)
+	}
+
+	same := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:us-east-1:111122223333:example-new-queue"}]}`)
+	missing, err = Validate(changes, same, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Errorf("grant on the target queue must cover, got %+v", missing)
+	}
+}
+
+func lambdaChange(role string) *plan.ResourceChange {
+	return &plan.ResourceChange{
+		Type: "aws_lambda_function", Name: "fn", Change: "create",
+		AttributeValues: map[string]string{"role": role},
+	}
+}
+
+func TestPassRoleMissing_GrantOnDifferentRole(t *testing.T) {
+	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
+	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"lambda:*","Resource":"*"},
+		{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/example-other-role"}]}`)
+
+	missing := passRoleMissing(rc, policy, []*plan.ResourceChange{rc})
+	if !hasActionOn(missing, "iam:PassRole", "aws_lambda_function", "fn") {
+		t.Fatalf("expected iam:PassRole missing, got %+v", missing)
+	}
+	if missing[0].ConditionAttribute != "" {
+		t.Errorf("a known role makes PassRole unconditional, got gate %q", missing[0].ConditionAttribute)
+	}
+}
+
+func TestPassRoleMissing_Covered(t *testing.T) {
+	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
+	for name, doc := range map[string]string{
+		"exact":    `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/example-fn-role"}]}`,
+		"wildcard": `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"*"}]}`,
+		"prefix":   `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:*","Resource":"arn:aws:iam::111122223333:role/example-fn-*"}]}`,
+	} {
+		if m := passRoleMissing(rc, mustPolicy(t, doc), []*plan.ResourceChange{rc}); len(m) != 0 {
+			t.Errorf("%s: expected covered, got %+v", name, m)
+		}
+	}
+}
+
+func TestPassRoleMissing_NoGrantAtAll(t *testing.T) {
+	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
+	if m := passRoleMissing(rc, denyAll{}, nil); len(m) != 1 {
+		t.Errorf("expected PassRole missing without any grant, got %+v", m)
+	}
+}
+
+func TestPassRoleMissing_ManagedRoleReference(t *testing.T) {
+	role := &plan.ResourceChange{
+		Type: "aws_iam_role", Name: "fn", Change: "create",
+		AttributeValues: map[string]string{"name": "example-fn-role"},
+	}
+	fn := &plan.ResourceChange{
+		Type: "aws_lambda_function", Name: "fn", Change: "create",
+		AttributeValues: map[string]string{},
+		References:      map[string][]string{"role": {"aws_iam_role.fn.arn", "aws_iam_role.fn"}},
+	}
+	all := []*plan.ResourceChange{role, fn}
+
+	other := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/example-other-role"}]}`)
+	if m := passRoleMissing(fn, other, all); len(m) != 1 {
+		t.Errorf("expected PassRole missing for other role, got %+v", m)
+	}
+	pathed := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/app/example-fn-role"}]}`)
+	if m := passRoleMissing(fn, pathed, all); len(m) != 0 {
+		t.Errorf("a role under a path must still match, got %+v", m)
+	}
+}
+
+func TestPassRoleMissing_UnknownRoleIsSilent(t *testing.T) {
+	rc := &plan.ResourceChange{Type: "aws_lambda_function", Name: "fn", Change: "create", AttributeValues: map[string]string{}}
+	if m := passRoleMissing(rc, denyAll{}, nil); len(m) != 0 {
+		t.Errorf("unknown role must not be reported, got %+v", m)
+	}
+}
+
+func TestPassRoleMissing_DeleteNeedsNoPassRole(t *testing.T) {
+	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
+	rc.Change = "delete"
+	if m := passRoleMissing(rc, denyAll{}, nil); len(m) != 0 {
+		t.Errorf("delete must not require PassRole, got %+v", m)
+	}
+}

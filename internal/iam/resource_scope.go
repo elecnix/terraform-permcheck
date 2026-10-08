@@ -29,6 +29,8 @@ var targetRules = map[string]func(rc *plan.ResourceChange, all []*plan.ResourceC
 	// aws_secretsmanager_secret is itself the target; a secret's name carries
 	// into its ARN.
 	"aws_secretsmanager_secret": secretTargetARNs,
+	// aws_sqs_queue is its own target; the queue name is the last ARN segment.
+	"aws_sqs_queue": sqsQueueTargetARNs,
 }
 
 // resourceTargetARNs returns the ARN patterns a resource change acts on,
@@ -85,6 +87,16 @@ func secretVersionTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange
 		}
 	}
 	return patterns
+}
+
+// sqsQueueTargetARNs derives the ARN pattern of an SQS queue from its
+// configured name.
+func sqsQueueTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []string {
+	name := rc.AttributeValues["name"]
+	if name == "" {
+		return nil
+	}
+	return []string{"arn:*:sqs:*:*:" + name}
 }
 
 // secretARPattern builds the ARN pattern for a secretsmanager secret named

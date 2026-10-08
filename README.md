@@ -102,12 +102,25 @@ rather than only the action name:
 - `aws_secretsmanager_secret_version` derives its target from the referenced
   secret's configured `name` (or a literal ARN `secret_id`).
 - `aws_secretsmanager_secret` derives its own ARN from its `name`.
+- `aws_sqs_queue` derives its own ARN from its `name`.
+- `iam:PassRole` is required for resources that hand a role to a service
+  (`aws_lambda_function`, `aws_sfn_state_machine`, `aws_codebuild_project`,
+  `aws_ecs_task_definition`, `aws_cloudwatch_event_target`,
+  `aws_apigatewayv2_integration`). The role comes from a literal ARN in the
+  `role` or `role_arn` attribute, or from a reference to an `aws_iam_role`
+  with a known `name`.
 
 A grant whose `Resource` provably cannot apply to the target is reported
 missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).
 Where the target ARN is unknown — the value is computed at apply time with no
 reference to a managed resource, or you're in static HCL mode — PermCheck
 falls back to today's action-only match rather than risk a false positive.
+
+Resource types without a rule above get an action-name check only. For
+example, a policy that grants `lambda:*` on one function still passes for a
+different function, and the apply then fails with `AccessDenied`. PermCheck
+also ignores `Deny` statements, `NotResource` and `Condition` blocks. A passing
+report is a lower bound for those cases.
 
 ### Excluding known false positives
 
