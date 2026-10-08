@@ -1151,3 +1151,50 @@ func TestStaticHCL_UnresolvedTypeFails(t *testing.T) {
 		t.Errorf("resources = %+v, want main.tf:1", r)
 	}
 }
+
+// TestValidate_ModuleFindingHasNoRootLocation checks that a finding in a
+// module does not take the file and line of a root block that shares its
+// type and name. The parser cannot tell which module call a subdirectory
+// belongs to, so the module finding has no location.
+func TestValidate_ModuleFindingHasNoRootLocation(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	queue := "resource \"aws_sqs_queue\" \"q\" {\n  name = \"q\"\n}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte("\n"+queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "modules", "app", "main.tf"), []byte(queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(root, "plan.json")
+	plan := `{"resource_changes":[
+		{"address":"module.app.aws_sqs_queue.q","module_address":"module.app","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["create"]}}]}`
+	if err := os.WriteFile(planPath, []byte(plan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policyPath := filepath.Join(root, "policy.json")
+	if err := os.WriteFile(policyPath, []byte(`{"Version":"2012-10-17","Statement":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", planPath,
+			"--terraform-root", root,
+			"--policy-file", policyPath,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("want errGapsFound, got %v", err)
+		}
+	})
+	if !strings.Contains(out, "module.app.aws_sqs_queue.q (create)") {
+		t.Fatalf("want a finding on the module queue, got:\n%s", out)
+	}
+	if strings.Contains(out, "file=") {
+		t.Errorf("a module finding must have no file location, got:\n%s", out)
+	}
+}

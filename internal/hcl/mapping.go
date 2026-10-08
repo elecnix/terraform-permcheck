@@ -62,6 +62,36 @@ func resourceLocations(absDir string, blocks []ResourceBlock) map[string]Locatio
 	return locations
 }
 
+// MapRootResources is MapResources for the root module only: the blocks of
+// the .tf files directly in dir. A block in a subdirectory belongs to a
+// module, and the parser does not know which module call, and so which
+// address, it has. A plan names its resources by address, so plan mode uses
+// this map: a module finding then has no location rather than the location
+// of a root block that shares its type and name.
+func MapRootResources(dir string) (map[string]Location, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve terraform root %q: %w", dir, err)
+	}
+	blocks, err := ParseDir(absDir)
+	if err != nil {
+		return nil, err
+	}
+	return rootResourceLocations(absDir, blocks), nil
+}
+
+// rootResourceLocations is resourceLocations over the blocks of the files
+// directly in absDir.
+func rootResourceLocations(absDir string, blocks []ResourceBlock) map[string]Location {
+	var root []ResourceBlock
+	for _, b := range blocks {
+		if filepath.Dir(relPath(absDir, b.Filename)) == "." {
+			root = append(root, b)
+		}
+	}
+	return resourceLocations(absDir, root)
+}
+
 // relPath returns filename relative to absDir, falling back to filename when
 // the two cannot be related. ParseDir's block filenames come from a walk
 // rooted at absDir, so they are absolute in normal use; the relative case is

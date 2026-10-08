@@ -32,3 +32,13 @@ func TestLocations_Of(t *testing.T) {
 		t.Error("a nil map must find nothing")
 	}
 }
+
+// A finding in a module has the address module.<name>.<type>.<name>. The map
+// holds root-module blocks, so the same type and name there is another
+// resource.
+func TestLocations_OfModuleFinding(t *testing.T) {
+	l := Locations{"aws_s3_bucket.a": {Path: "main.tf", Line: 3}}
+	if loc, ok := l.Of(iam.MissingAction{ModuleAddress: "module.app", ResourceType: "aws_s3_bucket", ResourceName: "a"}); ok {
+		t.Errorf("a module finding must have no location, got %+v", loc)
+	}
+}

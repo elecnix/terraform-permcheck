@@ -566,6 +566,11 @@ With `--format github-annotations`, each missing permission group produces a
 in the PR diff. `--exit-zero` ensures the step itself succeeds so the check
 passes green while surfacing warnings.
 
+With `--terraform-root`, an annotation also carries the file and line of the
+resource block. In plan mode, only resources of the root module get one: the
+parser does not resolve module calls, so it cannot tell which block a module
+resource comes from.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

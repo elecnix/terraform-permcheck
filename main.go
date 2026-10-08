@@ -157,22 +157,28 @@ func validateCmd(args []string) error {
 		Resolver: check.ResolverFor(source),
 	}
 
-	// Build resource-to-file location map when --terraform-root is set.
-	// In plan mode, this provides file= and line= parameters for annotations.
-	// In static HCL mode, this is also used (though the parser already has
-	// file info).
+	// Static HCL mode reads resources from .tf files when no plan is given.
+	static := *planFile == "" && !stdinHasData()
+
+	// Build resource-to-file location map when --terraform-root is set, for
+	// the file= and line= parameters of annotations. A plan names resources
+	// by address, and the parser knows the address of root-module blocks
+	// only, so plan mode maps those. Static mode checks every block it
+	// parsed, so it maps every block.
 	var locations report.Locations
 	if *terraformRoot != "" {
+		mapResources := hcl.MapRootResources
+		if static {
+			mapResources = hcl.MapResources
+		}
 		var locErr error
-		locations, locErr = hcl.MapResources(*terraformRoot)
+		locations, locErr = mapResources(*terraformRoot)
 		if locErr != nil {
 			// Non-fatal: continue without file locations.
 			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
 		}
 	}
 
-	// Static HCL mode reads resources from .tf files when no plan is given.
-	static := *planFile == "" && !stdinHasData()
 	if static && *terraformRoot == "" {
 		return fmt.Errorf("no plan input: provide --plan-file, pipe plan JSON to stdin, or use --terraform-root for static HCL mode")
 	}

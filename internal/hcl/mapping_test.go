@@ -407,3 +407,20 @@ func TestReadFileAt_UsesTheInstalledReader(t *testing.T) {
 		t.Errorf("after restore, reader = %q, want the real file contents back", got)
 	}
 }
+
+// TestRootResourceLocations keeps only the blocks of .tf files directly in
+// the root, the root module. A block in a subdirectory belongs to a module
+// whose address the parser cannot know.
+func TestRootResourceLocations(t *testing.T) {
+	absDir := "/root"
+	blocks := []ResourceBlock{
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "a", Filename: "/root/modules/x/x.tf", Line: 1},
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "a", Filename: "/root/main.tf", Line: 5},
+		{Mode: "resource", Type: "aws_s3_bucket", Name: "nested", Filename: "/root/modules/x/x.tf", Line: 9},
+	}
+	got := rootResourceLocations(absDir, blocks)
+	want := map[string]Location{"aws_s3_bucket.a": {Path: "main.tf", Line: 5}}
+	if len(got) != len(want) || got["aws_s3_bucket.a"] != want["aws_s3_bucket.a"] {
+		t.Errorf("rootResourceLocations = %+v, want %+v", got, want)
+	}
+}

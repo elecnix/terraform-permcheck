@@ -12,11 +12,13 @@ import (
 type Locations map[string]hcl.Location
 
 // Of returns where m's resource is declared. A finding from a declared need
-// has no resource block, so it has no location. A plan address may carry a
+// has no resource block, so it has no location. Neither has a finding in a
+// module: the map keys root-module blocks by type and name, and the same
+// type and name in a module is another block. A plan address may carry a
 // count or for_each index, which a block label never does, so the index is
 // dropped before the lookup.
 func (l Locations) Of(m iam.MissingAction) (hcl.Location, bool) {
-	if m.Need != "" {
+	if m.Need != "" || m.ModuleAddress != "" {
 		return hcl.Location{}, false
 	}
 	loc, ok := l[m.ResourceType+"."+withoutIndex(m.ResourceName)]
