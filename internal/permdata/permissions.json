@@ -538,6 +538,22 @@
         ]
       }
     },
+    "aws_api_gateway_account": {
+      "ops": {
+        "create": [
+          {"action":"apigateway:PATCH"}
+        ],
+        "delete": [
+          {"action":"apigateway:PATCH"}
+        ],
+        "read": [
+          {"action":"apigateway:GET"}
+        ],
+        "update": [
+          {"action":"apigateway:PATCH"}
+        ]
+      }
+    },
     "aws_api_gateway_api_key": {
       "ops": {
         "create": [
@@ -688,6 +704,25 @@
         "update": [
           {"action":"apigateway:PATCH"},
           {"action":"apigateway:GET"},
+          {"action":"apigateway:PUT","attribute":"tags"},
+          {"action":"apigateway:DELETE","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_api_gateway_domain_name_access_association": {
+      "ops": {
+        "create": [
+          {"action":"apigateway:POST"},
+          {"action":"apigateway:PUT","attribute":"tags"},
+          {"action":"apigateway:GET"}
+        ],
+        "delete": [
+          {"action":"apigateway:DELETE"}
+        ],
+        "read": [
+          {"action":"apigateway:GET"}
+        ],
+        "update": [
           {"action":"apigateway:PUT","attribute":"tags"},
           {"action":"apigateway:DELETE","attribute":"tags"}
         ]
@@ -1382,6 +1417,27 @@
         ]
       }
     },
+    "aws_appconfig_environment": {
+      "ops": {
+        "create": [
+          {"action":"appconfig:CreateEnvironment"},
+          {"action":"appconfig:TagResource","attribute":"tags"},
+          {"action":"appconfig:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"appconfig:DeleteEnvironment"}
+        ],
+        "read": [
+          {"action":"appconfig:GetEnvironment"},
+          {"action":"appconfig:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"appconfig:UpdateEnvironment"},
+          {"action":"appconfig:TagResource","attribute":"tags"},
+          {"action":"appconfig:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_appconfig_extension": {
       "ops": {
         "create": [
@@ -1434,6 +1490,105 @@
         ],
         "read": [
           {"action":"appconfig:GetHostedConfigurationVersion"}
+        ]
+      }
+    },
+    "aws_appfabric_app_authorization": {
+      "ops": {
+        "create": [
+          {"action":"appfabric:CreateAppAuthorization"},
+          {"action":"appfabric:GetAppAuthorization"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"appfabric:DeleteAppAuthorization"},
+          {"action":"appfabric:GetAppAuthorization"}
+        ],
+        "read": [
+          {"action":"appfabric:GetAppAuthorization"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"appfabric:UpdateAppAuthorization"},
+          {"action":"appfabric:GetAppAuthorization"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_appfabric_app_authorization_connection": {
+      "ops": {
+        "create": [
+          {"action":"appfabric:ConnectAppAuthorization"},
+          {"action":"appfabric:GetAppAuthorization"}
+        ],
+        "read": [
+          {"action":"appfabric:GetAppAuthorization"}
+        ]
+      }
+    },
+    "aws_appfabric_app_bundle": {
+      "ops": {
+        "create": [
+          {"action":"appfabric:CreateAppBundle"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"appfabric:DeleteAppBundle"}
+        ],
+        "read": [
+          {"action":"appfabric:GetAppBundle"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_appfabric_ingestion": {
+      "ops": {
+        "create": [
+          {"action":"appfabric:CreateIngestion"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"appfabric:DeleteIngestion"}
+        ],
+        "read": [
+          {"action":"appfabric:GetIngestion"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_appfabric_ingestion_destination": {
+      "ops": {
+        "create": [
+          {"action":"appfabric:CreateIngestionDestination"},
+          {"action":"appfabric:GetIngestionDestination"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"appfabric:DeleteIngestionDestination"},
+          {"action":"appfabric:GetIngestionDestination"}
+        ],
+        "read": [
+          {"action":"appfabric:GetIngestionDestination"},
+          {"action":"appfabric:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"appfabric:UpdateIngestionDestination","changed":"destination_configuration"},
+          {"action":"appfabric:GetIngestionDestination","changed":"destination_configuration"},
+          {"action":"appfabric:TagResource","attribute":"tags"},
+          {"action":"appfabric:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -1786,6 +1941,30 @@
         ],
         "read": [
           {"action":"apprunner:DescribeCustomDomains"}
+        ]
+      }
+    },
+    "aws_apprunner_default_auto_scaling_configuration_version": {
+      "ops": {
+        "create": [
+          {"action":"apprunner:UpdateDefaultAutoScalingConfiguration"}
+        ],
+        "read": [
+          {"action":"apprunner:ListAutoScalingConfigurations"}
+        ],
+        "update": [
+          {"action":"apprunner:UpdateDefaultAutoScalingConfiguration"}
+        ]
+      }
+    },
+    "aws_apprunner_deployment": {
+      "ops": {
+        "create": [
+          {"action":"apprunner:StartDeployment"},
+          {"action":"apprunner:ListOperations"}
+        ],
+        "read": [
+          {"action":"apprunner:ListOperations"}
         ]
       }
     },
@@ -2180,6 +2359,25 @@
         ]
       }
     },
+    "aws_appsync_source_api_association": {
+      "ops": {
+        "create": [
+          {"action":"appsync:AssociateSourceGraphqlApi"},
+          {"action":"appsync:GetSourceApiAssociation"}
+        ],
+        "delete": [
+          {"action":"appsync:DisassociateSourceGraphqlApi"},
+          {"action":"appsync:GetSourceApiAssociation"}
+        ],
+        "read": [
+          {"action":"appsync:GetSourceApiAssociation"}
+        ],
+        "update": [
+          {"action":"appsync:UpdateSourceApiAssociation"},
+          {"action":"appsync:GetSourceApiAssociation"}
+        ]
+      }
+    },
     "aws_appsync_type": {
       "ops": {
         "create": [
@@ -2292,6 +2490,138 @@
           {"action":"athena:GetWorkGroup"},
           {"action":"athena:TagResource","attribute":"tags"},
           {"action":"athena:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_auditmanager_account_registration": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:RegisterAccount"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeregisterAccount"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetAccountStatus"}
+        ],
+        "update": [
+          {"action":"auditmanager:RegisterAccount"}
+        ]
+      }
+    },
+    "aws_auditmanager_assessment": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:CreateAssessment"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeleteAssessment"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetAssessment"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"auditmanager:UpdateAssessment"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_auditmanager_assessment_delegation": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:BatchCreateDelegationByAssessment"}
+        ],
+        "delete": [
+          {"action":"auditmanager:BatchDeleteDelegationByAssessment"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetDelegations"}
+        ]
+      }
+    },
+    "aws_auditmanager_assessment_report": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:CreateAssessmentReport"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeleteAssessmentReport"}
+        ],
+        "read": [
+          {"action":"auditmanager:ListAssessmentReports"}
+        ]
+      }
+    },
+    "aws_auditmanager_control": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:CreateControl"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeleteControl"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetControl"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"auditmanager:UpdateControl"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_auditmanager_framework": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:CreateAssessmentFramework"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeleteAssessmentFramework"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetAssessmentFramework"},
+          {"action":"auditmanager:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"auditmanager:UpdateAssessmentFramework"},
+          {"action":"auditmanager:TagResource","attribute":"tags"},
+          {"action":"auditmanager:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_auditmanager_framework_share": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:StartAssessmentFrameworkShare"}
+        ],
+        "delete": [
+          {"action":"auditmanager:UpdateAssessmentFrameworkShare"},
+          {"action":"auditmanager:DeleteAssessmentFrameworkShare"}
+        ],
+        "read": [
+          {"action":"auditmanager:ListAssessmentFrameworkShareRequests"}
+        ]
+      }
+    },
+    "aws_auditmanager_organization_admin_account_registration": {
+      "ops": {
+        "create": [
+          {"action":"auditmanager:RegisterOrganizationAdminAccount"}
+        ],
+        "delete": [
+          {"action":"auditmanager:DeregisterOrganizationAdminAccount"}
+        ],
+        "read": [
+          {"action":"auditmanager:GetOrganizationAdminAccount"}
         ]
       }
     },
@@ -2519,6 +2849,27 @@
         ]
       }
     },
+    "aws_backup_logically_air_gapped_vault": {
+      "ops": {
+        "create": [
+          {"action":"backup:CreateLogicallyAirGappedBackupVault"},
+          {"action":"backup:DescribeBackupVault"},
+          {"action":"backup:TagResource","attribute":"tags"},
+          {"action":"backup:ListTags"}
+        ],
+        "delete": [
+          {"action":"backup:DeleteBackupVault"}
+        ],
+        "read": [
+          {"action":"backup:DescribeBackupVault"},
+          {"action":"backup:ListTags"}
+        ],
+        "update": [
+          {"action":"backup:TagResource","attribute":"tags"},
+          {"action":"backup:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_backup_plan": {
       "ops": {
         "create": [
@@ -2563,6 +2914,45 @@
           {"action":"backup:DescribeReportPlan"},
           {"action":"backup:TagResource","attribute":"tags"},
           {"action":"backup:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_backup_restore_testing_plan": {
+      "ops": {
+        "create": [
+          {"action":"backup:CreateRestoreTestingPlan"},
+          {"action":"backup:GetRestoreTestingPlan"},
+          {"action":"backup:TagResource","attribute":"tags"},
+          {"action":"backup:ListTags"}
+        ],
+        "delete": [
+          {"action":"backup:DeleteRestoreTestingPlan"}
+        ],
+        "read": [
+          {"action":"backup:GetRestoreTestingPlan"},
+          {"action":"backup:ListTags"}
+        ],
+        "update": [
+          {"action":"backup:UpdateRestoreTestingPlan"},
+          {"action":"backup:TagResource","attribute":"tags"},
+          {"action":"backup:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_backup_restore_testing_selection": {
+      "ops": {
+        "create": [
+          {"action":"backup:CreateRestoreTestingSelection"},
+          {"action":"backup:GetRestoreTestingSelection"}
+        ],
+        "delete": [
+          {"action":"backup:DeleteRestoreTestingSelection"}
+        ],
+        "read": [
+          {"action":"backup:GetRestoreTestingSelection"}
+        ],
+        "update": [
+          {"action":"backup:UpdateRestoreTestingSelection"}
         ]
       }
     },
@@ -2702,6 +3092,31 @@
         ]
       }
     },
+    "aws_batch_job_queue": {
+      "ops": {
+        "create": [
+          {"action":"batch:CreateJobQueue"},
+          {"action":"batch:DescribeJobQueues"},
+          {"action":"batch:TagResource","attribute":"tags"},
+          {"action":"batch:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"batch:UpdateJobQueue"},
+          {"action":"batch:DeleteJobQueue"},
+          {"action":"batch:DescribeJobQueues"}
+        ],
+        "read": [
+          {"action":"batch:DescribeJobQueues"},
+          {"action":"batch:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"batch:UpdateJobQueue"},
+          {"action":"batch:DescribeJobQueues"},
+          {"action":"batch:TagResource","attribute":"tags"},
+          {"action":"batch:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_batch_scheduling_policy": {
       "ops": {
         "create": [
@@ -2722,6 +3137,307 @@
           {"action":"batch:DescribeSchedulingPolicies"},
           {"action":"batch:TagResource","attribute":"tags"},
           {"action":"batch:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bcmdataexports_export": {
+      "ops": {
+        "create": [
+          {"action":"bcm-data-exports:CreateExport"},
+          {"action":"bcm-data-exports:GetExport"},
+          {"action":"bcm-data-exports:TagResource","attribute":"tags"},
+          {"action":"bcm-data-exports:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bcm-data-exports:DeleteExport"}
+        ],
+        "read": [
+          {"action":"bcm-data-exports:GetExport"},
+          {"action":"bcm-data-exports:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bcm-data-exports:UpdateExport","changed":"export"},
+          {"action":"bcm-data-exports:GetExport"},
+          {"action":"bcm-data-exports:TagResource","attribute":"tags"},
+          {"action":"bcm-data-exports:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrock_custom_model": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateModelCustomizationJob"},
+          {"action":"bedrock:GetModelCustomizationJob"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:StopModelCustomizationJob"},
+          {"action":"bedrock:DeleteCustomModel","attribute":"custom_model_arn"},
+          {"action":"bedrock:GetModelCustomizationJob"}
+        ],
+        "read": [
+          {"action":"bedrock:GetModelCustomizationJob"},
+          {"action":"bedrock:GetCustomModel"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrock_guardrail": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateGuardrail"},
+          {"action":"bedrock:GetGuardrail"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteGuardrail"},
+          {"action":"bedrock:GetGuardrail"}
+        ],
+        "read": [
+          {"action":"bedrock:GetGuardrail"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateGuardrail"},
+          {"action":"bedrock:GetGuardrail"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrock_guardrail_version": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateGuardrailVersion"},
+          {"action":"bedrock:GetGuardrail"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteGuardrail"},
+          {"action":"bedrock:GetGuardrail"}
+        ],
+        "read": [
+          {"action":"bedrock:GetGuardrail"}
+        ]
+      }
+    },
+    "aws_bedrock_inference_profile": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateInferenceProfile"},
+          {"action":"bedrock:GetInferenceProfile"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteInferenceProfile"},
+          {"action":"bedrock:GetInferenceProfile"}
+        ],
+        "read": [
+          {"action":"bedrock:GetInferenceProfile"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrock_model_invocation_logging_configuration": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:PutModelInvocationLoggingConfiguration"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteModelInvocationLoggingConfiguration"}
+        ],
+        "read": [
+          {"action":"bedrock:GetModelInvocationLoggingConfiguration"}
+        ],
+        "update": [
+          {"action":"bedrock:PutModelInvocationLoggingConfiguration"}
+        ]
+      }
+    },
+    "aws_bedrock_provisioned_model_throughput": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateProvisionedModelThroughput"},
+          {"action":"bedrock:GetProvisionedModelThroughput"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteProvisionedModelThroughput"}
+        ],
+        "read": [
+          {"action":"bedrock:GetProvisionedModelThroughput"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrockagent_agent": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateAgent"},
+          {"action":"bedrock:GetAgent"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteAgent"},
+          {"action":"bedrock:GetAgent"}
+        ],
+        "read": [
+          {"action":"bedrock:GetAgent"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateAgent"},
+          {"action":"bedrock:GetAgent"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrockagent_agent_action_group": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateAgentActionGroup"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteAgentActionGroup"}
+        ],
+        "read": [
+          {"action":"bedrock:GetAgentActionGroup"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateAgentActionGroup"},
+          {"action":"bedrock:GetAgentActionGroup"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ]
+      }
+    },
+    "aws_bedrockagent_agent_alias": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateAgentAlias"},
+          {"action":"bedrock:GetAgentAlias"},
+          {"action":"bedrock:GetAgent"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteAgentAlias"}
+        ],
+        "read": [
+          {"action":"bedrock:GetAgentAlias"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateAgentAlias"},
+          {"action":"bedrock:GetAgentAlias"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_bedrockagent_agent_collaborator": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:AssociateAgentCollaborator"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ],
+        "delete": [
+          {"action":"bedrock:DisassociateAgentCollaborator"},
+          {"action":"bedrock:GetAgent"},
+          {"action":"bedrock:UpdateAgent"},
+          {"action":"bedrock:PrepareAgent"}
+        ],
+        "read": [
+          {"action":"bedrock:GetAgentCollaborator"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateAgentCollaborator"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ]
+      }
+    },
+    "aws_bedrockagent_agent_knowledge_base_association": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:AssociateAgentKnowledgeBase"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ],
+        "delete": [
+          {"action":"bedrock:DisassociateAgentKnowledgeBase"}
+        ],
+        "read": [
+          {"action":"bedrock:GetAgentKnowledgeBase"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateAgentKnowledgeBase"},
+          {"action":"bedrock:PrepareAgent"},
+          {"action":"bedrock:GetAgent"}
+        ]
+      }
+    },
+    "aws_bedrockagent_data_source": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateDataSource"},
+          {"action":"bedrock:GetDataSource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteDataSource"},
+          {"action":"bedrock:GetDataSource"}
+        ],
+        "read": [
+          {"action":"bedrock:GetDataSource"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateDataSource"}
+        ]
+      }
+    },
+    "aws_bedrockagent_knowledge_base": {
+      "ops": {
+        "create": [
+          {"action":"bedrock:CreateKnowledgeBase"},
+          {"action":"bedrock:GetKnowledgeBase"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"bedrock:DeleteKnowledgeBase"},
+          {"action":"bedrock:GetKnowledgeBase"}
+        ],
+        "read": [
+          {"action":"bedrock:GetKnowledgeBase"},
+          {"action":"bedrock:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"bedrock:UpdateKnowledgeBase"},
+          {"action":"bedrock:GetKnowledgeBase"},
+          {"action":"bedrock:TagResource","attribute":"tags"},
+          {"action":"bedrock:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -2855,6 +3571,54 @@
           {"action":"ce:DescribeCostCategoryDefinition"},
           {"action":"ce:TagResource","attribute":"tags"},
           {"action":"ce:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_chatbot_slack_channel_configuration": {
+      "ops": {
+        "create": [
+          {"action":"chatbot:CreateSlackChannelConfiguration"},
+          {"action":"chatbot:DescribeSlackChannelConfigurations"},
+          {"action":"chatbot:TagResource","attribute":"tags"},
+          {"action":"chatbot:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"chatbot:DeleteSlackChannelConfiguration"},
+          {"action":"chatbot:DescribeSlackChannelConfigurations"}
+        ],
+        "read": [
+          {"action":"chatbot:DescribeSlackChannelConfigurations"},
+          {"action":"chatbot:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"chatbot:UpdateSlackChannelConfiguration"},
+          {"action":"chatbot:DescribeSlackChannelConfigurations"},
+          {"action":"chatbot:TagResource","attribute":"tags"},
+          {"action":"chatbot:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_chatbot_teams_channel_configuration": {
+      "ops": {
+        "create": [
+          {"action":"chatbot:CreateMicrosoftTeamsChannelConfiguration"},
+          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"},
+          {"action":"chatbot:TagResource","attribute":"tags"},
+          {"action":"chatbot:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"chatbot:DeleteMicrosoftTeamsChannelConfiguration"},
+          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"}
+        ],
+        "read": [
+          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"},
+          {"action":"chatbot:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"chatbot:UpdateMicrosoftTeamsChannelConfiguration"},
+          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"},
+          {"action":"chatbot:TagResource","attribute":"tags"},
+          {"action":"chatbot:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -3145,6 +3909,27 @@
         ]
       }
     },
+    "aws_cleanrooms_membership": {
+      "ops": {
+        "create": [
+          {"action":"cleanrooms:CreateMembership"},
+          {"action":"cleanrooms:TagResource","attribute":"tags"},
+          {"action":"cleanrooms:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"cleanrooms:DeleteMembership"}
+        ],
+        "read": [
+          {"action":"cleanrooms:GetMembership"},
+          {"action":"cleanrooms:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"cleanrooms:UpdateMembership"},
+          {"action":"cleanrooms:TagResource","attribute":"tags"},
+          {"action":"cleanrooms:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_cloud9_environment_ec2": {
       "ops": {
         "create": [
@@ -3343,6 +4128,23 @@
         ]
       }
     },
+    "aws_cloudfront_continuous_deployment_policy": {
+      "ops": {
+        "create": [
+          {"action":"cloudfront:CreateContinuousDeploymentPolicy"}
+        ],
+        "delete": [
+          {"action":"cloudfront:DeleteContinuousDeploymentPolicy"},
+          {"action":"cloudfront:GetContinuousDeploymentPolicy"}
+        ],
+        "read": [
+          {"action":"cloudfront:GetContinuousDeploymentPolicy"}
+        ],
+        "update": [
+          {"action":"cloudfront:UpdateContinuousDeploymentPolicy"}
+        ]
+      }
+    },
     "aws_cloudfront_distribution": {
       "ops": {
         "create": [
@@ -3444,6 +4246,23 @@
         "update": [
           {"action":"cloudfront:UpdateKeyGroup"},
           {"action":"cloudfront:GetKeyGroup"}
+        ]
+      }
+    },
+    "aws_cloudfront_key_value_store": {
+      "ops": {
+        "create": [
+          {"action":"cloudfront:CreateKeyValueStore"},
+          {"action":"cloudfront:DescribeKeyValueStore"}
+        ],
+        "delete": [
+          {"action":"cloudfront:DeleteKeyValueStore"}
+        ],
+        "read": [
+          {"action":"cloudfront:DescribeKeyValueStore"}
+        ],
+        "update": [
+          {"action":"cloudfront:UpdateKeyValueStore"}
         ]
       }
     },
@@ -3570,6 +4389,49 @@
         "update": [
           {"action":"cloudfront:UpdateResponseHeadersPolicy"},
           {"action":"cloudfront:GetResponseHeadersPolicy"}
+        ]
+      }
+    },
+    "aws_cloudfront_vpc_origin": {
+      "ops": {
+        "create": [
+          {"action":"cloudfront:CreateVpcOrigin"},
+          {"action":"cloudfront:GetVpcOrigin"},
+          {"action":"cloudfront:TagResource","attribute":"tags"},
+          {"action":"cloudfront:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"cloudfront:DeleteVpcOrigin"},
+          {"action":"cloudfront:GetVpcOrigin"}
+        ],
+        "read": [
+          {"action":"cloudfront:GetVpcOrigin"},
+          {"action":"cloudfront:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"cloudfront:UpdateVpcOrigin","changed":"vpc_origin_endpoint_config"},
+          {"action":"cloudfront:GetVpcOrigin","changed":"vpc_origin_endpoint_config"},
+          {"action":"cloudfront:TagResource","attribute":"tags"},
+          {"action":"cloudfront:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudfrontkeyvaluestore_key": {
+      "ops": {
+        "create": [
+          {"action":"cloudfront-keyvaluestore:PutKey"},
+          {"action":"cloudfront-keyvaluestore:DescribeKeyValueStore"}
+        ],
+        "delete": [
+          {"action":"cloudfront-keyvaluestore:DeleteKey"},
+          {"action":"cloudfront-keyvaluestore:DescribeKeyValueStore"}
+        ],
+        "read": [
+          {"action":"cloudfront-keyvaluestore:GetKey"}
+        ],
+        "update": [
+          {"action":"cloudfront-keyvaluestore:PutKey","changed":"value"},
+          {"action":"cloudfront-keyvaluestore:DescribeKeyValueStore","changed":"value"}
         ]
       }
     },
@@ -3739,6 +4601,20 @@
         ]
       }
     },
+    "aws_cloudtrail_organization_delegated_admin_account": {
+      "ops": {
+        "create": [
+          {"action":"cloudtrail:RegisterOrganizationDelegatedAdmin"},
+          {"action":"organizations:ListDelegatedAdministrators"}
+        ],
+        "delete": [
+          {"action":"cloudtrail:DeregisterOrganizationDelegatedAdmin"}
+        ],
+        "read": [
+          {"action":"organizations:ListDelegatedAdministrators"}
+        ]
+      }
+    },
     "aws_cloudwatch_composite_alarm": {
       "ops": {
         "create": [
@@ -3758,6 +4634,58 @@
         "update": [
           {"action":"cloudwatch:PutCompositeAlarm"},
           {"action":"cloudwatch:DescribeAlarms"},
+          {"action":"cloudwatch:TagResource","attribute":"tags"},
+          {"action":"cloudwatch:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudwatch_contributor_insight_rule": {
+      "ops": {
+        "create": [
+          {"action":"cloudwatch:PutInsightRule"},
+          {"action":"cloudwatch:EnableInsightRules","attribute":"rule_state"},
+          {"action":"cloudwatch:TagResource","attribute":"tags"},
+          {"action":"cloudwatch:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"cloudwatch:DeleteInsightRules"}
+        ],
+        "read": [
+          {"action":"cloudwatch:DescribeInsightRules"},
+          {"action":"cloudwatch:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"cloudwatch:EnableInsightRules","attribute":"rule_state"},
+          {"action":"cloudwatch:DisableInsightRules","attribute":"rule_state"},
+          {"action":"cloudwatch:TagResource","attribute":"tags"},
+          {"action":"cloudwatch:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudwatch_contributor_managed_insight_rule": {
+      "ops": {
+        "create": [
+          {"action":"cloudwatch:PutManagedInsightRules"},
+          {"action":"cloudwatch:DisableInsightRules"},
+          {"action":"cloudwatch:ListManagedInsightRules"},
+          {"action":"cloudwatch:TagResource","attribute":"tags"},
+          {"action":"cloudwatch:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"cloudwatch:DeleteInsightRules"},
+          {"action":"cloudwatch:ListManagedInsightRules"}
+        ],
+        "import": [
+          {"action":"cloudwatch:ListManagedInsightRules"}
+        ],
+        "read": [
+          {"action":"cloudwatch:ListManagedInsightRules"},
+          {"action":"cloudwatch:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"cloudwatch:PutManagedInsightRules","attribute":"state"},
+          {"action":"cloudwatch:DisableInsightRules","attribute":"state"},
+          {"action":"cloudwatch:ListManagedInsightRules","attribute":"state"},
           {"action":"cloudwatch:TagResource","attribute":"tags"},
           {"action":"cloudwatch:UntagResource","attribute":"tags"}
         ]
@@ -3975,6 +4903,28 @@
         ]
       }
     },
+    "aws_cloudwatch_log_anomaly_detector": {
+      "ops": {
+        "create": [
+          {"action":"logs:CreateLogAnomalyDetector"},
+          {"action":"logs:GetLogAnomalyDetector"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteLogAnomalyDetector"}
+        ],
+        "read": [
+          {"action":"logs:GetLogAnomalyDetector"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"logs:UpdateLogAnomalyDetector"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_cloudwatch_log_data_protection_policy": {
       "ops": {
         "create": [
@@ -3990,6 +4940,85 @@
         "update": [
           {"action":"logs:PutDataProtectionPolicy"},
           {"action":"logs:GetDataProtectionPolicy"}
+        ]
+      }
+    },
+    "aws_cloudwatch_log_delivery": {
+      "ops": {
+        "create": [
+          {"action":"logs:CreateDelivery"},
+          {"action":"logs:GetDelivery"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteDelivery"}
+        ],
+        "read": [
+          {"action":"logs:GetDelivery"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"logs:UpdateDeliveryConfiguration"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudwatch_log_delivery_destination": {
+      "ops": {
+        "create": [
+          {"action":"logs:PutDeliveryDestination"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteDeliveryDestination"}
+        ],
+        "read": [
+          {"action":"logs:GetDeliveryDestination"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"logs:PutDeliveryDestination"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudwatch_log_delivery_destination_policy": {
+      "ops": {
+        "create": [
+          {"action":"logs:PutDeliveryDestinationPolicy"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteDeliveryDestinationPolicy"}
+        ],
+        "read": [
+          {"action":"logs:GetDeliveryDestinationPolicy"}
+        ],
+        "update": [
+          {"action":"logs:PutDeliveryDestinationPolicy"}
+        ]
+      }
+    },
+    "aws_cloudwatch_log_delivery_source": {
+      "ops": {
+        "create": [
+          {"action":"logs:PutDeliverySource"},
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteDeliverySource"}
+        ],
+        "read": [
+          {"action":"logs:GetDeliverySource"},
+          {"action":"logs:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"logs:TagResource","attribute":"tags"},
+          {"action":"logs:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -4041,6 +5070,22 @@
           {"action":"logs:DescribeLogGroups"},
           {"action":"logs:TagResource","attribute":"tags"},
           {"action":"logs:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_cloudwatch_log_index_policy": {
+      "ops": {
+        "create": [
+          {"action":"logs:PutIndexPolicy"}
+        ],
+        "delete": [
+          {"action":"logs:DeleteIndexPolicy"}
+        ],
+        "read": [
+          {"action":"logs:DescribeIndexPolicies"}
+        ],
+        "update": [
+          {"action":"logs:PutIndexPolicy"}
         ]
       }
     },
@@ -4500,6 +5545,52 @@
         ]
       }
     },
+    "aws_codeconnections_connection": {
+      "ops": {
+        "create": [
+          {"action":"codeconnections:CreateConnection"},
+          {"action":"codeconnections:GetConnection"},
+          {"action":"codeconnections:TagResource","attribute":"tags"},
+          {"action":"codeconnections:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"codeconnections:DeleteConnection"},
+          {"action":"codeconnections:GetConnection"}
+        ],
+        "read": [
+          {"action":"codeconnections:GetConnection"},
+          {"action":"codeconnections:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"codeconnections:TagResource","attribute":"tags"},
+          {"action":"codeconnections:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_codeconnections_host": {
+      "ops": {
+        "create": [
+          {"action":"codeconnections:CreateHost"},
+          {"action":"codeconnections:GetHost"},
+          {"action":"codeconnections:TagResource","attribute":"tags"},
+          {"action":"codeconnections:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"codeconnections:DeleteHost"},
+          {"action":"codeconnections:GetHost"}
+        ],
+        "read": [
+          {"action":"codeconnections:GetHost"},
+          {"action":"codeconnections:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"codeconnections:UpdateHost"},
+          {"action":"codeconnections:GetHost"},
+          {"action":"codeconnections:TagResource","attribute":"tags"},
+          {"action":"codeconnections:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_codedeploy_app": {
       "ops": {
         "create": [
@@ -4557,6 +5648,27 @@
           {"action":"codedeploy:GetDeploymentGroup"},
           {"action":"codedeploy:TagResource","attribute":"tags"},
           {"action":"codedeploy:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_codeguruprofiler_profiling_group": {
+      "ops": {
+        "create": [
+          {"action":"codeguru-profiler:CreateProfilingGroup"},
+          {"action":"codeguru-profiler:TagResource","attribute":"tags"},
+          {"action":"codeguru-profiler:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"codeguru-profiler:DeleteProfilingGroup"}
+        ],
+        "read": [
+          {"action":"codeguru-profiler:DescribeProfilingGroup"},
+          {"action":"codeguru-profiler:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"codeguru-profiler:UpdateProfilingGroup","changed":"agent_orchestration_config"},
+          {"action":"codeguru-profiler:TagResource","attribute":"tags"},
+          {"action":"codeguru-profiler:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -4793,6 +5905,21 @@
         ]
       }
     },
+    "aws_cognito_managed_user_pool_client": {
+      "ops": {
+        "create": [
+          {"action":"cognito-idp:UpdateUserPoolClient"},
+          {"action":"cognito-idp:ListUserPoolClients"},
+          {"action":"cognito-idp:DescribeUserPoolClient"}
+        ],
+        "read": [
+          {"action":"cognito-idp:DescribeUserPoolClient"}
+        ],
+        "update": [
+          {"action":"cognito-idp:UpdateUserPoolClient"}
+        ]
+      }
+    },
     "aws_cognito_resource_server": {
       "ops": {
         "create": [
@@ -4914,6 +6041,22 @@
         ]
       }
     },
+    "aws_cognito_user_pool_client": {
+      "ops": {
+        "create": [
+          {"action":"cognito-idp:CreateUserPoolClient"}
+        ],
+        "delete": [
+          {"action":"cognito-idp:DeleteUserPoolClient"}
+        ],
+        "read": [
+          {"action":"cognito-idp:DescribeUserPoolClient"}
+        ],
+        "update": [
+          {"action":"cognito-idp:UpdateUserPoolClient"}
+        ]
+      }
+    },
     "aws_cognito_user_pool_domain": {
       "ops": {
         "create": [
@@ -5014,6 +6157,39 @@
           {"action":"ec2:DescribeNetworkInterfaces"},
           {"action":"comprehend:TagResource","attribute":"tags"},
           {"action":"comprehend:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_computeoptimizer_enrollment_status": {
+      "ops": {
+        "create": [
+          {"action":"compute-optimizer:UpdateEnrollmentStatus"},
+          {"action":"compute-optimizer:GetEnrollmentStatus"}
+        ],
+        "read": [
+          {"action":"compute-optimizer:GetEnrollmentStatus"}
+        ],
+        "update": [
+          {"action":"compute-optimizer:UpdateEnrollmentStatus"},
+          {"action":"compute-optimizer:GetEnrollmentStatus"}
+        ]
+      }
+    },
+    "aws_computeoptimizer_recommendation_preferences": {
+      "ops": {
+        "create": [
+          {"action":"compute-optimizer:PutRecommendationPreferences"},
+          {"action":"compute-optimizer:GetRecommendationPreferences"}
+        ],
+        "delete": [
+          {"action":"compute-optimizer:DeleteRecommendationPreferences"}
+        ],
+        "read": [
+          {"action":"compute-optimizer:GetRecommendationPreferences"}
+        ],
+        "update": [
+          {"action":"compute-optimizer:PutRecommendationPreferences"},
+          {"action":"compute-optimizer:GetRecommendationPreferences"}
         ]
       }
     },
@@ -5277,6 +6453,22 @@
         "update": [
           {"action":"config:PutRemediationConfigurations"},
           {"action":"config:DescribeRemediationConfigurations"}
+        ]
+      }
+    },
+    "aws_config_retention_configuration": {
+      "ops": {
+        "create": [
+          {"action":"config:PutRetentionConfiguration"}
+        ],
+        "delete": [
+          {"action":"config:DeleteRetentionConfiguration"}
+        ],
+        "read": [
+          {"action":"config:DescribeRetentionConfigurations"}
+        ],
+        "update": [
+          {"action":"config:PutRetentionConfiguration"}
         ]
       }
     },
@@ -5681,6 +6873,38 @@
         ]
       }
     },
+    "aws_costoptimizationhub_enrollment_status": {
+      "ops": {
+        "create": [
+          {"action":"cost-optimization-hub:UpdateEnrollmentStatus"}
+        ],
+        "delete": [
+          {"action":"cost-optimization-hub:UpdateEnrollmentStatus"}
+        ],
+        "read": [
+          {"action":"cost-optimization-hub:ListEnrollmentStatuses"}
+        ],
+        "update": [
+          {"action":"cost-optimization-hub:UpdateEnrollmentStatus","changed":"include_member_accounts"}
+        ]
+      }
+    },
+    "aws_costoptimizationhub_preferences": {
+      "ops": {
+        "create": [
+          {"action":"cost-optimization-hub:UpdatePreferences"}
+        ],
+        "delete": [
+          {"action":"cost-optimization-hub:UpdatePreferences"}
+        ],
+        "read": [
+          {"action":"cost-optimization-hub:GetPreferences"}
+        ],
+        "update": [
+          {"action":"cost-optimization-hub:UpdatePreferences"}
+        ]
+      }
+    },
     "aws_cur_report_definition": {
       "ops": {
         "create": [
@@ -5788,6 +7012,22 @@
           {"action":"dataexchange:GetDataSet"},
           {"action":"dataexchange:TagResource","attribute":"tags"},
           {"action":"dataexchange:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_dataexchange_event_action": {
+      "ops": {
+        "create": [
+          {"action":"dataexchange:CreateEventAction"}
+        ],
+        "delete": [
+          {"action":"dataexchange:DeleteEventAction"}
+        ],
+        "read": [
+          {"action":"dataexchange:GetEventAction"}
+        ],
+        "update": [
+          {"action":"dataexchange:UpdateEventAction"}
         ]
       }
     },
@@ -6125,6 +7365,179 @@
           {"action":"datasync:DescribeTask"},
           {"action":"datasync:TagResource","attribute":"tags"},
           {"action":"datasync:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_datazone_asset_type": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateAssetType"},
+          {"action":"datazone:GetAssetType"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteAssetType"}
+        ],
+        "read": [
+          {"action":"datazone:GetAssetType"}
+        ]
+      }
+    },
+    "aws_datazone_domain": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateDomain"},
+          {"action":"datazone:GetDomain"},
+          {"action":"datazone:TagResource","attribute":"tags"},
+          {"action":"datazone:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteDomain"},
+          {"action":"datazone:GetDomain"}
+        ],
+        "read": [
+          {"action":"datazone:GetDomain"},
+          {"action":"datazone:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateDomain"},
+          {"action":"datazone:TagResource","attribute":"tags"},
+          {"action":"datazone:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_datazone_environment": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateEnvironment"},
+          {"action":"datazone:GetEnvironment"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteEnvironment"},
+          {"action":"datazone:GetEnvironment"}
+        ],
+        "read": [
+          {"action":"datazone:GetEnvironment"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateEnvironment"},
+          {"action":"datazone:GetEnvironment"}
+        ]
+      }
+    },
+    "aws_datazone_environment_blueprint_configuration": {
+      "ops": {
+        "create": [
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteEnvironmentBlueprintConfiguration"}
+        ],
+        "import": [
+          {"action":"datazone:GetEnvironmentBlueprintConfiguration"}
+        ],
+        "read": [
+          {"action":"datazone:GetEnvironmentBlueprintConfiguration"}
+        ],
+        "update": [
+          {"action":"datazone:PutEnvironmentBlueprintConfiguration"}
+        ]
+      }
+    },
+    "aws_datazone_environment_profile": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateEnvironmentProfile"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteEnvironmentProfile"}
+        ],
+        "read": [
+          {"action":"datazone:GetEnvironmentProfile"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateEnvironmentProfile"}
+        ]
+      }
+    },
+    "aws_datazone_form_type": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateFormType"},
+          {"action":"datazone:GetFormType"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteFormType"}
+        ],
+        "read": [
+          {"action":"datazone:GetFormType"}
+        ]
+      }
+    },
+    "aws_datazone_glossary": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateGlossary"}
+        ],
+        "delete": [
+          {"action":"datazone:UpdateGlossary"},
+          {"action":"datazone:DeleteGlossary"}
+        ],
+        "read": [
+          {"action":"datazone:GetGlossary"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateGlossary"}
+        ]
+      }
+    },
+    "aws_datazone_glossary_term": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateGlossaryTerm"},
+          {"action":"datazone:GetGlossaryTerm"}
+        ],
+        "delete": [
+          {"action":"datazone:UpdateGlossaryTerm"},
+          {"action":"datazone:DeleteGlossaryTerm"}
+        ],
+        "read": [
+          {"action":"datazone:GetGlossaryTerm"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateGlossaryTerm"}
+        ]
+      }
+    },
+    "aws_datazone_project": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateProject"},
+          {"action":"datazone:GetProject"}
+        ],
+        "delete": [
+          {"action":"datazone:DeleteProject"},
+          {"action":"datazone:GetProject"}
+        ],
+        "read": [
+          {"action":"datazone:GetProject"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateProject"}
+        ]
+      }
+    },
+    "aws_datazone_user_profile": {
+      "ops": {
+        "create": [
+          {"action":"datazone:CreateUserProfile"},
+          {"action":"datazone:GetUserProfile"}
+        ],
+        "read": [
+          {"action":"datazone:GetUserProfile"}
+        ],
+        "update": [
+          {"action":"datazone:UpdateUserProfile"},
+          {"action":"datazone:GetUserProfile"}
         ]
       }
     },
@@ -6894,6 +8307,60 @@
         ]
       }
     },
+    "aws_devopsguru_event_sources_config": {
+      "ops": {
+        "create": [
+          {"action":"devops-guru:UpdateEventSourcesConfig"}
+        ],
+        "delete": [
+          {"action":"devops-guru:UpdateEventSourcesConfig"}
+        ],
+        "read": [
+          {"action":"devops-guru:DescribeEventSourcesConfig"}
+        ]
+      }
+    },
+    "aws_devopsguru_notification_channel": {
+      "ops": {
+        "create": [
+          {"action":"devops-guru:AddNotificationChannel"}
+        ],
+        "delete": [
+          {"action":"devops-guru:RemoveNotificationChannel"}
+        ],
+        "read": [
+          {"action":"devops-guru:ListNotificationChannels"}
+        ]
+      }
+    },
+    "aws_devopsguru_resource_collection": {
+      "ops": {
+        "create": [
+          {"action":"devops-guru:UpdateResourceCollection"}
+        ],
+        "delete": [
+          {"action":"devops-guru:UpdateResourceCollection"}
+        ],
+        "read": [
+          {"action":"devops-guru:GetResourceCollection"}
+        ]
+      }
+    },
+    "aws_devopsguru_service_integration": {
+      "ops": {
+        "create": [
+          {"action":"devops-guru:UpdateServiceIntegration"},
+          {"action":"devops-guru:DescribeServiceIntegration"}
+        ],
+        "read": [
+          {"action":"devops-guru:DescribeServiceIntegration"}
+        ],
+        "update": [
+          {"action":"devops-guru:UpdateServiceIntegration"},
+          {"action":"devops-guru:DescribeServiceIntegration"}
+        ]
+      }
+    },
     "aws_directory_service_conditional_forwarder": {
       "ops": {
         "create": [
@@ -7032,6 +8499,31 @@
         ],
         "read": [
           {"action":"ds:DescribeDirectories"}
+        ]
+      }
+    },
+    "aws_directory_service_trust": {
+      "ops": {
+        "create": [
+          {"action":"ds:CreateTrust"},
+          {"action":"ds:DescribeTrusts"}
+        ],
+        "delete": [
+          {"action":"ds:DeleteTrust"},
+          {"action":"ds:DescribeTrusts"}
+        ],
+        "import": [
+          {"action":"ds:DescribeTrusts"}
+        ],
+        "read": [
+          {"action":"ds:DescribeTrusts"},
+          {"action":"ds:DescribeConditionalForwarders"}
+        ],
+        "update": [
+          {"action":"ds:UpdateTrust","changed":"selective_auth"},
+          {"action":"ds:UpdateConditionalForwarder","changed":"conditional_forwarder_ip_addrs"},
+          {"action":"ds:DescribeTrusts","changed":"selective_auth"},
+          {"action":"ds:DescribeConditionalForwarders","changed":"conditional_forwarder_ip_addrs"}
         ]
       }
     },
@@ -7436,6 +8928,54 @@
           {"action":"rds:DescribeDBSubnetGroups"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_docdbelastic_cluster": {
+      "ops": {
+        "create": [
+          {"action":"docdb-elastic:CreateCluster"},
+          {"action":"docdb-elastic:GetCluster"},
+          {"action":"docdb-elastic:TagResource","attribute":"tags"},
+          {"action":"docdb-elastic:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"docdb-elastic:DeleteCluster"},
+          {"action":"docdb-elastic:GetCluster"}
+        ],
+        "read": [
+          {"action":"docdb-elastic:GetCluster"},
+          {"action":"docdb-elastic:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"docdb-elastic:UpdateCluster"},
+          {"action":"docdb-elastic:GetCluster"},
+          {"action":"docdb-elastic:TagResource","attribute":"tags"},
+          {"action":"docdb-elastic:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_drs_replication_configuration_template": {
+      "ops": {
+        "create": [
+          {"action":"drs:CreateReplicationConfigurationTemplate"},
+          {"action":"drs:DescribeReplicationConfigurationTemplates"},
+          {"action":"drs:TagResource","attribute":"tags"},
+          {"action":"drs:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"drs:DeleteReplicationConfigurationTemplate"},
+          {"action":"drs:DescribeReplicationConfigurationTemplates"}
+        ],
+        "read": [
+          {"action":"drs:DescribeReplicationConfigurationTemplates"},
+          {"action":"drs:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"drs:UpdateReplicationConfigurationTemplate"},
+          {"action":"drs:DescribeReplicationConfigurationTemplates"},
+          {"action":"drs:TagResource","attribute":"tags"},
+          {"action":"drs:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -7887,6 +9427,23 @@
         ]
       }
     },
+    "aws_dynamodb_resource_policy": {
+      "ops": {
+        "create": [
+          {"action":"dynamodb:PutResourcePolicy"},
+          {"action":"dynamodb:GetResourcePolicy"}
+        ],
+        "delete": [
+          {"action":"dynamodb:DeleteResourcePolicy"}
+        ],
+        "read": [
+          {"action":"dynamodb:GetResourcePolicy"}
+        ],
+        "update": [
+          {"action":"dynamodb:PutResourcePolicy"}
+        ]
+      }
+    },
     "aws_dynamodb_table": {
       "ops": {
         "create": [
@@ -8056,6 +9613,21 @@
         ]
       }
     },
+    "aws_ebs_fast_snapshot_restore": {
+      "ops": {
+        "create": [
+          {"action":"ec2:EnableFastSnapshotRestores"},
+          {"action":"ec2:DescribeFastSnapshotRestores"}
+        ],
+        "delete": [
+          {"action":"ec2:DisableFastSnapshotRestores"},
+          {"action":"ec2:DescribeFastSnapshotRestores"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeFastSnapshotRestores"}
+        ]
+      }
+    },
     "aws_ebs_snapshot": {
       "ops": {
         "create": [
@@ -8194,6 +9766,24 @@
         "update": [
           {"action":"ec2:ModifyAvailabilityZoneGroup"},
           {"action":"ec2:DescribeAvailabilityZones"}
+        ]
+      }
+    },
+    "aws_ec2_capacity_block_reservation": {
+      "ops": {
+        "create": [
+          {"action":"ec2:PurchaseCapacityBlock"},
+          {"action":"ec2:DescribeCapacityReservations"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeCapacityReservations"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "update": [
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DeleteTags","attribute":"tags"}
         ]
       }
     },
@@ -8358,6 +9948,44 @@
           {"action":"ec2:DescribeHosts"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_ec2_instance_connect_endpoint": {
+      "ops": {
+        "create": [
+          {"action":"ec2:CreateInstanceConnectEndpoint"},
+          {"action":"ec2:DescribeInstanceConnectEndpoints"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"ec2:DeleteInstanceConnectEndpoint"},
+          {"action":"ec2:DescribeInstanceConnectEndpoints"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeInstanceConnectEndpoints"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "update": [
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_ec2_instance_metadata_defaults": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyInstanceMetadataDefaults"}
+        ],
+        "delete": [
+          {"action":"ec2:ModifyInstanceMetadataDefaults"}
+        ],
+        "read": [
+          {"action":"ec2:GetInstanceMetadataDefaults"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyInstanceMetadataDefaults"}
         ]
       }
     },
@@ -8738,6 +10366,44 @@
         ]
       }
     },
+    "aws_ec2_transit_gateway_default_route_table_association": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "delete": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ]
+      }
+    },
+    "aws_ec2_transit_gateway_default_route_table_propagation": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "delete": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeTransitGateways"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyTransitGateway"},
+          {"action":"ec2:DescribeTransitGateways"}
+        ]
+      }
+    },
     "aws_ec2_transit_gateway_multicast_domain": {
       "ops": {
         "create": [
@@ -9069,6 +10735,19 @@
           {"action":"ec2:GetTransitGatewayRouteTablePropagations","changed":"transit_gateway_default_route_table_propagation"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_ecr_account_setting": {
+      "ops": {
+        "create": [
+          {"action":"ecr:PutAccountSetting"}
+        ],
+        "read": [
+          {"action":"ecr:GetAccountSetting"}
+        ],
+        "update": [
+          {"action":"ecr:PutAccountSetting"}
         ]
       }
     },
@@ -9642,6 +11321,25 @@
         ]
       }
     },
+    "aws_eip_domain_name": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyAddressAttribute"},
+          {"action":"ec2:DescribeAddressesAttribute"}
+        ],
+        "delete": [
+          {"action":"ec2:ResetAddressAttribute"},
+          {"action":"ec2:DescribeAddressesAttribute"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeAddressesAttribute"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyAddressAttribute","changed":"domain_name"},
+          {"action":"ec2:DescribeAddressesAttribute","changed":"domain_name"}
+        ]
+      }
+    },
     "aws_eks_access_entry": {
       "ops": {
         "create": [
@@ -9801,6 +11499,27 @@
           {"action":"eks:UpdateNodegroupConfig"},
           {"action":"eks:DescribeUpdate"},
           {"action":"eks:DescribeNodegroup"},
+          {"action":"eks:TagResource","attribute":"tags"},
+          {"action":"eks:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_eks_pod_identity_association": {
+      "ops": {
+        "create": [
+          {"action":"eks:CreatePodIdentityAssociation"},
+          {"action":"eks:TagResource","attribute":"tags"},
+          {"action":"eks:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"eks:DeletePodIdentityAssociation"}
+        ],
+        "read": [
+          {"action":"eks:DescribePodIdentityAssociation"},
+          {"action":"eks:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"eks:UpdatePodIdentityAssociation","changed":"role_arn"},
           {"action":"eks:TagResource","attribute":"tags"},
           {"action":"eks:UntagResource","attribute":"tags"}
         ]
@@ -10016,6 +11735,48 @@
           {"action":"elasticache:DecreaseReplicaCount","changed":"replicas_per_node_group"},
           {"action":"elasticache:DecreaseReplicaCount","changed":"num_cache_clusters"},
           {"action":"elasticache:DescribeCacheClusters"},
+          {"action":"elasticache:AddTagsToResource","attribute":"tags"},
+          {"action":"elasticache:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_elasticache_reserved_cache_node": {
+      "ops": {
+        "create": [
+          {"action":"elasticache:PurchaseReservedCacheNodesOffering"},
+          {"action":"elasticache:DescribeReservedCacheNodes"},
+          {"action":"elasticache:AddTagsToResource","attribute":"tags"},
+          {"action":"elasticache:ListTagsForResource"}
+        ],
+        "read": [
+          {"action":"elasticache:DescribeReservedCacheNodes"},
+          {"action":"elasticache:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"elasticache:AddTagsToResource","attribute":"tags"},
+          {"action":"elasticache:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_elasticache_serverless_cache": {
+      "ops": {
+        "create": [
+          {"action":"elasticache:CreateServerlessCache"},
+          {"action":"elasticache:DescribeServerlessCaches"},
+          {"action":"elasticache:AddTagsToResource","attribute":"tags"},
+          {"action":"elasticache:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"elasticache:DeleteServerlessCache"},
+          {"action":"elasticache:DescribeServerlessCaches"}
+        ],
+        "read": [
+          {"action":"elasticache:DescribeServerlessCaches"},
+          {"action":"elasticache:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"elasticache:ModifyServerlessCache"},
+          {"action":"elasticache:DescribeServerlessCaches"},
           {"action":"elasticache:AddTagsToResource","attribute":"tags"},
           {"action":"elasticache:RemoveTagsFromResource","attribute":"tags"}
         ]
@@ -10868,6 +12629,30 @@
         ]
       }
     },
+    "aws_fms_resource_set": {
+      "ops": {
+        "create": [
+          {"action":"fms:PutResourceSet"},
+          {"action":"fms:GetResourceSet"},
+          {"action":"fms:TagResource","attribute":"tags"},
+          {"action":"fms:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"fms:DeleteResourceSet"},
+          {"action":"fms:GetResourceSet"}
+        ],
+        "read": [
+          {"action":"fms:GetResourceSet"},
+          {"action":"fms:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"fms:PutResourceSet","changed":"resource_set"},
+          {"action":"fms:GetResourceSet"},
+          {"action":"fms:TagResource","attribute":"tags"},
+          {"action":"fms:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_fsx_backup": {
       "ops": {
         "create": [
@@ -11377,6 +13162,27 @@
         ]
       }
     },
+    "aws_globalaccelerator_cross_account_attachment": {
+      "ops": {
+        "create": [
+          {"action":"globalaccelerator:CreateCrossAccountAttachment"},
+          {"action":"globalaccelerator:TagResource","attribute":"tags"},
+          {"action":"globalaccelerator:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"globalaccelerator:DeleteCrossAccountAttachment"}
+        ],
+        "read": [
+          {"action":"globalaccelerator:DescribeCrossAccountAttachment"},
+          {"action":"globalaccelerator:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"globalaccelerator:UpdateCrossAccountAttachment"},
+          {"action":"globalaccelerator:TagResource","attribute":"tags"},
+          {"action":"globalaccelerator:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_globalaccelerator_custom_routing_accelerator": {
       "ops": {
         "create": [
@@ -11531,6 +13337,22 @@
           {"action":"glue:UpdateTable"},
           {"action":"glue:GetTable"},
           {"action":"glue:GetPartitionIndexes"}
+        ]
+      }
+    },
+    "aws_glue_catalog_table_optimizer": {
+      "ops": {
+        "create": [
+          {"action":"glue:CreateTableOptimizer"}
+        ],
+        "delete": [
+          {"action":"glue:DeleteTableOptimizer"}
+        ],
+        "read": [
+          {"action":"glue:GetTableOptimizer"}
+        ],
+        "update": [
+          {"action":"glue:UpdateTableOptimizer","changed":"configuration"}
         ]
       }
     },
@@ -11964,6 +13786,33 @@
         ]
       }
     },
+    "aws_grafana_workspace_service_account": {
+      "ops": {
+        "create": [
+          {"action":"grafana:CreateWorkspaceServiceAccount"}
+        ],
+        "delete": [
+          {"action":"grafana:DeleteWorkspaceServiceAccount"}
+        ],
+        "read": [
+          {"action":"grafana:ListWorkspaceServiceAccounts"}
+        ]
+      }
+    },
+    "aws_grafana_workspace_service_account_token": {
+      "ops": {
+        "create": [
+          {"action":"grafana:CreateWorkspaceServiceAccountToken"},
+          {"action":"grafana:ListWorkspaceServiceAccountTokens"}
+        ],
+        "delete": [
+          {"action":"grafana:DeleteWorkspaceServiceAccountToken"}
+        ],
+        "read": [
+          {"action":"grafana:ListWorkspaceServiceAccountTokens"}
+        ]
+      }
+    },
     "aws_guardduty_detector": {
       "ops": {
         "create": [
@@ -12049,6 +13898,29 @@
         ]
       }
     },
+    "aws_guardduty_malware_protection_plan": {
+      "ops": {
+        "create": [
+          {"action":"guardduty:CreateMalwareProtectionPlan"},
+          {"action":"guardduty:GetMalwareProtectionPlan"},
+          {"action":"guardduty:TagResource","attribute":"tags"},
+          {"action":"guardduty:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"guardduty:DeleteMalwareProtectionPlan"}
+        ],
+        "read": [
+          {"action":"guardduty:GetMalwareProtectionPlan"},
+          {"action":"guardduty:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"guardduty:UpdateMalwareProtectionPlan"},
+          {"action":"guardduty:GetMalwareProtectionPlan"},
+          {"action":"guardduty:TagResource","attribute":"tags"},
+          {"action":"guardduty:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_guardduty_member": {
       "ops": {
         "create": [
@@ -12066,6 +13938,19 @@
           {"action":"guardduty:InviteMembers","changed":"invite"},
           {"action":"guardduty:DisassociateMembers","changed":"invite"},
           {"action":"guardduty:GetMembers"}
+        ]
+      }
+    },
+    "aws_guardduty_member_detector_feature": {
+      "ops": {
+        "create": [
+          {"action":"guardduty:UpdateMemberDetectors"}
+        ],
+        "read": [
+          {"action":"guardduty:GetMemberDetectors"}
+        ],
+        "update": [
+          {"action":"guardduty:UpdateMemberDetectors"}
         ]
       }
     },
@@ -12212,6 +14097,23 @@
         ]
       }
     },
+    "aws_iam_group_policies_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:PutGroupPolicy"},
+          {"action":"iam:DeleteGroupPolicy"},
+          {"action":"iam:ListGroupPolicies"}
+        ],
+        "read": [
+          {"action":"iam:ListGroupPolicies"}
+        ],
+        "update": [
+          {"action":"iam:PutGroupPolicy","changed":"policy_names"},
+          {"action":"iam:DeleteGroupPolicy","changed":"policy_names"},
+          {"action":"iam:ListGroupPolicies","changed":"policy_names"}
+        ]
+      }
+    },
     "aws_iam_group_policy": {
       "ops": {
         "create": [
@@ -12241,6 +14143,23 @@
         ],
         "read": [
           {"action":"iam:ListAttachedGroupPolicies"}
+        ]
+      }
+    },
+    "aws_iam_group_policy_attachments_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:ListAttachedGroupPolicies"},
+          {"action":"iam:AttachGroupPolicy"},
+          {"action":"iam:DetachGroupPolicy"}
+        ],
+        "read": [
+          {"action":"iam:ListAttachedGroupPolicies"}
+        ],
+        "update": [
+          {"action":"iam:ListAttachedGroupPolicies","changed":"policy_arns"},
+          {"action":"iam:AttachGroupPolicy","changed":"policy_arns"},
+          {"action":"iam:DetachGroupPolicy","changed":"policy_arns"}
         ]
       }
     },
@@ -12291,6 +14210,32 @@
           {"action":"iam:AddClientIDToOpenIDConnectProvider","changed":"client_id_list"},
           {"action":"iam:RemoveClientIDFromOpenIDConnectProvider","changed":"client_id_list"},
           {"action":"iam:GetOpenIDConnectProvider"}
+        ]
+      }
+    },
+    "aws_iam_organizations_features": {
+      "ops": {
+        "create": [
+          {"action":"iam:EnableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:EnableOrganizationsRootSessions"},
+          {"action":"iam:DisableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:DisableOrganizationsRootSessions"},
+          {"action":"iam:ListOrganizationsFeatures"}
+        ],
+        "delete": [
+          {"action":"iam:EnableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:EnableOrganizationsRootSessions"},
+          {"action":"iam:DisableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:DisableOrganizationsRootSessions"}
+        ],
+        "read": [
+          {"action":"iam:ListOrganizationsFeatures"}
+        ],
+        "update": [
+          {"action":"iam:EnableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:EnableOrganizationsRootSessions"},
+          {"action":"iam:DisableOrganizationsRootCredentialsManagement"},
+          {"action":"iam:DisableOrganizationsRootSessions"}
         ]
       }
     },
@@ -12398,6 +14343,23 @@
         ]
       }
     },
+    "aws_iam_role_policies_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:PutRolePolicy"},
+          {"action":"iam:DeleteRolePolicy"},
+          {"action":"iam:ListRolePolicies"}
+        ],
+        "read": [
+          {"action":"iam:ListRolePolicies"}
+        ],
+        "update": [
+          {"action":"iam:PutRolePolicy","changed":"policy_names"},
+          {"action":"iam:DeleteRolePolicy","changed":"policy_names"},
+          {"action":"iam:ListRolePolicies","changed":"policy_names"}
+        ]
+      }
+    },
     "aws_iam_role_policy": {
       "ops": {
         "create": [
@@ -12427,6 +14389,23 @@
         ],
         "read": [
           {"action":"iam:ListAttachedRolePolicies"}
+        ]
+      }
+    },
+    "aws_iam_role_policy_attachments_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:ListAttachedRolePolicies"},
+          {"action":"iam:AttachRolePolicy"},
+          {"action":"iam:DetachRolePolicy"}
+        ],
+        "read": [
+          {"action":"iam:ListAttachedRolePolicies"}
+        ],
+        "update": [
+          {"action":"iam:ListAttachedRolePolicies","changed":"policy_arns"},
+          {"action":"iam:AttachRolePolicy","changed":"policy_arns"},
+          {"action":"iam:DetachRolePolicy","changed":"policy_arns"}
         ]
       }
     },
@@ -12603,6 +14582,23 @@
         ]
       }
     },
+    "aws_iam_user_policies_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:PutUserPolicy"},
+          {"action":"iam:DeleteUserPolicy"},
+          {"action":"iam:ListUserPolicies"}
+        ],
+        "read": [
+          {"action":"iam:ListUserPolicies"}
+        ],
+        "update": [
+          {"action":"iam:PutUserPolicy","changed":"policy_names"},
+          {"action":"iam:DeleteUserPolicy","changed":"policy_names"},
+          {"action":"iam:ListUserPolicies","changed":"policy_names"}
+        ]
+      }
+    },
     "aws_iam_user_policy": {
       "ops": {
         "create": [
@@ -12632,6 +14628,23 @@
         ],
         "read": [
           {"action":"iam:ListAttachedUserPolicies"}
+        ]
+      }
+    },
+    "aws_iam_user_policy_attachments_exclusive": {
+      "ops": {
+        "create": [
+          {"action":"iam:ListAttachedUserPolicies"},
+          {"action":"iam:AttachUserPolicy"},
+          {"action":"iam:DetachUserPolicy"}
+        ],
+        "read": [
+          {"action":"iam:ListAttachedUserPolicies"}
+        ],
+        "update": [
+          {"action":"iam:ListAttachedUserPolicies","changed":"policy_arns"},
+          {"action":"iam:AttachUserPolicy","changed":"policy_arns"},
+          {"action":"iam:DetachUserPolicy","changed":"policy_arns"}
         ]
       }
     },
@@ -12879,6 +14892,28 @@
         "update": [
           {"action":"imagebuilder:UpdateInfrastructureConfiguration"},
           {"action":"imagebuilder:GetInfrastructureConfiguration"},
+          {"action":"imagebuilder:TagResource","attribute":"tags"},
+          {"action":"imagebuilder:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_imagebuilder_lifecycle_policy": {
+      "ops": {
+        "create": [
+          {"action":"imagebuilder:CreateLifecyclePolicy"},
+          {"action":"imagebuilder:GetLifecyclePolicy"},
+          {"action":"imagebuilder:TagResource","attribute":"tags"},
+          {"action":"imagebuilder:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"imagebuilder:DeleteLifecyclePolicy"}
+        ],
+        "read": [
+          {"action":"imagebuilder:GetLifecyclePolicy"},
+          {"action":"imagebuilder:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"imagebuilder:UpdateLifecyclePolicy"},
           {"action":"imagebuilder:TagResource","attribute":"tags"},
           {"action":"imagebuilder:UntagResource","attribute":"tags"}
         ]
@@ -13215,6 +15250,28 @@
         "update": [
           {"action":"iot:UpdateAuthorizer"},
           {"action":"iot:DescribeAuthorizer"},
+          {"action":"iot:TagResource","attribute":"tags"},
+          {"action":"iot:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_iot_billing_group": {
+      "ops": {
+        "create": [
+          {"action":"iot:CreateBillingGroup"},
+          {"action":"iot:DescribeBillingGroup"},
+          {"action":"iot:TagResource","attribute":"tags"},
+          {"action":"iot:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"iot:DeleteBillingGroup"}
+        ],
+        "read": [
+          {"action":"iot:DescribeBillingGroup"},
+          {"action":"iot:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"iot:UpdateBillingGroup","changed":"properties"},
           {"action":"iot:TagResource","attribute":"tags"},
           {"action":"iot:UntagResource","attribute":"tags"}
         ]
@@ -13916,6 +15973,22 @@
         ]
       }
     },
+    "aws_kinesis_resource_policy": {
+      "ops": {
+        "create": [
+          {"action":"kinesis:PutResourcePolicy"}
+        ],
+        "delete": [
+          {"action":"kinesis:DeleteResourcePolicy"}
+        ],
+        "read": [
+          {"action":"kinesis:GetResourcePolicy"}
+        ],
+        "update": [
+          {"action":"kinesis:PutResourcePolicy"}
+        ]
+      }
+    },
     "aws_kinesis_stream": {
       "ops": {
         "create": [
@@ -14290,6 +16363,24 @@
         ]
       }
     },
+    "aws_lakeformation_data_cells_filter": {
+      "ops": {
+        "create": [
+          {"action":"lakeformation:CreateDataCellsFilter"},
+          {"action":"lakeformation:GetDataCellsFilter"}
+        ],
+        "delete": [
+          {"action":"lakeformation:DeleteDataCellsFilter"}
+        ],
+        "read": [
+          {"action":"lakeformation:GetDataCellsFilter"}
+        ],
+        "update": [
+          {"action":"lakeformation:UpdateDataCellsFilter","changed":"table_data"},
+          {"action":"lakeformation:GetDataCellsFilter","changed":"table_data"}
+        ]
+      }
+    },
     "aws_lakeformation_data_lake_settings": {
       "ops": {
         "create": [
@@ -14327,6 +16418,20 @@
         ]
       }
     },
+    "aws_lakeformation_opt_in": {
+      "ops": {
+        "create": [
+          {"action":"lakeformation:CreateLakeFormationOptIn"},
+          {"action":"lakeformation:ListLakeFormationOptIns"}
+        ],
+        "delete": [
+          {"action":"lakeformation:DeleteLakeFormationOptIn"}
+        ],
+        "read": [
+          {"action":"lakeformation:ListLakeFormationOptIns"}
+        ]
+      }
+    },
     "aws_lakeformation_permissions": {
       "ops": {
         "create": [
@@ -14352,6 +16457,20 @@
         ],
         "read": [
           {"action":"lakeformation:DescribeResource"}
+        ]
+      }
+    },
+    "aws_lakeformation_resource_lf_tag": {
+      "ops": {
+        "create": [
+          {"action":"lakeformation:AddLFTagsToResource"},
+          {"action":"lakeformation:GetResourceLFTags"}
+        ],
+        "delete": [
+          {"action":"lakeformation:RemoveLFTagsFromResource"}
+        ],
+        "read": [
+          {"action":"lakeformation:GetResourceLFTags"}
         ]
       }
     },
@@ -14491,6 +16610,22 @@
         ]
       }
     },
+    "aws_lambda_function_recursion_config": {
+      "ops": {
+        "create": [
+          {"action":"lambda:PutFunctionRecursionConfig"}
+        ],
+        "delete": [
+          {"action":"lambda:PutFunctionRecursionConfig"}
+        ],
+        "read": [
+          {"action":"lambda:GetFunctionRecursionConfig"}
+        ],
+        "update": [
+          {"action":"lambda:PutFunctionRecursionConfig","changed":"recursive_loop"}
+        ]
+      }
+    },
     "aws_lambda_function_url": {
       "ops": {
         "create": [
@@ -14584,6 +16719,22 @@
         "update": [
           {"action":"lambda:PutProvisionedConcurrencyConfig"},
           {"action":"lambda:GetProvisionedConcurrencyConfig"}
+        ]
+      }
+    },
+    "aws_lambda_runtime_management_config": {
+      "ops": {
+        "create": [
+          {"action":"lambda:PutRuntimeManagementConfig"}
+        ],
+        "delete": [
+          {"action":"lambda:PutRuntimeManagementConfig"}
+        ],
+        "read": [
+          {"action":"lambda:GetRuntimeManagementConfig"}
+        ],
+        "update": [
+          {"action":"lambda:PutRuntimeManagementConfig"}
         ]
       }
     },
@@ -14790,6 +16941,115 @@
           {"action":"lex:PutSlotType"},
           {"action":"lex:GetSlotType"},
           {"action":"lex:GetSlotTypeVersions"}
+        ]
+      }
+    },
+    "aws_lexv2models_bot": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateBot"},
+          {"action":"lex:DescribeBot"},
+          {"action":"lex:TagResource","attribute":"tags"},
+          {"action":"lex:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteBot"},
+          {"action":"lex:DescribeBot"}
+        ],
+        "read": [
+          {"action":"lex:DescribeBot"},
+          {"action":"lex:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"lex:UpdateBot"},
+          {"action":"lex:DescribeBot"},
+          {"action":"lex:TagResource","attribute":"tags"},
+          {"action":"lex:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_lexv2models_bot_locale": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateBotLocale"},
+          {"action":"lex:DescribeBotLocale"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteBotLocale"},
+          {"action":"lex:DescribeBotLocale"}
+        ],
+        "read": [
+          {"action":"lex:DescribeBotLocale"}
+        ],
+        "update": [
+          {"action":"lex:UpdateBotLocale"},
+          {"action":"lex:DescribeBotLocale"}
+        ]
+      }
+    },
+    "aws_lexv2models_bot_version": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateBotVersion"},
+          {"action":"lex:DescribeBotVersion"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteBotVersion"},
+          {"action":"lex:DescribeBotVersion"}
+        ],
+        "read": [
+          {"action":"lex:DescribeBotVersion"}
+        ]
+      }
+    },
+    "aws_lexv2models_intent": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateIntent"},
+          {"action":"lex:DescribeIntent"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteIntent"},
+          {"action":"lex:DescribeIntent"}
+        ],
+        "read": [
+          {"action":"lex:DescribeIntent"}
+        ],
+        "update": [
+          {"action":"lex:UpdateIntent"},
+          {"action":"lex:DescribeIntent"}
+        ]
+      }
+    },
+    "aws_lexv2models_slot": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateSlot"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteSlot"}
+        ],
+        "read": [
+          {"action":"lex:DescribeSlot"}
+        ],
+        "update": [
+          {"action":"lex:UpdateSlot"}
+        ]
+      }
+    },
+    "aws_lexv2models_slot_type": {
+      "ops": {
+        "create": [
+          {"action":"lex:CreateSlotType"}
+        ],
+        "delete": [
+          {"action":"lex:DeleteSlotType"}
+        ],
+        "read": [
+          {"action":"lex:DescribeSlotType"}
+        ],
+        "update": [
+          {"action":"lex:UpdateSlotType"}
         ]
       }
     },
@@ -15489,6 +17749,84 @@
         ]
       }
     },
+    "aws_m2_application": {
+      "ops": {
+        "create": [
+          {"action":"m2:CreateApplication"},
+          {"action":"m2:GetApplication"},
+          {"action":"m2:TagResource","attribute":"tags"},
+          {"action":"m2:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"m2:DeleteApplication"},
+          {"action":"m2:GetApplication"}
+        ],
+        "read": [
+          {"action":"m2:GetApplication"},
+          {"action":"m2:GetApplicationVersion"},
+          {"action":"m2:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"m2:UpdateApplication"},
+          {"action":"m2:GetApplicationVersion"},
+          {"action":"m2:TagResource","attribute":"tags"},
+          {"action":"m2:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_m2_deployment": {
+      "ops": {
+        "create": [
+          {"action":"m2:CreateDeployment"},
+          {"action":"m2:GetDeployment"},
+          {"action":"m2:StartApplication"},
+          {"action":"m2:GetApplication"}
+        ],
+        "delete": [
+          {"action":"m2:DeleteApplicationFromEnvironment"},
+          {"action":"m2:StopApplication"},
+          {"action":"m2:GetApplication"}
+        ],
+        "read": [
+          {"action":"m2:GetDeployment"},
+          {"action":"m2:GetApplication"}
+        ],
+        "update": [
+          {"action":"m2:CreateDeployment","changed":"application_version"},
+          {"action":"m2:StopApplication","changed":"application_version"},
+          {"action":"m2:StopApplication","changed":"start"},
+          {"action":"m2:GetApplication","changed":"application_version"},
+          {"action":"m2:GetApplication","changed":"start"},
+          {"action":"m2:GetDeployment","changed":"application_version"},
+          {"action":"m2:StartApplication","changed":"application_version"},
+          {"action":"m2:StartApplication","changed":"start"}
+        ]
+      }
+    },
+    "aws_m2_environment": {
+      "ops": {
+        "create": [
+          {"action":"m2:CreateEnvironment"},
+          {"action":"m2:GetEnvironment"},
+          {"action":"m2:TagResource","attribute":"tags"},
+          {"action":"m2:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"m2:DeleteEnvironment"},
+          {"action":"m2:GetEnvironment"}
+        ],
+        "read": [
+          {"action":"m2:GetEnvironment"},
+          {"action":"m2:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"m2:UpdateEnvironment"},
+          {"action":"m2:GetEnvironment"},
+          {"action":"m2:TagResource","attribute":"tags"},
+          {"action":"m2:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_macie2_account": {
       "ops": {
         "create": [
@@ -15650,6 +17988,19 @@
         ]
       }
     },
+    "aws_macie2_organization_configuration": {
+      "ops": {
+        "create": [
+          {"action":"macie2:UpdateOrganizationConfiguration"}
+        ],
+        "read": [
+          {"action":"macie2:DescribeOrganizationConfiguration"}
+        ],
+        "update": [
+          {"action":"macie2:UpdateOrganizationConfiguration"}
+        ]
+      }
+    },
     "aws_main_route_table_association": {
       "ops": {
         "create": [
@@ -15713,6 +18064,28 @@
           {"action":"mediapackage:DescribeChannel"},
           {"action":"mediapackage:TagResource","attribute":"tags"},
           {"action":"mediapackage:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_media_packagev2_channel_group": {
+      "ops": {
+        "create": [
+          {"action":"mediapackagev2:CreateChannelGroup"},
+          {"action":"mediapackagev2:TagResource","attribute":"tags"},
+          {"action":"mediapackagev2:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"mediapackagev2:DeleteChannelGroup"},
+          {"action":"mediapackagev2:GetChannelGroup"}
+        ],
+        "read": [
+          {"action":"mediapackagev2:GetChannelGroup"},
+          {"action":"mediapackagev2:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"mediapackagev2:UpdateChannelGroup"},
+          {"action":"mediapackagev2:TagResource","attribute":"tags"},
+          {"action":"mediapackagev2:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -15862,6 +18235,24 @@
         ]
       }
     },
+    "aws_medialive_multiplex_program": {
+      "ops": {
+        "create": [
+          {"action":"medialive:CreateMultiplexProgram"},
+          {"action":"medialive:DescribeMultiplexProgram"}
+        ],
+        "delete": [
+          {"action":"medialive:DeleteMultiplexProgram"}
+        ],
+        "read": [
+          {"action":"medialive:DescribeMultiplexProgram"}
+        ],
+        "update": [
+          {"action":"medialive:UpdateMultiplexProgram"},
+          {"action":"medialive:DescribeMultiplexProgram"}
+        ]
+      }
+    },
     "aws_memorydb_acl": {
       "ops": {
         "create": [
@@ -15906,6 +18297,30 @@
         "update": [
           {"action":"memorydb:UpdateCluster"},
           {"action":"memorydb:DescribeClusters"},
+          {"action":"memorydb:TagResource","attribute":"tags"},
+          {"action":"memorydb:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_memorydb_multi_region_cluster": {
+      "ops": {
+        "create": [
+          {"action":"memorydb:CreateMultiRegionCluster"},
+          {"action":"memorydb:DescribeMultiRegionClusters"},
+          {"action":"memorydb:TagResource","attribute":"tags"},
+          {"action":"memorydb:ListTags"}
+        ],
+        "delete": [
+          {"action":"memorydb:DeleteMultiRegionCluster"},
+          {"action":"memorydb:DescribeMultiRegionClusters"}
+        ],
+        "read": [
+          {"action":"memorydb:DescribeMultiRegionClusters"},
+          {"action":"memorydb:ListTags"}
+        ],
+        "update": [
+          {"action":"memorydb:UpdateMultiRegionCluster"},
+          {"action":"memorydb:DescribeMultiRegionClusters"},
           {"action":"memorydb:TagResource","attribute":"tags"},
           {"action":"memorydb:UntagResource","attribute":"tags"}
         ]
@@ -16199,6 +18614,19 @@
           {"action":"kafka:DescribeClusterV2"},
           {"action":"kafka:TagResource","attribute":"tags"},
           {"action":"kafka:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_msk_single_scram_secret_association": {
+      "ops": {
+        "create": [
+          {"action":"kafka:BatchAssociateScramSecret"}
+        ],
+        "delete": [
+          {"action":"kafka:BatchDisassociateScramSecret"}
+        ],
+        "read": [
+          {"action":"kafka:ListScramSecrets"}
         ]
       }
     },
@@ -16568,6 +18996,30 @@
         ]
       }
     },
+    "aws_neptunegraph_graph": {
+      "ops": {
+        "create": [
+          {"action":"neptune-graph:CreateGraph"},
+          {"action":"neptune-graph:GetGraph"},
+          {"action":"neptune-graph:TagResource","attribute":"tags"},
+          {"action":"neptune-graph:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"neptune-graph:DeleteGraph"},
+          {"action":"neptune-graph:GetGraph"}
+        ],
+        "read": [
+          {"action":"neptune-graph:GetGraph"},
+          {"action":"neptune-graph:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"neptune-graph:UpdateGraph"},
+          {"action":"neptune-graph:GetGraph"},
+          {"action":"neptune-graph:TagResource","attribute":"tags"},
+          {"action":"neptune-graph:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_network_acl": {
       "ops": {
         "create": [
@@ -16813,6 +19265,30 @@
         ]
       }
     },
+    "aws_networkfirewall_tls_inspection_configuration": {
+      "ops": {
+        "create": [
+          {"action":"network-firewall:CreateTLSInspectionConfiguration"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration"},
+          {"action":"network-firewall:TagResource","attribute":"tags"},
+          {"action":"network-firewall:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"network-firewall:DeleteTLSInspectionConfiguration"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration"}
+        ],
+        "read": [
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration"},
+          {"action":"network-firewall:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"network-firewall:UpdateTLSInspectionConfiguration"},
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration"},
+          {"action":"network-firewall:TagResource","attribute":"tags"},
+          {"action":"network-firewall:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_networkmanager_attachment_accepter": {
       "ops": {
         "create": [
@@ -16977,6 +19453,29 @@
         "update": [
           {"action":"networkmanager:UpdateDevice"},
           {"action":"networkmanager:GetDevices"},
+          {"action":"networkmanager:TagResource","attribute":"tags"},
+          {"action":"networkmanager:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_networkmanager_dx_gateway_attachment": {
+      "ops": {
+        "create": [
+          {"action":"networkmanager:CreateDirectConnectGatewayAttachment"},
+          {"action":"networkmanager:GetDirectConnectGatewayAttachment"},
+          {"action":"networkmanager:TagResource","attribute":"tags"}
+        ],
+        "delete": [
+          {"action":"networkmanager:RejectAttachment"},
+          {"action":"networkmanager:DeleteAttachment"},
+          {"action":"networkmanager:GetDirectConnectGatewayAttachment"}
+        ],
+        "read": [
+          {"action":"networkmanager:GetDirectConnectGatewayAttachment"}
+        ],
+        "update": [
+          {"action":"networkmanager:UpdateDirectConnectGatewayAttachment","changed":"edge_locations"},
+          {"action":"networkmanager:GetDirectConnectGatewayAttachment","changed":"edge_locations"},
           {"action":"networkmanager:TagResource","attribute":"tags"},
           {"action":"networkmanager:UntagResource","attribute":"tags"}
         ]
@@ -17185,6 +19684,54 @@
         ]
       }
     },
+    "aws_networkmonitor_monitor": {
+      "ops": {
+        "create": [
+          {"action":"networkmonitor:CreateMonitor"},
+          {"action":"networkmonitor:GetMonitor"},
+          {"action":"networkmonitor:TagResource","attribute":"tags"},
+          {"action":"networkmonitor:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"networkmonitor:DeleteMonitor"},
+          {"action":"networkmonitor:GetMonitor"}
+        ],
+        "read": [
+          {"action":"networkmonitor:GetMonitor"},
+          {"action":"networkmonitor:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"networkmonitor:UpdateMonitor","changed":"aggregation_period"},
+          {"action":"networkmonitor:GetMonitor","changed":"aggregation_period"},
+          {"action":"networkmonitor:TagResource","attribute":"tags"},
+          {"action":"networkmonitor:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_networkmonitor_probe": {
+      "ops": {
+        "create": [
+          {"action":"networkmonitor:CreateProbe"},
+          {"action":"networkmonitor:GetProbe"},
+          {"action":"networkmonitor:TagResource","attribute":"tags"},
+          {"action":"networkmonitor:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"networkmonitor:DeleteProbe"},
+          {"action":"networkmonitor:GetProbe"}
+        ],
+        "read": [
+          {"action":"networkmonitor:GetProbe"},
+          {"action":"networkmonitor:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"networkmonitor:UpdateProbe"},
+          {"action":"networkmonitor:GetProbe"},
+          {"action":"networkmonitor:TagResource","attribute":"tags"},
+          {"action":"networkmonitor:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_oam_link": {
       "ops": {
         "create": [
@@ -17227,6 +19774,19 @@
           {"action":"oam:GetSink"},
           {"action":"oam:TagResource","attribute":"tags"},
           {"action":"oam:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_opensearch_authorize_vpc_endpoint_access": {
+      "ops": {
+        "create": [
+          {"action":"es:AuthorizeVpcEndpointAccess"}
+        ],
+        "delete": [
+          {"action":"es:RevokeVpcEndpointAccess"}
+        ],
+        "read": [
+          {"action":"es:ListVpcEndpointAccess"}
         ]
       }
     },
@@ -17381,6 +19941,115 @@
         "update": [
           {"action":"es:UpdateVpcEndpoint"},
           {"action":"es:DescribeVpcEndpoints"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_access_policy": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateAccessPolicy"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteAccessPolicy"}
+        ],
+        "read": [
+          {"action":"aoss:GetAccessPolicy"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateAccessPolicy"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_collection": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateCollection"},
+          {"action":"aoss:BatchGetCollection"},
+          {"action":"aoss:TagResource","attribute":"tags"},
+          {"action":"aoss:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteCollection"},
+          {"action":"aoss:BatchGetCollection"}
+        ],
+        "read": [
+          {"action":"aoss:BatchGetCollection"},
+          {"action":"aoss:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateCollection","changed":"description"},
+          {"action":"aoss:TagResource","attribute":"tags"},
+          {"action":"aoss:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_lifecycle_policy": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateLifecyclePolicy"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteLifecyclePolicy"}
+        ],
+        "read": [
+          {"action":"aoss:BatchGetLifecyclePolicy"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateLifecyclePolicy"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_security_config": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateSecurityConfig"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteSecurityConfig"}
+        ],
+        "read": [
+          {"action":"aoss:GetSecurityConfig"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateSecurityConfig"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_security_policy": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateSecurityPolicy"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteSecurityPolicy"}
+        ],
+        "read": [
+          {"action":"aoss:GetSecurityPolicy"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateSecurityPolicy"}
+        ]
+      }
+    },
+    "aws_opensearchserverless_vpc_endpoint": {
+      "ops": {
+        "create": [
+          {"action":"aoss:CreateVpcEndpoint"},
+          {"action":"aoss:BatchGetVpcEndpoint"},
+          {"action":"ec2:DescribeVpcEndpoints"}
+        ],
+        "delete": [
+          {"action":"aoss:DeleteVpcEndpoint"},
+          {"action":"aoss:BatchGetVpcEndpoint"}
+        ],
+        "read": [
+          {"action":"aoss:BatchGetVpcEndpoint"},
+          {"action":"ec2:DescribeVpcEndpoints"}
+        ],
+        "update": [
+          {"action":"aoss:UpdateVpcEndpoint"},
+          {"action":"aoss:BatchGetVpcEndpoint"},
+          {"action":"ec2:DescribeVpcEndpoints"}
         ]
       }
     },
@@ -17660,6 +20329,71 @@
         ]
       }
     },
+    "aws_osis_pipeline": {
+      "ops": {
+        "create": [
+          {"action":"osis:CreatePipeline"},
+          {"action":"osis:GetPipeline"},
+          {"action":"osis:TagResource","attribute":"tags"},
+          {"action":"osis:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"osis:DeletePipeline"},
+          {"action":"osis:GetPipeline"}
+        ],
+        "read": [
+          {"action":"osis:GetPipeline"},
+          {"action":"osis:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"osis:UpdatePipeline"},
+          {"action":"osis:GetPipeline"},
+          {"action":"osis:TagResource","attribute":"tags"},
+          {"action":"osis:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_paymentcryptography_key": {
+      "ops": {
+        "create": [
+          {"action":"payment-cryptography:CreateKey"},
+          {"action":"payment-cryptography:GetKey"},
+          {"action":"payment-cryptography:TagResource","attribute":"tags"},
+          {"action":"payment-cryptography:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"payment-cryptography:DeleteKey"},
+          {"action":"payment-cryptography:GetKey"}
+        ],
+        "read": [
+          {"action":"payment-cryptography:GetKey"},
+          {"action":"payment-cryptography:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"payment-cryptography:StartKeyUsage","changed":"enabled"},
+          {"action":"payment-cryptography:StopKeyUsage","changed":"enabled"},
+          {"action":"payment-cryptography:GetKey","changed":"enabled"},
+          {"action":"payment-cryptography:TagResource","attribute":"tags"},
+          {"action":"payment-cryptography:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_paymentcryptography_key_alias": {
+      "ops": {
+        "create": [
+          {"action":"payment-cryptography:CreateAlias"}
+        ],
+        "delete": [
+          {"action":"payment-cryptography:DeleteAlias"}
+        ],
+        "read": [
+          {"action":"payment-cryptography:GetAlias"}
+        ],
+        "update": [
+          {"action":"payment-cryptography:UpdateAlias"}
+        ]
+      }
+    },
     "aws_pinpoint_adm_channel": {
       "ops": {
         "create": [
@@ -17813,6 +20547,28 @@
         ]
       }
     },
+    "aws_pinpoint_email_template": {
+      "ops": {
+        "create": [
+          {"action":"mobiletargeting:CreateEmailTemplate"},
+          {"action":"mobiletargeting:TagResource","attribute":"tags"},
+          {"action":"mobiletargeting:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"mobiletargeting:DeleteEmailTemplate"}
+        ],
+        "read": [
+          {"action":"mobiletargeting:GetEmailTemplate"},
+          {"action":"mobiletargeting:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"mobiletargeting:UpdateEmailTemplate"},
+          {"action":"mobiletargeting:GetEmailTemplate"},
+          {"action":"mobiletargeting:TagResource","attribute":"tags"},
+          {"action":"mobiletargeting:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_pinpoint_event_stream": {
       "ops": {
         "create": [
@@ -17864,6 +20620,75 @@
         "update": [
           {"action":"mobiletargeting:UpdateSmsChannel"},
           {"action":"mobiletargeting:GetSmsChannel"}
+        ]
+      }
+    },
+    "aws_pinpointsmsvoicev2_configuration_set": {
+      "ops": {
+        "create": [
+          {"action":"sms-voice:CreateConfigurationSet"},
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"sms-voice:DeleteConfigurationSet"}
+        ],
+        "read": [
+          {"action":"sms-voice:DescribeConfigurationSets"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"sms-voice:DeleteDefaultSenderId","changed":"default_sender_id"},
+          {"action":"sms-voice:SetDefaultSenderId","changed":"default_sender_id"},
+          {"action":"sms-voice:DeleteDefaultMessageType","changed":"default_message_type"},
+          {"action":"sms-voice:SetDefaultMessageType","changed":"default_message_type"},
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_pinpointsmsvoicev2_opt_out_list": {
+      "ops": {
+        "create": [
+          {"action":"sms-voice:CreateOptOutList"},
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"sms-voice:DeleteOptOutList"}
+        ],
+        "read": [
+          {"action":"sms-voice:DescribeOptOutLists"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_pinpointsmsvoicev2_phone_number": {
+      "ops": {
+        "create": [
+          {"action":"sms-voice:RequestPhoneNumber"},
+          {"action":"sms-voice:UpdatePhoneNumber"},
+          {"action":"sms-voice:DescribePhoneNumbers"},
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"sms-voice:ReleasePhoneNumber"},
+          {"action":"sms-voice:DescribePhoneNumbers"}
+        ],
+        "read": [
+          {"action":"sms-voice:DescribePhoneNumbers"},
+          {"action":"sms-voice:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"sms-voice:UpdatePhoneNumber"},
+          {"action":"sms-voice:DescribePhoneNumbers"},
+          {"action":"sms-voice:TagResource","attribute":"tags"},
+          {"action":"sms-voice:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -17957,6 +20782,28 @@
         ]
       }
     },
+    "aws_prometheus_scraper": {
+      "ops": {
+        "create": [
+          {"action":"aps:CreateScraper"},
+          {"action":"aps:DescribeScraper"},
+          {"action":"aps:TagResource","attribute":"tags"},
+          {"action":"aps:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"aps:DeleteScraper"},
+          {"action":"aps:DescribeScraper"}
+        ],
+        "read": [
+          {"action":"aps:DescribeScraper"},
+          {"action":"aps:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"aps:TagResource","attribute":"tags"},
+          {"action":"aps:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_prometheus_workspace": {
       "ops": {
         "create": [
@@ -18006,6 +20853,30 @@
         "update": [
           {"action":"elasticloadbalancing:SetLoadBalancerPoliciesForBackendServer","changed":"instance_ports"},
           {"action":"elasticloadbalancing:DescribeLoadBalancers"}
+        ]
+      }
+    },
+    "aws_qbusiness_application": {
+      "ops": {
+        "create": [
+          {"action":"qbusiness:CreateApplication"},
+          {"action":"qbusiness:GetApplication"},
+          {"action":"qbusiness:TagResource","attribute":"tags"},
+          {"action":"qbusiness:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"qbusiness:DeleteApplication"},
+          {"action":"qbusiness:GetApplication"}
+        ],
+        "read": [
+          {"action":"qbusiness:GetApplication"},
+          {"action":"qbusiness:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"qbusiness:UpdateApplication"},
+          {"action":"qbusiness:GetApplication"},
+          {"action":"qbusiness:TagResource","attribute":"tags"},
+          {"action":"qbusiness:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -18214,6 +21085,19 @@
         ]
       }
     },
+    "aws_quicksight_folder_membership": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateFolderMembership"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteFolderMembership"}
+        ],
+        "read": [
+          {"action":"quicksight:ListFolderMembers"}
+        ]
+      }
+    },
     "aws_quicksight_group": {
       "ops": {
         "create": [
@@ -18246,6 +21130,90 @@
         ]
       }
     },
+    "aws_quicksight_iam_policy_assignment": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateIAMPolicyAssignment"},
+          {"action":"quicksight:DescribeIAMPolicyAssignment"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteIAMPolicyAssignment"},
+          {"action":"quicksight:DescribeIAMPolicyAssignment"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeIAMPolicyAssignment"}
+        ],
+        "update": [
+          {"action":"quicksight:UpdateIAMPolicyAssignment"}
+        ]
+      }
+    },
+    "aws_quicksight_ingestion": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateIngestion"}
+        ],
+        "delete": [
+          {"action":"quicksight:CancelIngestion"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeIngestion"}
+        ]
+      }
+    },
+    "aws_quicksight_namespace": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateNamespace"},
+          {"action":"quicksight:DescribeNamespace"},
+          {"action":"quicksight:TagResource","attribute":"tags"},
+          {"action":"quicksight:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteNamespace"},
+          {"action":"quicksight:DescribeNamespace"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeNamespace"},
+          {"action":"quicksight:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"quicksight:TagResource","attribute":"tags"},
+          {"action":"quicksight:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_quicksight_refresh_schedule": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateRefreshSchedule"},
+          {"action":"quicksight:DescribeRefreshSchedule"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteRefreshSchedule"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeRefreshSchedule"}
+        ],
+        "update": [
+          {"action":"quicksight:UpdateRefreshSchedule","changed":"schedule"},
+          {"action":"quicksight:DescribeRefreshSchedule","changed":"schedule"}
+        ]
+      }
+    },
+    "aws_quicksight_role_membership": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateRoleMembership"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteRoleMembership"}
+        ],
+        "read": [
+          {"action":"quicksight:ListRoleMemberships"}
+        ]
+      }
+    },
     "aws_quicksight_template": {
       "ops": {
         "create": [
@@ -18270,6 +21238,22 @@
           {"action":"quicksight:DescribeTemplatePermissions"},
           {"action":"quicksight:TagResource","attribute":"tags"},
           {"action":"quicksight:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_quicksight_template_alias": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateTemplateAlias"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteTemplateAlias"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeTemplateAlias"}
+        ],
+        "update": [
+          {"action":"quicksight:UpdateTemplateAlias","changed":"template_version_number"}
         ]
       }
     },
@@ -18315,6 +21299,30 @@
         "update": [
           {"action":"quicksight:UpdateUser"},
           {"action":"quicksight:DescribeUser"}
+        ]
+      }
+    },
+    "aws_quicksight_vpc_connection": {
+      "ops": {
+        "create": [
+          {"action":"quicksight:CreateVPCConnection"},
+          {"action":"quicksight:DescribeVPCConnection"},
+          {"action":"quicksight:TagResource","attribute":"tags"},
+          {"action":"quicksight:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"quicksight:DeleteVPCConnection"},
+          {"action":"quicksight:DescribeVPCConnection"}
+        ],
+        "read": [
+          {"action":"quicksight:DescribeVPCConnection"},
+          {"action":"quicksight:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"quicksight:UpdateVPCConnection"},
+          {"action":"quicksight:DescribeVPCConnection"},
+          {"action":"quicksight:TagResource","attribute":"tags"},
+          {"action":"quicksight:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -18606,6 +21614,30 @@
         ]
       }
     },
+    "aws_rds_cluster_snapshot_copy": {
+      "ops": {
+        "create": [
+          {"action":"rds:CopyDBClusterSnapshot"},
+          {"action":"rds:ModifyDBClusterSnapshotAttribute","attribute":"shared_accounts"},
+          {"action":"rds:DescribeDBClusterSnapshots"},
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rds:DeleteDBClusterSnapshot"}
+        ],
+        "read": [
+          {"action":"rds:DescribeDBClusterSnapshots"},
+          {"action":"rds:DescribeDBClusterSnapshotAttributes"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rds:ModifyDBClusterSnapshotAttribute","changed":"shared_accounts"},
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_rds_custom_db_engine_version": {
       "ops": {
         "create": [
@@ -18627,6 +21659,21 @@
           {"action":"rds:DescribeDBEngineVersions"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_rds_export_task": {
+      "ops": {
+        "create": [
+          {"action":"rds:StartExportTask"},
+          {"action":"rds:DescribeExportTasks"}
+        ],
+        "delete": [
+          {"action":"rds:CancelExportTask"},
+          {"action":"rds:DescribeExportTasks"}
+        ],
+        "read": [
+          {"action":"rds:DescribeExportTasks"}
         ]
       }
     },
@@ -18657,6 +21704,45 @@
         ]
       }
     },
+    "aws_rds_instance_state": {
+      "ops": {
+        "create": [
+          {"action":"rds:DescribeDBInstances"},
+          {"action":"rds:StopDBInstance"},
+          {"action":"rds:StartDBInstance"}
+        ],
+        "read": [
+          {"action":"rds:DescribeDBInstances"}
+        ],
+        "update": [
+          {"action":"rds:DescribeDBInstances"},
+          {"action":"rds:StopDBInstance","changed":"state"},
+          {"action":"rds:StartDBInstance","changed":"state"}
+        ]
+      }
+    },
+    "aws_rds_integration": {
+      "ops": {
+        "create": [
+          {"action":"rds:CreateIntegration"},
+          {"action":"rds:DescribeIntegrations"},
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rds:DeleteIntegration"},
+          {"action":"rds:DescribeIntegrations"}
+        ],
+        "read": [
+          {"action":"rds:DescribeIntegrations"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_rds_reserved_instance": {
       "ops": {
         "create": [
@@ -18671,6 +21757,33 @@
         ],
         "update": [
           {"action":"rds:DescribeReservedDBInstances"},
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_rds_shard_group": {
+      "ops": {
+        "create": [
+          {"action":"rds:CreateDBShardGroup"},
+          {"action":"rds:DescribeDBShardGroups"},
+          {"action":"rds:DescribeDBClusters"},
+          {"action":"rds:AddTagsToResource","attribute":"tags"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rds:DeleteDBShardGroup"},
+          {"action":"rds:DescribeDBShardGroups"},
+          {"action":"rds:DescribeDBClusters"}
+        ],
+        "read": [
+          {"action":"rds:DescribeDBShardGroups"},
+          {"action":"rds:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rds:ModifyDBShardGroup"},
+          {"action":"rds:DescribeDBShardGroups"},
+          {"action":"rds:DescribeDBClusters"},
           {"action":"rds:AddTagsToResource","attribute":"tags"},
           {"action":"rds:RemoveTagsFromResource","attribute":"tags"}
         ]
@@ -18767,6 +21880,32 @@
           {"action":"redshift:DescribeClusterSnapshots"},
           {"action":"redshift:CreateTags","attribute":"tags"},
           {"action":"redshift:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_redshift_data_share_authorization": {
+      "ops": {
+        "create": [
+          {"action":"redshift:AuthorizeDataShare"}
+        ],
+        "delete": [
+          {"action":"redshift:DeauthorizeDataShare"}
+        ],
+        "read": [
+          {"action":"redshift:DescribeDataShares"}
+        ]
+      }
+    },
+    "aws_redshift_data_share_consumer_association": {
+      "ops": {
+        "create": [
+          {"action":"redshift:AssociateDataShareConsumer"}
+        ],
+        "delete": [
+          {"action":"redshift:DisassociateDataShareConsumer"}
+        ],
+        "read": [
+          {"action":"redshift:DescribeDataShares"}
         ]
       }
     },
@@ -18869,6 +22008,22 @@
         ]
       }
     },
+    "aws_redshift_logging": {
+      "ops": {
+        "create": [
+          {"action":"redshift:EnableLogging"}
+        ],
+        "delete": [
+          {"action":"redshift:DisableLogging"}
+        ],
+        "read": [
+          {"action":"redshift:DescribeLoggingStatus"}
+        ],
+        "update": [
+          {"action":"redshift:EnableLogging"}
+        ]
+      }
+    },
     "aws_redshift_parameter_group": {
       "ops": {
         "create": [
@@ -18940,6 +22095,22 @@
         ],
         "update": [
           {"action":"redshift:ModifyScheduledAction"}
+        ]
+      }
+    },
+    "aws_redshift_snapshot_copy": {
+      "ops": {
+        "create": [
+          {"action":"redshift:EnableSnapshotCopy"}
+        ],
+        "delete": [
+          {"action":"redshift:DisableSnapshotCopy"}
+        ],
+        "read": [
+          {"action":"redshift:DescribeClusters"}
+        ],
+        "update": [
+          {"action":"redshift:ModifySnapshotCopyRetentionPeriod","changed":"retention_period"}
         ]
       }
     },
@@ -19052,6 +22223,22 @@
         ],
         "read": [
           {"action":"redshift-data:DescribeStatement"}
+        ]
+      }
+    },
+    "aws_redshiftserverless_custom_domain_association": {
+      "ops": {
+        "create": [
+          {"action":"redshift-serverless:CreateCustomDomainAssociation"}
+        ],
+        "delete": [
+          {"action":"redshift-serverless:DeleteCustomDomainAssociation"}
+        ],
+        "read": [
+          {"action":"redshift-serverless:GetCustomDomainAssociation"}
+        ],
+        "update": [
+          {"action":"redshift-serverless:UpdateCustomDomainAssociation"}
         ]
       }
     },
@@ -19177,6 +22364,147 @@
         ]
       }
     },
+    "aws_rekognition_collection": {
+      "ops": {
+        "create": [
+          {"action":"rekognition:CreateCollection"},
+          {"action":"rekognition:DescribeCollection"},
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rekognition:DeleteCollection"}
+        ],
+        "read": [
+          {"action":"rekognition:DescribeCollection"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_rekognition_project": {
+      "ops": {
+        "create": [
+          {"action":"rekognition:CreateProject"},
+          {"action":"rekognition:DescribeProjects"},
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rekognition:DeleteProject"},
+          {"action":"rekognition:DescribeProjects"}
+        ],
+        "read": [
+          {"action":"rekognition:DescribeProjects"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_rekognition_stream_processor": {
+      "ops": {
+        "create": [
+          {"action":"rekognition:CreateStreamProcessor"},
+          {"action":"rekognition:DescribeStreamProcessor"},
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"rekognition:DeleteStreamProcessor"},
+          {"action":"rekognition:DescribeStreamProcessor"}
+        ],
+        "read": [
+          {"action":"rekognition:DescribeStreamProcessor"},
+          {"action":"rekognition:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"rekognition:UpdateStreamProcessor"},
+          {"action":"rekognition:DescribeStreamProcessor"},
+          {"action":"rekognition:TagResource","attribute":"tags"},
+          {"action":"rekognition:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_resiliencehub_resiliency_policy": {
+      "ops": {
+        "create": [
+          {"action":"resiliencehub:CreateResiliencyPolicy"},
+          {"action":"resiliencehub:DescribeResiliencyPolicy"},
+          {"action":"resiliencehub:TagResource","attribute":"tags"},
+          {"action":"resiliencehub:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"resiliencehub:DeleteResiliencyPolicy"},
+          {"action":"resiliencehub:DescribeResiliencyPolicy"}
+        ],
+        "read": [
+          {"action":"resiliencehub:DescribeResiliencyPolicy"},
+          {"action":"resiliencehub:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"resiliencehub:UpdateResiliencyPolicy"},
+          {"action":"resiliencehub:DescribeResiliencyPolicy"},
+          {"action":"resiliencehub:TagResource","attribute":"tags"},
+          {"action":"resiliencehub:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_resourceexplorer2_index": {
+      "ops": {
+        "create": [
+          {"action":"resource-explorer-2:CreateIndex"},
+          {"action":"resource-explorer-2:UpdateIndexType"},
+          {"action":"resource-explorer-2:GetIndex"},
+          {"action":"resource-explorer-2:TagResource","attribute":"tags"},
+          {"action":"resource-explorer-2:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"resource-explorer-2:DeleteIndex"},
+          {"action":"resource-explorer-2:GetIndex"}
+        ],
+        "read": [
+          {"action":"resource-explorer-2:GetIndex"},
+          {"action":"resource-explorer-2:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"resource-explorer-2:UpdateIndexType","changed":"type"},
+          {"action":"resource-explorer-2:GetIndex","changed":"type"},
+          {"action":"resource-explorer-2:TagResource","attribute":"tags"},
+          {"action":"resource-explorer-2:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_resourceexplorer2_view": {
+      "ops": {
+        "create": [
+          {"action":"resource-explorer-2:CreateView"},
+          {"action":"resource-explorer-2:AssociateDefaultView"},
+          {"action":"resource-explorer-2:TagResource","attribute":"tags"},
+          {"action":"resource-explorer-2:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"resource-explorer-2:DeleteView"}
+        ],
+        "read": [
+          {"action":"resource-explorer-2:GetView"},
+          {"action":"resource-explorer-2:GetDefaultView"},
+          {"action":"resource-explorer-2:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"resource-explorer-2:UpdateView"},
+          {"action":"resource-explorer-2:AssociateDefaultView","changed":"default_view"},
+          {"action":"resource-explorer-2:DisassociateDefaultView","changed":"default_view"},
+          {"action":"resource-explorer-2:TagResource","attribute":"tags"},
+          {"action":"resource-explorer-2:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_resourcegroups_group": {
       "ops": {
         "create": [
@@ -19289,6 +22617,38 @@
         "update": [
           {"action":"ec2:ReplaceRoute"},
           {"action":"ec2:DescribeRouteTables"}
+        ]
+      }
+    },
+    "aws_route53_cidr_collection": {
+      "ops": {
+        "create": [
+          {"action":"route53:CreateCidrCollection"}
+        ],
+        "delete": [
+          {"action":"route53:DeleteCidrCollection"}
+        ],
+        "read": [
+          {"action":"route53:ListCidrCollections"}
+        ]
+      }
+    },
+    "aws_route53_cidr_location": {
+      "ops": {
+        "create": [
+          {"action":"route53:ChangeCidrCollection"},
+          {"action":"route53:ListCidrCollections"}
+        ],
+        "delete": [
+          {"action":"route53:ChangeCidrCollection"},
+          {"action":"route53:ListCidrCollections"}
+        ],
+        "read": [
+          {"action":"route53:ListCidrBlocks"}
+        ],
+        "update": [
+          {"action":"route53:ChangeCidrCollection"},
+          {"action":"route53:ListCidrCollections"}
         ]
       }
     },
@@ -19766,6 +23126,67 @@
         ]
       }
     },
+    "aws_route53domains_delegation_signer_record": {
+      "ops": {
+        "create": [
+          {"action":"route53domains:AssociateDelegationSignerToDomain"},
+          {"action":"route53domains:GetOperationDetail"},
+          {"action":"route53domains:GetDomainDetail"}
+        ],
+        "delete": [
+          {"action":"route53domains:DisassociateDelegationSignerFromDomain"},
+          {"action":"route53domains:GetOperationDetail"}
+        ],
+        "read": [
+          {"action":"route53domains:GetDomainDetail"}
+        ]
+      }
+    },
+    "aws_route53domains_domain": {
+      "ops": {
+        "create": [
+          {"action":"route53domains:RegisterDomain"},
+          {"action":"route53domains:GetOperationDetail"},
+          {"action":"route53domains:DeleteTagsForDomain"},
+          {"action":"route53domains:UpdateTagsForDomain"},
+          {"action":"route53domains:UpdateDomainNameservers"},
+          {"action":"route53domains:EnableDomainTransferLock"},
+          {"action":"route53domains:DisableDomainTransferLock"},
+          {"action":"route53domains:GetDomainDetail"},
+          {"action":"route53:ListHostedZones"},
+          {"action":"route53domains:ListTagsForDomain"}
+        ],
+        "delete": [
+          {"action":"route53domains:DeleteDomain"},
+          {"action":"route53domains:GetOperationDetail"},
+          {"action":"route53:DeleteHostedZone"},
+          {"action":"route53:ChangeResourceRecordSets"},
+          {"action":"route53:ListResourceRecordSets"},
+          {"action":"route53:GetChange"},
+          {"action":"route53:GetDNSSEC"},
+          {"action":"route53:DisableHostedZoneDNSSEC"}
+        ],
+        "read": [
+          {"action":"route53domains:GetDomainDetail"},
+          {"action":"route53:ListHostedZones"},
+          {"action":"route53domains:ListTagsForDomain"}
+        ],
+        "update": [
+          {"action":"route53domains:UpdateDomainContact"},
+          {"action":"route53domains:GetOperationDetail"},
+          {"action":"route53domains:UpdateDomainContactPrivacy"},
+          {"action":"route53domains:EnableDomainAutoRenew","changed":"auto_renew"},
+          {"action":"route53domains:DisableDomainAutoRenew","changed":"auto_renew"},
+          {"action":"route53domains:UpdateDomainNameservers","changed":"name_server"},
+          {"action":"route53domains:EnableDomainTransferLock","changed":"transfer_lock"},
+          {"action":"route53domains:DisableDomainTransferLock","changed":"transfer_lock"},
+          {"action":"route53domains:RenewDomain","changed":"duration_in_years"},
+          {"action":"route53domains:GetDomainDetail"},
+          {"action":"route53domains:UpdateTagsForDomain","attribute":"tags"},
+          {"action":"route53domains:DeleteTagsForDomain","attribute":"tags"}
+        ]
+      }
+    },
     "aws_route53domains_registered_domain": {
       "ops": {
         "create": [
@@ -19798,6 +23219,65 @@
           {"action":"route53domains:GetDomainDetail"},
           {"action":"route53domains:UpdateTagsForDomain","attribute":"tags"},
           {"action":"route53domains:DeleteTagsForDomain","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_route53profiles_association": {
+      "ops": {
+        "create": [
+          {"action":"route53profiles:AssociateProfile"},
+          {"action":"route53profiles:GetProfileAssociation"},
+          {"action":"route53profiles:TagResource","attribute":"tags"},
+          {"action":"route53profiles:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"route53profiles:DisassociateProfile"},
+          {"action":"route53profiles:GetProfileAssociation"}
+        ],
+        "read": [
+          {"action":"route53profiles:GetProfileAssociation"},
+          {"action":"route53profiles:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"route53profiles:TagResource","attribute":"tags"},
+          {"action":"route53profiles:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_route53profiles_profile": {
+      "ops": {
+        "create": [
+          {"action":"route53profiles:CreateProfile"},
+          {"action":"route53profiles:GetProfile"},
+          {"action":"route53profiles:TagResource","attribute":"tags"},
+          {"action":"route53profiles:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"route53profiles:DeleteProfile"},
+          {"action":"route53profiles:GetProfile"}
+        ],
+        "read": [
+          {"action":"route53profiles:GetProfile"},
+          {"action":"route53profiles:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"route53profiles:TagResource","attribute":"tags"},
+          {"action":"route53profiles:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_route53profiles_resource_association": {
+      "ops": {
+        "create": [
+          {"action":"route53profiles:AssociateResourceToProfile"},
+          {"action":"route53profiles:GetProfileResourceAssociation"}
+        ],
+        "delete": [
+          {"action":"route53profiles:DisassociateResourceFromProfile"},
+          {"action":"route53profiles:GetProfileResourceAssociation"}
+        ],
+        "read": [
+          {"action":"route53profiles:GetProfileResourceAssociation"}
         ]
       }
     },
@@ -20314,6 +23794,25 @@
         ]
       }
     },
+    "aws_s3_bucket_lifecycle_configuration": {
+      "ops": {
+        "create": [
+          {"action":"s3:PutLifecycleConfiguration"},
+          {"action":"s3:GetLifecycleConfiguration"}
+        ],
+        "delete": [
+          {"action":"s3:PutLifecycleConfiguration"},
+          {"action":"s3:GetLifecycleConfiguration"}
+        ],
+        "read": [
+          {"action":"s3:GetLifecycleConfiguration"}
+        ],
+        "update": [
+          {"action":"s3:PutLifecycleConfiguration"},
+          {"action":"s3:GetLifecycleConfiguration"}
+        ]
+      }
+    },
     "aws_s3_bucket_logging": {
       "ops": {
         "create": [
@@ -20562,6 +24061,22 @@
         ]
       }
     },
+    "aws_s3_directory_bucket": {
+      "ops": {
+        "create": [
+          {"action":"s3express:CreateBucket"}
+        ],
+        "delete": [
+          {"action":"s3express:DeleteBucket"},
+          {"action":"s3:ListBucket"},
+          {"action":"s3:DeleteObject"},
+          {"action":"s3:PutObjectLegalHold"}
+        ],
+        "read": [
+          {"action":"s3:ListBucket"}
+        ]
+      }
+    },
     "aws_s3_object": {
       "ops": {
         "create": [
@@ -20603,6 +24118,80 @@
         ],
         "update": [
           {"action":"s3:GetObject"}
+        ]
+      }
+    },
+    "aws_s3control_access_grant": {
+      "ops": {
+        "create": [
+          {"action":"s3:CreateAccessGrant"}
+        ],
+        "delete": [
+          {"action":"s3:DeleteAccessGrant"}
+        ],
+        "read": [
+          {"action":"s3:GetAccessGrant"},
+          {"action":"s3:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"s3:UntagResource"},
+          {"action":"s3:TagResource"}
+        ]
+      }
+    },
+    "aws_s3control_access_grants_instance": {
+      "ops": {
+        "create": [
+          {"action":"s3:CreateAccessGrantsInstance"}
+        ],
+        "delete": [
+          {"action":"s3:DeleteAccessGrantsInstance"},
+          {"action":"s3:DissociateAccessGrantsIdentityCenter","attribute":"identity_center_arn"}
+        ],
+        "read": [
+          {"action":"s3:GetAccessGrantsInstance"},
+          {"action":"s3:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"s3:DissociateAccessGrantsIdentityCenter"},
+          {"action":"s3:AssociateAccessGrantsIdentityCenter"},
+          {"action":"s3:UntagResource"},
+          {"action":"s3:TagResource"}
+        ]
+      }
+    },
+    "aws_s3control_access_grants_instance_resource_policy": {
+      "ops": {
+        "create": [
+          {"action":"s3:PutAccessGrantsInstanceResourcePolicy"}
+        ],
+        "delete": [
+          {"action":"s3:DeleteAccessGrantsInstanceResourcePolicy"}
+        ],
+        "read": [
+          {"action":"s3:GetAccessGrantsInstanceResourcePolicy"}
+        ],
+        "update": [
+          {"action":"s3:PutAccessGrantsInstanceResourcePolicy"}
+        ]
+      }
+    },
+    "aws_s3control_access_grants_location": {
+      "ops": {
+        "create": [
+          {"action":"s3:CreateAccessGrantsLocation"}
+        ],
+        "delete": [
+          {"action":"s3:DeleteAccessGrantsLocation"}
+        ],
+        "read": [
+          {"action":"s3:GetAccessGrantsLocation"},
+          {"action":"s3:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"s3:UpdateAccessGrantsLocation","changed":"iam_role_arn"},
+          {"action":"s3:UntagResource"},
+          {"action":"s3:TagResource"}
         ]
       }
     },
@@ -20794,6 +24383,100 @@
         ],
         "read": [
           {"action":"s3-outposts:ListEndpoints"}
+        ]
+      }
+    },
+    "aws_s3tables_namespace": {
+      "ops": {
+        "create": [
+          {"action":"s3tables:CreateNamespace"},
+          {"action":"s3tables:GetNamespace"}
+        ],
+        "delete": [
+          {"action":"s3tables:DeleteNamespace"}
+        ],
+        "read": [
+          {"action":"s3tables:GetNamespace"}
+        ]
+      }
+    },
+    "aws_s3tables_table": {
+      "ops": {
+        "create": [
+          {"action":"s3tables:CreateTable"},
+          {"action":"s3tables:PutTableMaintenanceConfiguration","attribute":"maintenance_configuration"},
+          {"action":"s3tables:GetTableMaintenanceConfiguration"},
+          {"action":"s3tables:GetTable"}
+        ],
+        "delete": [
+          {"action":"s3tables:DeleteTable"}
+        ],
+        "read": [
+          {"action":"s3tables:GetTableMaintenanceConfiguration"},
+          {"action":"s3tables:GetTable"}
+        ],
+        "update": [
+          {"action":"s3tables:RenameTable"},
+          {"action":"s3tables:PutTableMaintenanceConfiguration","changed":"maintenance_configuration"},
+          {"action":"s3tables:GetTableMaintenanceConfiguration"},
+          {"action":"s3tables:GetTable"}
+        ]
+      }
+    },
+    "aws_s3tables_table_bucket": {
+      "ops": {
+        "create": [
+          {"action":"s3tables:CreateTableBucket"},
+          {"action":"s3tables:PutTableBucketMaintenanceConfiguration","attribute":"maintenance_configuration"},
+          {"action":"s3tables:GetTableBucketMaintenanceConfiguration"},
+          {"action":"s3tables:GetTableBucket"}
+        ],
+        "delete": [
+          {"action":"s3tables:DeleteTableBucket"}
+        ],
+        "read": [
+          {"action":"s3tables:GetTableBucketMaintenanceConfiguration"},
+          {"action":"s3tables:GetTableBucket"}
+        ],
+        "update": [
+          {"action":"s3tables:PutTableBucketMaintenanceConfiguration","changed":"maintenance_configuration"},
+          {"action":"s3tables:GetTableBucketMaintenanceConfiguration","changed":"maintenance_configuration"}
+        ]
+      }
+    },
+    "aws_s3tables_table_bucket_policy": {
+      "ops": {
+        "create": [
+          {"action":"s3tables:PutTableBucketPolicy"},
+          {"action":"s3tables:GetTableBucketPolicy"}
+        ],
+        "delete": [
+          {"action":"s3tables:DeleteTableBucketPolicy"}
+        ],
+        "read": [
+          {"action":"s3tables:GetTableBucketPolicy"}
+        ],
+        "update": [
+          {"action":"s3tables:PutTableBucketPolicy"},
+          {"action":"s3tables:GetTableBucketPolicy"}
+        ]
+      }
+    },
+    "aws_s3tables_table_policy": {
+      "ops": {
+        "create": [
+          {"action":"s3tables:PutTablePolicy"},
+          {"action":"s3tables:GetTablePolicy"}
+        ],
+        "delete": [
+          {"action":"s3tables:DeleteTablePolicy"}
+        ],
+        "read": [
+          {"action":"s3tables:GetTablePolicy"}
+        ],
+        "update": [
+          {"action":"s3tables:PutTablePolicy"},
+          {"action":"s3tables:GetTablePolicy"}
         ]
       }
     },
@@ -21763,6 +25446,28 @@
         ]
       }
     },
+    "aws_securityhub_automation_rule": {
+      "ops": {
+        "create": [
+          {"action":"securityhub:CreateAutomationRule"},
+          {"action":"securityhub:BatchGetAutomationRules"},
+          {"action":"securityhub:TagResource","attribute":"tags"},
+          {"action":"securityhub:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"securityhub:BatchDeleteAutomationRules"}
+        ],
+        "read": [
+          {"action":"securityhub:BatchGetAutomationRules"},
+          {"action":"securityhub:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"securityhub:BatchUpdateAutomationRules"},
+          {"action":"securityhub:TagResource","attribute":"tags"},
+          {"action":"securityhub:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_securityhub_configuration_policy": {
       "ops": {
         "create": [
@@ -21914,6 +25619,19 @@
         ]
       }
     },
+    "aws_securityhub_standards_control_association": {
+      "ops": {
+        "create": [
+          {"action":"securityhub:BatchUpdateStandardsControlAssociations"}
+        ],
+        "read": [
+          {"action":"securityhub:ListStandardsControlAssociations"}
+        ],
+        "update": [
+          {"action":"securityhub:BatchUpdateStandardsControlAssociations"}
+        ]
+      }
+    },
     "aws_securityhub_standards_subscription": {
       "ops": {
         "create": [
@@ -21926,6 +25644,98 @@
         ],
         "read": [
           {"action":"securityhub:GetEnabledStandards"}
+        ]
+      }
+    },
+    "aws_securitylake_aws_log_source": {
+      "ops": {
+        "create": [
+          {"action":"securitylake:CreateAwsLogSource"},
+          {"action":"securitylake:ListLogSources"}
+        ],
+        "delete": [
+          {"action":"securitylake:DeleteAwsLogSource"},
+          {"action":"securitylake:ListLogSources"}
+        ],
+        "read": [
+          {"action":"securitylake:ListLogSources"}
+        ]
+      }
+    },
+    "aws_securitylake_custom_log_source": {
+      "ops": {
+        "create": [
+          {"action":"securitylake:CreateCustomLogSource"}
+        ],
+        "delete": [
+          {"action":"securitylake:DeleteCustomLogSource"}
+        ],
+        "read": [
+          {"action":"securitylake:ListLogSources"}
+        ]
+      }
+    },
+    "aws_securitylake_data_lake": {
+      "ops": {
+        "create": [
+          {"action":"securitylake:CreateDataLake"},
+          {"action":"securitylake:ListDataLakes"},
+          {"action":"securitylake:TagResource","attribute":"tags"},
+          {"action":"securitylake:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"securitylake:DeleteDataLake"},
+          {"action":"securitylake:ListDataLakes"}
+        ],
+        "read": [
+          {"action":"securitylake:ListDataLakes"},
+          {"action":"securitylake:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"securitylake:UpdateDataLake","changed":"configuration"},
+          {"action":"securitylake:ListDataLakes","changed":"configuration"},
+          {"action":"securitylake:TagResource","attribute":"tags"},
+          {"action":"securitylake:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_securitylake_subscriber": {
+      "ops": {
+        "create": [
+          {"action":"securitylake:CreateSubscriber"},
+          {"action":"securitylake:GetSubscriber"},
+          {"action":"securitylake:TagResource","attribute":"tags"},
+          {"action":"securitylake:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"securitylake:DeleteSubscriber"},
+          {"action":"securitylake:GetSubscriber"}
+        ],
+        "read": [
+          {"action":"securitylake:GetSubscriber"},
+          {"action":"securitylake:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"securitylake:UpdateSubscriber"},
+          {"action":"securitylake:GetSubscriber"},
+          {"action":"securitylake:TagResource","attribute":"tags"},
+          {"action":"securitylake:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_securitylake_subscriber_notification": {
+      "ops": {
+        "create": [
+          {"action":"securitylake:CreateSubscriberNotification"}
+        ],
+        "delete": [
+          {"action":"securitylake:DeleteSubscriberNotification"}
+        ],
+        "read": [
+          {"action":"securitylake:GetSubscriber"}
+        ],
+        "update": [
+          {"action":"securitylake:UpdateSubscriberNotification","changed":"configuration"}
         ]
       }
     },
@@ -22323,6 +26133,61 @@
         ]
       }
     },
+    "aws_servicecatalogappregistry_application": {
+      "ops": {
+        "create": [
+          {"action":"servicecatalog:CreateApplication"},
+          {"action":"servicecatalog:TagResource","attribute":"tags"},
+          {"action":"servicecatalog:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"servicecatalog:DeleteApplication"}
+        ],
+        "read": [
+          {"action":"servicecatalog:GetApplication"},
+          {"action":"servicecatalog:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"servicecatalog:UpdateApplication","changed":"description"},
+          {"action":"servicecatalog:TagResource","attribute":"tags"},
+          {"action":"servicecatalog:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_servicecatalogappregistry_attribute_group": {
+      "ops": {
+        "create": [
+          {"action":"servicecatalog:CreateAttributeGroup"},
+          {"action":"servicecatalog:TagResource","attribute":"tags"},
+          {"action":"servicecatalog:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"servicecatalog:DeleteAttributeGroup"}
+        ],
+        "read": [
+          {"action":"servicecatalog:GetAttributeGroup"},
+          {"action":"servicecatalog:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"servicecatalog:UpdateAttributeGroup"},
+          {"action":"servicecatalog:TagResource","attribute":"tags"},
+          {"action":"servicecatalog:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_servicecatalogappregistry_attribute_group_association": {
+      "ops": {
+        "create": [
+          {"action":"servicecatalog:AssociateAttributeGroup"}
+        ],
+        "delete": [
+          {"action":"servicecatalog:DisassociateAttributeGroup"}
+        ],
+        "read": [
+          {"action":"servicecatalog:ListAssociatedAttributeGroups"}
+        ]
+      }
+    },
     "aws_servicequotas_service_quota": {
       "ops": {
         "create": [
@@ -22341,6 +26206,36 @@
           {"action":"servicequotas:GetRequestedServiceQuotaChange"},
           {"action":"servicequotas:GetAWSDefaultServiceQuota"},
           {"action":"servicequotas:GetServiceQuota"}
+        ]
+      }
+    },
+    "aws_servicequotas_template": {
+      "ops": {
+        "create": [
+          {"action":"servicequotas:PutServiceQuotaIncreaseRequestIntoTemplate"}
+        ],
+        "delete": [
+          {"action":"servicequotas:DeleteServiceQuotaIncreaseRequestFromTemplate"}
+        ],
+        "read": [
+          {"action":"servicequotas:GetServiceQuotaIncreaseRequestFromTemplate"}
+        ],
+        "update": [
+          {"action":"servicequotas:PutServiceQuotaIncreaseRequestIntoTemplate","changed":"value"}
+        ]
+      }
+    },
+    "aws_servicequotas_template_association": {
+      "ops": {
+        "create": [
+          {"action":"servicequotas:AssociateServiceQuotaTemplate"},
+          {"action":"servicequotas:GetAssociationForServiceQuotaTemplate"}
+        ],
+        "delete": [
+          {"action":"servicequotas:DisassociateServiceQuotaTemplate"}
+        ],
+        "read": [
+          {"action":"servicequotas:GetAssociationForServiceQuotaTemplate"}
         ]
       }
     },
@@ -22572,6 +26467,19 @@
         "update": [
           {"action":"ses:UpdateTemplate"},
           {"action":"ses:GetTemplate"}
+        ]
+      }
+    },
+    "aws_sesv2_account_suppression_attributes": {
+      "ops": {
+        "create": [
+          {"action":"ses:PutAccountSuppressionAttributes"}
+        ],
+        "read": [
+          {"action":"ses:GetAccount"}
+        ],
+        "update": [
+          {"action":"ses:PutAccountSuppressionAttributes"}
         ]
       }
     },
@@ -22843,6 +26751,82 @@
         ]
       }
     },
+    "aws_shield_application_layer_automatic_response": {
+      "ops": {
+        "create": [
+          {"action":"shield:EnableApplicationLayerAutomaticResponse"},
+          {"action":"shield:DescribeProtection"}
+        ],
+        "delete": [
+          {"action":"shield:DisableApplicationLayerAutomaticResponse"},
+          {"action":"shield:DescribeProtection"}
+        ],
+        "read": [
+          {"action":"shield:DescribeProtection"}
+        ],
+        "update": [
+          {"action":"shield:UpdateApplicationLayerAutomaticResponse","changed":"action"},
+          {"action":"shield:DescribeProtection","changed":"action"}
+        ]
+      }
+    },
+    "aws_shield_drt_access_log_bucket_association": {
+      "ops": {
+        "create": [
+          {"action":"shield:AssociateDRTLogBucket"},
+          {"action":"shield:DescribeDRTAccess"}
+        ],
+        "delete": [
+          {"action":"shield:DisassociateDRTLogBucket"},
+          {"action":"shield:DescribeDRTAccess"}
+        ],
+        "read": [
+          {"action":"shield:DescribeDRTAccess"}
+        ]
+      }
+    },
+    "aws_shield_drt_access_role_arn_association": {
+      "ops": {
+        "create": [
+          {"action":"shield:AssociateDRTRole"},
+          {"action":"shield:DescribeDRTAccess"}
+        ],
+        "delete": [
+          {"action":"shield:DisassociateDRTRole"},
+          {"action":"shield:DescribeDRTAccess"}
+        ],
+        "read": [
+          {"action":"shield:DescribeDRTAccess"}
+        ],
+        "update": [
+          {"action":"shield:AssociateDRTRole","changed":"role_arn"},
+          {"action":"shield:DescribeDRTAccess","changed":"role_arn"}
+        ]
+      }
+    },
+    "aws_shield_proactive_engagement": {
+      "ops": {
+        "create": [
+          {"action":"shield:AssociateProactiveEngagementDetails"},
+          {"action":"shield:UpdateEmergencyContactSettings"},
+          {"action":"shield:EnableProactiveEngagement"},
+          {"action":"shield:DisableProactiveEngagement"}
+        ],
+        "delete": [
+          {"action":"shield:DisableProactiveEngagement"},
+          {"action":"shield:UpdateEmergencyContactSettings"}
+        ],
+        "read": [
+          {"action":"shield:DescribeSubscription"},
+          {"action":"shield:DescribeEmergencyContactSettings"}
+        ],
+        "update": [
+          {"action":"shield:UpdateEmergencyContactSettings","changed":"emergency_contact"},
+          {"action":"shield:EnableProactiveEngagement","changed":"enabled"},
+          {"action":"shield:DisableProactiveEngagement","changed":"enabled"}
+        ]
+      }
+    },
     "aws_shield_protection": {
       "ops": {
         "create": [
@@ -22885,6 +26869,22 @@
           {"action":"shield:DescribeProtectionGroup"},
           {"action":"shield:TagResource","attribute":"tags"},
           {"action":"shield:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_shield_subscription": {
+      "ops": {
+        "create": [
+          {"action":"shield:CreateSubscription"}
+        ],
+        "delete": [
+          {"action":"shield:UpdateSubscription"}
+        ],
+        "read": [
+          {"action":"shield:DescribeSubscription"}
+        ],
+        "update": [
+          {"action":"shield:UpdateSubscription","changed":"auto_renew"}
         ]
       }
     },
@@ -23465,6 +27465,27 @@
         ]
       }
     },
+    "aws_ssmcontacts_rotation": {
+      "ops": {
+        "create": [
+          {"action":"ssm-contacts:CreateRotation"},
+          {"action":"ssm-contacts:TagResource","attribute":"tags"},
+          {"action":"ssm-contacts:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"ssm-contacts:DeleteRotation"}
+        ],
+        "read": [
+          {"action":"ssm-contacts:GetRotation"},
+          {"action":"ssm-contacts:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"ssm-contacts:UpdateRotation"},
+          {"action":"ssm-contacts:TagResource","attribute":"tags"},
+          {"action":"ssm-contacts:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_ssmincidents_replication_set": {
       "ops": {
         "create": [
@@ -23514,6 +27535,29 @@
         ]
       }
     },
+    "aws_ssmquicksetup_configuration_manager": {
+      "ops": {
+        "create": [
+          {"action":"ssm-quicksetup:CreateConfigurationManager"},
+          {"action":"ssm-quicksetup:GetConfigurationManager"},
+          {"action":"ssm-quicksetup:TagResource","attribute":"tags"}
+        ],
+        "delete": [
+          {"action":"ssm-quicksetup:DeleteConfigurationManager"},
+          {"action":"ssm-quicksetup:GetConfigurationManager"}
+        ],
+        "read": [
+          {"action":"ssm-quicksetup:GetConfigurationManager"}
+        ],
+        "update": [
+          {"action":"ssm-quicksetup:UpdateConfigurationManager"},
+          {"action":"ssm-quicksetup:UpdateConfigurationDefinition","changed":"configuration_definition"},
+          {"action":"ssm-quicksetup:GetConfigurationManager"},
+          {"action":"ssm-quicksetup:TagResource","attribute":"tags"},
+          {"action":"ssm-quicksetup:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_ssoadmin_account_assignment": {
       "ops": {
         "create": [
@@ -23527,6 +27571,68 @@
         ],
         "read": [
           {"action":"sso:ListAccountAssignments"}
+        ]
+      }
+    },
+    "aws_ssoadmin_application": {
+      "ops": {
+        "create": [
+          {"action":"sso:CreateApplication"},
+          {"action":"sso:DescribeApplication"}
+        ],
+        "delete": [
+          {"action":"sso:DeleteApplication"}
+        ],
+        "read": [
+          {"action":"sso:DescribeApplication"},
+          {"action":"sso:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"sso:UpdateApplication"},
+          {"action":"sso:UntagResource"},
+          {"action":"sso:TagResource"}
+        ]
+      }
+    },
+    "aws_ssoadmin_application_access_scope": {
+      "ops": {
+        "create": [
+          {"action":"sso:PutApplicationAccessScope"}
+        ],
+        "delete": [
+          {"action":"sso:DeleteApplicationAccessScope"}
+        ],
+        "read": [
+          {"action":"sso:GetApplicationAccessScope"}
+        ]
+      }
+    },
+    "aws_ssoadmin_application_assignment": {
+      "ops": {
+        "create": [
+          {"action":"sso:CreateApplicationAssignment"}
+        ],
+        "delete": [
+          {"action":"sso:DeleteApplicationAssignment"}
+        ],
+        "read": [
+          {"action":"sso:DescribeApplicationAssignment"}
+        ]
+      }
+    },
+    "aws_ssoadmin_application_assignment_configuration": {
+      "ops": {
+        "create": [
+          {"action":"sso:PutApplicationAssignmentConfiguration"}
+        ],
+        "delete": [
+          {"action":"sso:PutApplicationAssignmentConfiguration"}
+        ],
+        "read": [
+          {"action":"sso:GetApplicationAssignmentConfiguration"}
+        ],
+        "update": [
+          {"action":"sso:PutApplicationAssignmentConfiguration","changed":"assignment_required"}
         ]
       }
     },
@@ -23648,6 +27754,25 @@
         ],
         "read": [
           {"action":"sso:GetPermissionsBoundaryForPermissionSet"}
+        ]
+      }
+    },
+    "aws_ssoadmin_trusted_token_issuer": {
+      "ops": {
+        "create": [
+          {"action":"sso:CreateTrustedTokenIssuer"}
+        ],
+        "delete": [
+          {"action":"sso:DeleteTrustedTokenIssuer"}
+        ],
+        "read": [
+          {"action":"sso:DescribeTrustedTokenIssuer"},
+          {"action":"sso:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"sso:UpdateTrustedTokenIssuer"},
+          {"action":"sso:UntagResource"},
+          {"action":"sso:TagResource"}
         ]
       }
     },
@@ -23987,6 +28112,54 @@
         ],
         "read": [
           {"action":"synthetics:ListAssociatedGroups"}
+        ]
+      }
+    },
+    "aws_timestreaminfluxdb_db_instance": {
+      "ops": {
+        "create": [
+          {"action":"timestream-influxdb:CreateDbInstance"},
+          {"action":"timestream-influxdb:GetDbInstance"},
+          {"action":"timestream-influxdb:TagResource","attribute":"tags"},
+          {"action":"timestream-influxdb:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"timestream-influxdb:DeleteDbInstance"},
+          {"action":"timestream-influxdb:GetDbInstance"}
+        ],
+        "read": [
+          {"action":"timestream-influxdb:GetDbInstance"},
+          {"action":"timestream-influxdb:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"timestream-influxdb:UpdateDbInstance"},
+          {"action":"timestream-influxdb:GetDbInstance"},
+          {"action":"timestream-influxdb:TagResource","attribute":"tags"},
+          {"action":"timestream-influxdb:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_timestreamquery_scheduled_query": {
+      "ops": {
+        "create": [
+          {"action":"timestream:CreateScheduledQuery"},
+          {"action":"timestream:DescribeScheduledQuery"},
+          {"action":"timestream:TagResource","attribute":"tags"},
+          {"action":"timestream:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"timestream:DeleteScheduledQuery"},
+          {"action":"timestream:DescribeScheduledQuery"}
+        ],
+        "read": [
+          {"action":"timestream:DescribeScheduledQuery"},
+          {"action":"timestream:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"timestream:UpdateScheduledQuery"},
+          {"action":"timestream:DescribeScheduledQuery"},
+          {"action":"timestream:TagResource","attribute":"tags"},
+          {"action":"timestream:UntagResource","attribute":"tags"}
         ]
       }
     },
@@ -24490,6 +28663,89 @@
         ]
       }
     },
+    "aws_verifiedpermissions_identity_source": {
+      "ops": {
+        "create": [
+          {"action":"verifiedpermissions:CreateIdentitySource"},
+          {"action":"verifiedpermissions:GetIdentitySource"}
+        ],
+        "delete": [
+          {"action":"verifiedpermissions:DeleteIdentitySource"}
+        ],
+        "read": [
+          {"action":"verifiedpermissions:GetIdentitySource"}
+        ],
+        "update": [
+          {"action":"verifiedpermissions:UpdateIdentitySource"},
+          {"action":"verifiedpermissions:GetIdentitySource"}
+        ]
+      }
+    },
+    "aws_verifiedpermissions_policy": {
+      "ops": {
+        "create": [
+          {"action":"verifiedpermissions:CreatePolicy"}
+        ],
+        "delete": [
+          {"action":"verifiedpermissions:DeletePolicy"}
+        ],
+        "read": [
+          {"action":"verifiedpermissions:GetPolicy"}
+        ],
+        "update": [
+          {"action":"verifiedpermissions:UpdatePolicy","changed":"definition"}
+        ]
+      }
+    },
+    "aws_verifiedpermissions_policy_store": {
+      "ops": {
+        "create": [
+          {"action":"verifiedpermissions:CreatePolicyStore"}
+        ],
+        "delete": [
+          {"action":"verifiedpermissions:DeletePolicyStore"}
+        ],
+        "read": [
+          {"action":"verifiedpermissions:GetPolicyStore"}
+        ],
+        "update": [
+          {"action":"verifiedpermissions:UpdatePolicyStore"}
+        ]
+      }
+    },
+    "aws_verifiedpermissions_policy_template": {
+      "ops": {
+        "create": [
+          {"action":"verifiedpermissions:CreatePolicyTemplate"}
+        ],
+        "delete": [
+          {"action":"verifiedpermissions:DeletePolicyTemplate"}
+        ],
+        "read": [
+          {"action":"verifiedpermissions:GetPolicyTemplate"}
+        ],
+        "update": [
+          {"action":"verifiedpermissions:UpdatePolicyTemplate"}
+        ]
+      }
+    },
+    "aws_verifiedpermissions_schema": {
+      "ops": {
+        "create": [
+          {"action":"verifiedpermissions:PutSchema"}
+        ],
+        "delete": [
+          {"action":"verifiedpermissions:PutSchema"}
+        ],
+        "read": [
+          {"action":"verifiedpermissions:GetSchema"}
+        ],
+        "update": [
+          {"action":"verifiedpermissions:PutSchema","changed":"definition"},
+          {"action":"verifiedpermissions:GetSchema","changed":"definition"}
+        ]
+      }
+    },
     "aws_volume_attachment": {
       "ops": {
         "create": [
@@ -24548,6 +28804,49 @@
           {"action":"ec2:DescribeSecurityGroups"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpc_block_public_access_exclusion": {
+      "ops": {
+        "create": [
+          {"action":"ec2:CreateVpcBlockPublicAccessExclusion"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"ec2:DeleteVpcBlockPublicAccessExclusion"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyVpcBlockPublicAccessExclusion","changed":"internet_gateway_exclusion_mode"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions","changed":"internet_gateway_exclusion_mode"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpc_block_public_access_options": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyVpcBlockPublicAccessOptions"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessOptions"}
+        ],
+        "delete": [
+          {"action":"ec2:ModifyVpcBlockPublicAccessOptions"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessOptions"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeVpcBlockPublicAccessOptions"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyVpcBlockPublicAccessOptions"},
+          {"action":"ec2:DescribeVpcBlockPublicAccessOptions"}
         ]
       }
     },
@@ -24682,6 +28981,19 @@
         ]
       }
     },
+    "aws_vpc_endpoint_private_dns": {
+      "ops": {
+        "create": [
+          {"action":"ec2:ModifyVpcEndpoint"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeVpcEndpoints"}
+        ],
+        "update": [
+          {"action":"ec2:ModifyVpcEndpoint"}
+        ]
+      }
+    },
     "aws_vpc_endpoint_route_table_association": {
       "ops": {
         "create": [
@@ -24754,6 +29066,14 @@
         ],
         "read": [
           {"action":"ec2:DescribeVpcEndpointServicePermissions"}
+        ]
+      }
+    },
+    "aws_vpc_endpoint_service_private_dns_verification": {
+      "ops": {
+        "create": [
+          {"action":"ec2:StartVpcEndpointServicePrivateDnsVerification"},
+          {"action":"ec2:DescribeVpcEndpointServiceConfigurations"}
         ]
       }
     },
@@ -25051,6 +29371,63 @@
         ]
       }
     },
+    "aws_vpc_security_group_egress_rule": {
+      "ops": {
+        "create": [
+          {"action":"ec2:AuthorizeSecurityGroupEgress"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"ec2:RevokeSecurityGroupEgress"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeSecurityGroupRules"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "update": [
+          {"action":"ec2:ModifySecurityGroupRules"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpc_security_group_ingress_rule": {
+      "ops": {
+        "create": [
+          {"action":"ec2:AuthorizeSecurityGroupIngress"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"ec2:RevokeSecurityGroupIngress"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeSecurityGroupRules"},
+          {"action":"ec2:DescribeTags"}
+        ],
+        "update": [
+          {"action":"ec2:ModifySecurityGroupRules"},
+          {"action":"ec2:CreateTags","attribute":"tags"},
+          {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpc_security_group_vpc_association": {
+      "ops": {
+        "create": [
+          {"action":"ec2:AssociateSecurityGroupVpc"},
+          {"action":"ec2:DescribeSecurityGroupVpcAssociations"}
+        ],
+        "delete": [
+          {"action":"ec2:DisassociateSecurityGroupVpc"},
+          {"action":"ec2:DescribeSecurityGroupVpcAssociations"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeSecurityGroupVpcAssociations"}
+        ]
+      }
+    },
     "aws_vpclattice_access_log_subscription": {
       "ops": {
         "create": [
@@ -25137,6 +29514,54 @@
         ]
       }
     },
+    "aws_vpclattice_resource_configuration": {
+      "ops": {
+        "create": [
+          {"action":"vpc-lattice:CreateResourceConfiguration"},
+          {"action":"vpc-lattice:GetResourceConfiguration"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"vpc-lattice:DeleteResourceConfiguration"},
+          {"action":"vpc-lattice:GetResourceConfiguration"}
+        ],
+        "read": [
+          {"action":"vpc-lattice:GetResourceConfiguration"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"vpc-lattice:UpdateResourceConfiguration"},
+          {"action":"vpc-lattice:GetResourceConfiguration"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpclattice_resource_gateway": {
+      "ops": {
+        "create": [
+          {"action":"vpc-lattice:CreateResourceGateway"},
+          {"action":"vpc-lattice:GetResourceGateway"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"vpc-lattice:DeleteResourceGateway"},
+          {"action":"vpc-lattice:GetResourceGateway"}
+        ],
+        "read": [
+          {"action":"vpc-lattice:GetResourceGateway"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "update": [
+          {"action":"vpc-lattice:UpdateResourceGateway","changed":"security_group_ids"},
+          {"action":"vpc-lattice:GetResourceGateway","changed":"security_group_ids"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
     "aws_vpclattice_resource_policy": {
       "ops": {
         "create": [
@@ -25197,6 +29622,28 @@
         "update": [
           {"action":"vpc-lattice:UpdateServiceNetwork"},
           {"action":"vpc-lattice:GetServiceNetwork"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_vpclattice_service_network_resource_association": {
+      "ops": {
+        "create": [
+          {"action":"vpc-lattice:CreateServiceNetworkResourceAssociation"},
+          {"action":"vpc-lattice:GetServiceNetworkResourceAssociation"},
+          {"action":"vpc-lattice:TagResource","attribute":"tags"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "delete": [
+          {"action":"vpc-lattice:DeleteServiceNetworkResourceAssociation"},
+          {"action":"vpc-lattice:GetServiceNetworkResourceAssociation"}
+        ],
+        "read": [
+          {"action":"vpc-lattice:GetServiceNetworkResourceAssociation"},
+          {"action":"vpc-lattice:ListTagsForResource"}
+        ],
+        "update": [
           {"action":"vpc-lattice:TagResource","attribute":"tags"},
           {"action":"vpc-lattice:UntagResource","attribute":"tags"}
         ]
@@ -26104,6 +30551,28 @@
         ]
       }
     },
+    "aws_workspaces_connection_alias": {
+      "ops": {
+        "create": [
+          {"action":"workspaces:CreateConnectionAlias"},
+          {"action":"workspaces:DescribeConnectionAliases"},
+          {"action":"workspaces:CreateTags","attribute":"tags"},
+          {"action":"workspaces:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"workspaces:DeleteConnectionAlias"},
+          {"action":"workspaces:DescribeConnectionAliases"}
+        ],
+        "read": [
+          {"action":"workspaces:DescribeConnectionAliases"},
+          {"action":"workspaces:DescribeTags"}
+        ],
+        "update": [
+          {"action":"workspaces:CreateTags","attribute":"tags"},
+          {"action":"workspaces:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
     "aws_workspaces_directory": {
       "ops": {
         "create": [
@@ -26207,6 +30676,20 @@
           {"action":"xray:GetGroup"},
           {"action":"xray:TagResource","attribute":"tags"},
           {"action":"xray:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_xray_resource_policy": {
+      "ops": {
+        "create": [
+          {"action":"xray:PutResourcePolicy"}
+        ],
+        "delete": [
+          {"action":"xray:DeleteResourcePolicy"},
+          {"action":"xray:ListResourcePolicies"}
+        ],
+        "read": [
+          {"action":"xray:ListResourcePolicies"}
         ]
       }
     },

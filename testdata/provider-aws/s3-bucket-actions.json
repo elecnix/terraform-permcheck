@@ -184,6 +184,23 @@
         "s3:PutInventoryConfiguration"
       ]
     },
+    "aws_s3_bucket_lifecycle_configuration": {
+      "create": [
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration"
+      ],
+      "delete": [
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration"
+      ],
+      "read": [
+        "s3:GetLifecycleConfiguration"
+      ],
+      "update": [
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration"
+      ]
+    },
     "aws_s3_bucket_logging": {
       "create": [
         "s3:GetBucketLogging",
