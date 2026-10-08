@@ -14,14 +14,21 @@ import (
 const staleLockAge = 30 * time.Minute
 
 // lockFile takes an exclusive lock on path by creating it with O_EXCL. It
-// polls until the file is gone. A lock file older than staleLockAge is
-// treated as left behind by a crashed run and removed.
+// polls until the file is gone. The holder refreshes the file's
+// modification time while it holds the lock, so a lock file older than
+// staleLockAge was left behind by a crashed run, and is removed.
 func lockFile(path string) (unlock func(), err error) {
 	for {
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
 			_ = f.Close()
-			return func() { _ = os.Remove(path) }, nil
+			// Refresh the lock while it is held, so a clone that runs longer
+			// than staleLockAge is not taken for a crashed run.
+			stop := keepFresh(path, staleLockAge/10)
+			return func() {
+				stop()
+				_ = os.Remove(path)
+			}, nil
 		}
 		if !errors.Is(err, fs.ErrExist) {
 			return nil, err
