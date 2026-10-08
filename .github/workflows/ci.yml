@@ -82,14 +82,40 @@ jobs:
           plan-file: testdata/plan.json
           policy-file: testdata/policy_partial.json
 
-      # The failed action has no outputs, so read the environment variables
-      # its check step set.
       - name: Check the exit codes
         env:
           COVERED: ${{ steps.covered.outputs.exit-code }}
-          OUTCOME: ${{ steps.partial.outcome }}
+          PARTIAL: ${{ steps.partial.outputs.exit-code }}
+          REPORT: ${{ steps.partial.outputs.report-file }}
         run: |
           test "$COVERED" = 0 || { echo "covered run exited $COVERED, want 0"; exit 1; }
-          test "$OUTCOME" = failure || { echo "partial run outcome $OUTCOME, want failure"; exit 1; }
-          test "$PERMCHECK_EXIT_CODE" = 1 || { echo "partial run exited $PERMCHECK_EXIT_CODE, want 1"; exit 1; }
-          grep -q '::warning' "$PERMCHECK_REPORT_FILE" || { echo "partial report has no annotations"; exit 1; }
+          test "$PARTIAL" = 1 || { echo "partial run exited $PARTIAL, want 1"; exit 1; }
+          grep -q '::warning' "$REPORT" || { echo "partial report has no annotations"; exit 1; }
+
+  # Builds every release archive the way the tag push does, so a change that
+  # breaks the release fails here instead of on the tag.
+  release-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check the GoReleaser config
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+      - name: Build a snapshot release
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish
