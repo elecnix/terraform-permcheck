@@ -126,10 +126,12 @@ func TestFilterS3Subresources_NonS3Unaffected(t *testing.T) {
 }
 
 func TestS3SubresourceAbsorbed(t *testing.T) {
-	// SSE config absorbs PutEncryptionConfiguration
+	// SSE config absorbs the encryption actions in both spellings
 	absorbed := s3SubresourceAbsorbed("aws_s3_bucket_server_side_encryption_configuration")
-	if len(absorbed) != 1 || !absorbed["s3:PutEncryptionConfiguration"] {
-		t.Errorf("expected {s3:PutEncryptionConfiguration}, got %v", absorbed)
+	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration"} {
+		if !absorbed[a] {
+			t.Errorf("expected %s to be absorbed, got %v", a, absorbed)
+		}
 	}
 
 	// Unknown type returns nil
