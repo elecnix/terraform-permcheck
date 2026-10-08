@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
@@ -186,14 +187,20 @@ func captureStreams(t *testing.T, fn func()) (stdout, stderr string) {
 		_, _ = io.Copy(into, r)
 		close(done)
 	}
+	// The deferred closes run on every return, t.Fatal included. Closing a
+	// write end twice returns an error that nothing reads.
 	outR, outW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer outR.Close()
+	defer outW.Close()
 	errR, errW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer errR.Close()
+	defer errW.Close()
 	var outBuf, errBuf bytes.Buffer
 	outDone, errDone := make(chan struct{}), make(chan struct{})
 	go read(outR, &outBuf, outDone)
@@ -208,4 +215,25 @@ func captureStreams(t *testing.T, fn func()) (stdout, stderr string) {
 	<-outDone
 	<-errDone
 	return outBuf.String(), errBuf.String()
+}
+
+// captureStreams closes both ends of its pipes, so repeated calls do not hold
+// file descriptors until the next garbage collection.
+func TestCaptureStreams_ClosesPipes(t *testing.T) {
+	openFDs := func() int {
+		entries, err := os.ReadDir("/dev/fd")
+		if err != nil {
+			t.Skipf("cannot list open file descriptors: %v", err)
+		}
+		return len(entries)
+	}
+	// With the collector off, a pipe left open stays open for the count.
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+	before := openFDs()
+	for i := 0; i < 20; i++ {
+		captureStreams(t, func() {})
+	}
+	if after := openFDs(); after > before {
+		t.Errorf("open file descriptors went from %d to %d after 20 calls", before, after)
+	}
 }
