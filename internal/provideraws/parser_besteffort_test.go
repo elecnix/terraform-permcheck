@@ -412,13 +412,13 @@ func findKeyByID(ctx context.Context, conn *kms.Client, keyID string) (*awstypes
 		t.Fatal(err)
 	}
 	for _, op := range []string{"create", "read"} {
-		if !containsString(schema.Permissions[op], "kms:DescribeKey") {
-			t.Errorf("%s = %v, want kms:DescribeKey listed", op, schema.Permissions[op])
+		if !containsString(schema.Actions(op), "kms:DescribeKey") {
+			t.Errorf("%s = %v, want kms:DescribeKey listed", op, schema.Actions(op))
 		}
-		if !schema.BestEffort[op]["kms:DescribeKey"] {
-			t.Errorf("%s: kms:DescribeKey not best-effort: %v", op, schema.BestEffort[op])
+		if gates := schema.Gates(op, "kms:DescribeKey"); len(gates) != 1 || !gates[0].BestEffort {
+			t.Errorf("%s: kms:DescribeKey not best-effort: %+v", op, gates)
 		}
-		if schema.BestEffort[op]["dynamodb:DescribeTable"] {
+		if gates := schema.Gates(op, "dynamodb:DescribeTable"); len(gates) != 1 || gates[0].BestEffort {
 			t.Errorf("%s: dynamodb:DescribeTable marked best-effort", op)
 		}
 	}

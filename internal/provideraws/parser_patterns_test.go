@@ -524,7 +524,7 @@ func findRoleByName(ctx context.Context, conn *iam.Client, name string) (*awstyp
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := schema.Permissions["read"]; !equalStrings(got, []string{"iam:GetRole"}) {
+	if got := schema.Actions("read"); !equalStrings(got, []string{"iam:GetRole"}) {
 		t.Errorf("read = %v, want [iam:GetRole]", got)
 	}
 	if len(schema.Incomplete) != 0 {

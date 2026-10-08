@@ -9,9 +9,9 @@ import (
 )
 
 // lambdaCreateResolver requires one action of a type with no target rule.
-var lambdaCreateResolver = fakeResolver{fakeSchema{perms: map[string][]string{
+var lambdaCreateResolver = fakeResolver{actionsSchema(map[string][]string{
 	"create": {"lambda:CreateFunction"},
-}}}
+})}
 
 func lambdaFunctionChange() []*plan.ResourceChange {
 	return []*plan.ResourceChange{{Type: "aws_lambda_function", Name: "fn", Change: "create"}}
@@ -99,7 +99,7 @@ func TestValidate_StrictUngrantedActionStaysMissing(t *testing.T) {
 }
 
 func TestValidate_StrictDerivedTargetIsChecked(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{"create": {"sqs:CreateQueue"}}}}
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"sqs:CreateQueue"}})}
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:us-east-1:111122223333:orders"}]}`)
 
@@ -127,7 +127,7 @@ func TestValidate_StrictDerivedTargetIsChecked(t *testing.T) {
 }
 
 func TestValidate_StrictKeepsOtherFilters(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{"create": {"sqs:SendMessage"}}}}
+	resolver := fakeResolver{actionsSchema(map[string][]string{"create": {"sqs:SendMessage"}})}
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"arn:aws:sqs:*:*:x"}]}`)
 	filter := DefaultFilter()

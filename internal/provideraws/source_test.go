@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 func TestSourceProviderParseAll(t *testing.T) {
@@ -94,14 +95,14 @@ func resourceTableRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	if err != nil {
 		t.Fatalf("resolve aws_backup_vault: %v", err)
 	}
-	createPerms := schema.GetPermissions()["create"]
+	createPerms := schema.Actions("create")
 	if !containsAction(createPerms, "backup:CreateBackupVault") {
 		t.Errorf("create: expected backup:CreateBackupVault, got %v", createPerms)
 	}
 	if !containsAction(createPerms, "backup:DescribeBackupVault") {
 		t.Errorf("create: expected backup:DescribeBackupVault (followed from read), got %v", createPerms)
 	}
-	deletePerms := schema.GetPermissions()["delete"]
+	deletePerms := schema.Actions("delete")
 	if !containsAction(deletePerms, "backup:DeleteBackupVault") {
 		t.Errorf("delete: expected backup:DeleteBackupVault, got %v", deletePerms)
 	}
@@ -111,7 +112,7 @@ func resourceTableRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	if err != nil {
 		t.Fatalf("resolve aws_dynamodb_table: %v", err)
 	}
-	createPerms = schema.GetPermissions()["create"]
+	createPerms = schema.Actions("create")
 	if !containsAction(createPerms, "dynamodb:CreateTable") {
 		t.Errorf("create: expected dynamodb:CreateTable, got %v", createPerms)
 	}
@@ -315,7 +316,7 @@ func resourceGroupRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	if err != nil {
 		t.Fatalf("resolve aws_instance: %v", err)
 	}
-	createPerms := schema.GetPermissions()["create"]
+	createPerms := schema.Actions("create")
 	if !containsAction(createPerms, "ec2:RunInstances") {
 		t.Errorf("create: expected ec2:RunInstances, got %v", createPerms)
 	}
@@ -543,8 +544,8 @@ func TestCloneAnnotatedTagNoise(t *testing.T) {
 }
 
 // TestParseFileGateKinds checks that the two gate kinds stay apart on the
-// resolved schema: a d.GetOk guard lands in Conditional, a d.HasChange guard
-// lands in ChangeGated. A caller must be able to tell them apart, since plan
+// resolved schema: a d.GetOk guard becomes a presence gate, a d.HasChange
+// guard a change gate. A caller must be able to tell them apart, since plan
 // mode evaluates them from different data.
 func TestParseFileGateKinds(t *testing.T) {
 	dir := t.TempDir()
@@ -605,7 +606,7 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 		t.Fatalf("resolve aws_iam_role: %v", err)
 	}
 
-	updatePerms := schema.GetPermissions()["update"]
+	updatePerms := schema.Actions("update")
 	for _, action := range []string{
 		"iam:UpdateRole",
 		"iam:PutRolePermissionsBoundary",
@@ -616,26 +617,15 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 		}
 	}
 
-	cond := schema.GetConditional()["update"]
-	if got := cond["iam:DeleteRolePolicy"]; got != "description" {
-		t.Errorf("Conditional[update][iam:DeleteRolePolicy] = %q, want description", got)
-	}
-	if _, ok := cond["iam:PutRolePermissionsBoundary"]; ok {
-		t.Error("a change-gated action must not appear in Conditional")
-	}
-	if _, ok := cond["iam:UpdateRole"]; ok {
-		t.Error("an unconditional action must not appear in Conditional")
-	}
-
-	changed := schema.GetChangeGated()["update"]
-	if got := changed["iam:PutRolePermissionsBoundary"]; got != "permissions_boundary" {
-		t.Errorf("ChangeGated[update][iam:PutRolePermissionsBoundary] = %q, want permissions_boundary", got)
-	}
-	if _, ok := changed["iam:DeleteRolePolicy"]; ok {
-		t.Error("a presence-gated action must not appear in ChangeGated")
-	}
-	if _, ok := changed["iam:UpdateRole"]; ok {
-		t.Error("an unconditional action must not appear in ChangeGated")
+	for action, want := range map[string]iam.Gate{
+		"iam:DeleteRolePolicy":           {Attribute: "description"},
+		"iam:PutRolePermissionsBoundary": {Changed: "permissions_boundary"},
+		"iam:UpdateRole":                 {},
+	} {
+		got := schema.Gates("update", action)
+		if len(got) != 1 || got[0].Attribute != want.Attribute || got[0].Changed != want.Changed {
+			t.Errorf("update %s gates = %+v, want one path gated like %+v", action, got, want)
+		}
 	}
 }
 

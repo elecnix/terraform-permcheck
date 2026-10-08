@@ -230,9 +230,9 @@ func TestCoversTarget_NotResourceDeny(t *testing.T) {
 }
 
 func TestValidate_AllowPlusDenyReportsMissing(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+	resolver := fakeResolver{actionsSchema(map[string][]string{
 		"create": {"sqs:CreateQueue"},
-	}}}
+	})}
 	// No name, so the target is unknown and coverage is action-level.
 	changes := []*plan.ResourceChange{{Type: "aws_sqs_queue", Name: "q", Change: "create"}}
 	doc := mustPolicy(t, `{"Statement":[
@@ -248,9 +248,9 @@ func TestValidate_AllowPlusDenyReportsMissing(t *testing.T) {
 }
 
 func TestValidate_DenyOnTargetQueue(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+	resolver := fakeResolver{actionsSchema(map[string][]string{
 		"create": {"sqs:CreateQueue"},
-	}}}
+	})}
 	changes := []*plan.ResourceChange{{
 		Type: "aws_sqs_queue", Name: "q", Change: "create",
 		AttributeValues: map[string]string{"name": "example-queue"},
@@ -280,9 +280,9 @@ func TestValidate_DenyOnTargetQueue(t *testing.T) {
 }
 
 func TestValidate_MidStringActionGlobCovers(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+	resolver := fakeResolver{actionsSchema(map[string][]string{
 		"create": {"secretsmanager:PutSecretValue"},
-	}}}
+	})}
 	changes := []*plan.ResourceChange{{Type: "aws_secretsmanager_secret_version", Name: "v", Change: "create"}}
 	doc := mustPolicy(t, `{"Statement":[{"Effect":"Allow","Action":"secretsmanager:*SecretValue","Resource":"*"}]}`)
 	missing, err := Validate(changes, doc, resolver, FilterConfig{})
@@ -295,9 +295,9 @@ func TestValidate_MidStringActionGlobCovers(t *testing.T) {
 }
 
 func TestValidate_CrossServiceCallbackHonoursDeny(t *testing.T) {
-	resolver := typeKeyedResolver{"aws_wafv2_web_acl_association": fakeSchema{perms: map[string][]string{
+	resolver := typeKeyedResolver{"aws_wafv2_web_acl_association": actionsSchema(map[string][]string{
 		"create": {"wafv2:AssociateWebACL"},
-	}}}
+	})}
 	changes := []*plan.ResourceChange{{
 		Type: "aws_wafv2_web_acl_association", Name: "this", Change: "create",
 		AttributeValues: map[string]string{

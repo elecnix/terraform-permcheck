@@ -2,6 +2,7 @@ package check
 
 import (
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
@@ -17,7 +18,7 @@ var staticMutationOps = []string{"create", "update", "delete"}
 //
 // A type the resolver cannot map is skipped, since validation has nothing to
 // check it against.
-func staticChanges(blocks []hcl.ResourceBlock, resolver Resolver) ([]*plan.ResourceChange, int) {
+func staticChanges(blocks []hcl.ResourceBlock, resolver iam.Resolver) ([]*plan.ResourceChange, int) {
 	var changes []*plan.ResourceChange
 	checked := 0
 
@@ -32,7 +33,7 @@ func staticChanges(blocks []hcl.ResourceBlock, resolver Resolver) ([]*plan.Resou
 		if err != nil {
 			continue
 		}
-		ops := staticOpsFor(schema.GetPermissions())
+		ops := staticOpsFor(schema)
 		if len(ops) == 0 {
 			continue
 		}
@@ -65,22 +66,23 @@ func staticChanges(blocks []hcl.ResourceBlock, resolver Resolver) ([]*plan.Resou
 // the validator falls back to create when an operation is absent, and an
 // operation whose actions the create check already reports would repeat that
 // result. Read and list are not mutation operations and are never checked.
-func staticOpsFor(perms map[string][]string) []string {
-	create := make(map[string]bool, len(perms["create"]))
-	for _, a := range perms["create"] {
-		create[a] = true
+func staticOpsFor(schema iam.Schema) []string {
+	createReqs, _ := schema.Requirements("create")
+	create := make(map[string]bool, len(createReqs))
+	for _, r := range createReqs {
+		create[r.Action] = true
 	}
 
 	var ops []string
 	for _, op := range staticMutationOps {
-		actions := perms[op]
-		if len(actions) == 0 {
+		reqs, _ := schema.Requirements(op)
+		if len(reqs) == 0 {
 			continue
 		}
 		if op != "create" {
 			distinct := false
-			for _, a := range actions {
-				if !create[a] {
+			for _, r := range reqs {
+				if !create[r.Action] {
 					distinct = true
 					break
 				}

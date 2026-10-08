@@ -8,79 +8,61 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
-// Schema maps a cloud resource type to the IAM permissions required
-// to create, read, update, delete, and list it.
+// Schema lists the requirements of each operation on a cloud resource type.
+// Both producers emit it: the CloudFormation registry adapter here and the
+// provider-source adapter in provideraws. It implements iam.Schema.
 type Schema struct {
-	TypeName    string
-	Permissions map[string][]string          // key: "create", "read", "update", "delete", "list" → action strings
-	Conditional map[string]map[string]string // op → action → condition attribute name (empty if unconditional)
-	// ChangeGated maps op → action → the attribute whose change gates the
-	// action (a d.HasChange guard in the provider). It is separate from
-	// Conditional because an action gated on presence is evaluated from the
-	// planned state, while an action gated on change is evaluated from the
-	// difference between prior and planned state.
-	ChangeGated map[string]map[string]string
+	TypeName string
 
-	// ValueConditional marks the conditional actions whose gating attribute is
-	// compared by value, not by presence (op → action → true). The attribute
-	// carries a default, so the call only runs when the author configured it.
-	ValueConditional map[string]map[string]bool
-
-	// BestEffort marks the actions whose failure the provider ignores
-	// (op → action → true): it discards the call's error, or makes the call
-	// only to clean up after an operation that already failed. A policy that
-	// denies such an action does not make the apply fail.
-	BestEffort map[string]map[string]bool
-
-	// Gates lists every gated path of the actions the provider reaches on
-	// more than one (op → action → gates). Such an action is needed when any
-	// of its gates holds, and the maps above hold no gate for it.
-	Gates map[string]map[string][]iam.Gate
+	// Ops maps "create", "read", "update", "delete" and "list" to the
+	// requirements of that operation, one per path that reaches an action.
+	// An operation the producer knows but that needs no permissions is
+	// present with an empty list.
+	Ops map[string][]iam.Requirement
 
 	// Incomplete names the operations whose permissions the provider could
 	// not fully determine, such as a create in which the provider-source
 	// parser found no call that creates anything. ChainProvider merges in a
-	// later provider's permissions for these operations.
+	// later provider's requirements for these operations. Only the chain
+	// reads it, so iam.Schema does not expose it.
 	Incomplete map[string]bool
 }
 
-// GetPermissions returns the permission map (implements iam.SchemaLike).
-func (s *Schema) GetPermissions() map[string][]string {
-	return s.Permissions
+// Requirements returns the requirements of op, and whether the schema knows
+// op at all (implements iam.Schema).
+func (s *Schema) Requirements(op string) ([]iam.Requirement, bool) {
+	reqs, ok := s.Ops[op]
+	return reqs, ok
 }
 
-// GetConditional returns the conditional-permission metadata, mapping
-// op → action → gating attribute name (implements iam.SchemaLike).
-func (s *Schema) GetConditional() map[string]map[string]string {
-	return s.Conditional
+// Actions lists the distinct actions op requires, in the order each first
+// appears.
+func (s *Schema) Actions(op string) []string {
+	var actions []string
+	seen := make(map[string]bool, len(s.Ops[op]))
+	for _, r := range s.Ops[op] {
+		if !seen[r.Action] {
+			seen[r.Action] = true
+			actions = append(actions, r.Action)
+		}
+	}
+	return actions
 }
 
-// GetChangeGated returns the change-gated permission metadata, mapping
-// op → action → the attribute whose change gates the action
-// (implements iam.SchemaLike).
-func (s *Schema) GetChangeGated() map[string]map[string]string {
-	return s.ChangeGated
-}
-
-// GetValueConditional returns the actions whose gating attribute is compared by
-// value (implements iam.SchemaLike).
-func (s *Schema) GetValueConditional() map[string]map[string]bool {
-	return s.ValueConditional
-}
-
-// GetGates returns the gates of the actions reached on several paths,
-// mapping op → action → gates.
-func (s *Schema) GetGates() map[string]map[string][]iam.Gate {
-	return s.Gates
-}
-
-// GetBestEffort returns the actions whose failure the provider ignores
-// (implements iam.SchemaLike).
-func (s *Schema) GetBestEffort() map[string]map[string]bool {
-	return s.BestEffort
+// Gates returns the gate of every path on which op reaches action, in order.
+func (s *Schema) Gates(op, action string) []iam.Gate {
+	var gates []iam.Gate
+	for _, r := range s.Ops[op] {
+		if r.Action == action {
+			gates = append(gates, r.Gate)
+		}
+	}
+	return gates
 }
 
 // Provider resolves cloud resource types to their required IAM permissions.
+// It returns the concrete Schema, so ChainProvider can read Incomplete and
+// merge operations. ChainProvider is the iam.Resolver built from providers.
 type Provider interface {
 	// Name returns the provider name (e.g. "aws").
 	Name() string
@@ -113,8 +95,9 @@ func (c *ChainProvider) Name() string {
 // Resolve tries each provider in order and returns the first successful
 // result. When that result marks operations incomplete, each later provider
 // that knows the type adds its actions for those operations, so a parse that
-// missed a call cannot report it as not needed.
-func (c *ChainProvider) Resolve(tfType string) (*Schema, error) {
+// missed a call cannot report it as not needed. A ChainProvider is an
+// iam.Resolver.
+func (c *ChainProvider) Resolve(tfType string) (iam.Schema, error) {
 	var lastErr error
 	for i, p := range c.providers {
 		schema, err := p.Resolve(tfType)
@@ -146,7 +129,7 @@ func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provi
 			continue
 		}
 		for _, op := range ops {
-			if len(fallback.Permissions[op]) == 0 {
+			if len(fallback.Ops[op]) == 0 {
 				continue
 			}
 			if !copied {
@@ -178,15 +161,10 @@ func incompleteOps(s *Schema) []string {
 // original, which a provider may cache, unchanged.
 func (s *Schema) clone() *Schema {
 	out := *s
-	out.Permissions = make(map[string][]string, len(s.Permissions))
-	for op, actions := range s.Permissions {
-		out.Permissions[op] = append([]string(nil), actions...)
+	out.Ops = make(map[string][]iam.Requirement, len(s.Ops))
+	for op, reqs := range s.Ops {
+		out.Ops[op] = append([]iam.Requirement(nil), reqs...)
 	}
-	out.Conditional = cloneNested(s.Conditional)
-	out.ChangeGated = cloneNested(s.ChangeGated)
-	out.ValueConditional = cloneNested(s.ValueConditional)
-	out.BestEffort = cloneNested(s.BestEffort)
-	out.Gates = cloneNested(s.Gates)
 	out.Incomplete = make(map[string]bool, len(s.Incomplete))
 	for op, v := range s.Incomplete {
 		out.Incomplete[op] = v
@@ -194,56 +172,19 @@ func (s *Schema) clone() *Schema {
 	return &out
 }
 
-// mergeOperation adds the fallback's actions for op that s lacks, with the
-// gates the fallback puts on them, and marks op complete. Actions s already
-// has keep their own gates.
+// mergeOperation adds the fallback's requirements for op on the actions s
+// lacks, with every path the fallback lists for them, and marks op complete.
+// Actions s already has keep their own paths.
 func (s *Schema) mergeOperation(op string, fallback *Schema) {
-	have := make(map[string]bool, len(s.Permissions[op]))
-	for _, a := range s.Permissions[op] {
-		have[a] = true
+	have := make(map[string]bool, len(s.Ops[op]))
+	for _, r := range s.Ops[op] {
+		have[r.Action] = true
 	}
-	for _, a := range fallback.Permissions[op] {
-		if have[a] {
+	for _, r := range fallback.Ops[op] {
+		if have[r.Action] {
 			continue
 		}
-		have[a] = true
-		s.Permissions[op] = append(s.Permissions[op], a)
-		copyGate(&s.Conditional, fallback.Conditional, op, a)
-		copyGate(&s.ChangeGated, fallback.ChangeGated, op, a)
-		copyGate(&s.ValueConditional, fallback.ValueConditional, op, a)
-		copyGate(&s.BestEffort, fallback.BestEffort, op, a)
-		copyGate(&s.Gates, fallback.Gates, op, a)
+		s.Ops[op] = append(s.Ops[op], r)
 	}
 	delete(s.Incomplete, op)
-}
-
-// cloneNested copies a two-level op → action → value map.
-func cloneNested[V any](m map[string]map[string]V) map[string]map[string]V {
-	if m == nil {
-		return nil
-	}
-	out := make(map[string]map[string]V, len(m))
-	for op, inner := range m {
-		cp := make(map[string]V, len(inner))
-		for k, v := range inner {
-			cp[k] = v
-		}
-		out[op] = cp
-	}
-	return out
-}
-
-// copyGate copies the gate src holds for op and action, if any, into dst.
-func copyGate[V any](dst *map[string]map[string]V, src map[string]map[string]V, op, action string) {
-	v, ok := src[op][action]
-	if !ok {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]map[string]V)
-	}
-	if (*dst)[op] == nil {
-		(*dst)[op] = make(map[string]V)
-	}
-	(*dst)[op][action] = v
 }

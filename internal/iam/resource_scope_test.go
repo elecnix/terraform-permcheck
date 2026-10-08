@@ -8,9 +8,9 @@ import (
 )
 
 // typeKeyedResolver serves a distinct schema per terraform resource type.
-type typeKeyedResolver map[string]SchemaLike
+type typeKeyedResolver map[string]Schema
 
-func (r typeKeyedResolver) Resolve(t string) (SchemaLike, error) {
+func (r typeKeyedResolver) Resolve(t string) (Schema, error) {
 	s, ok := r[t]
 	if !ok {
 		return nil, errors.New("no schema")
@@ -175,11 +175,9 @@ func TestCoversTargetWildcardResource(t *testing.T) {
 // secretVersionSchema is the create permission set the source parser extracts
 // for aws_secretsmanager_secret_version.
 func secretVersionSchema() fakeSchema {
-	return fakeSchema{
-		perms: map[string][]string{
-			"create": {"secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue"},
-		},
-	}
+	return actionsSchema(map[string][]string{
+		"create": {"secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue"},
+	})
 }
 
 func TestValidate_ResourceScopedCoverage(t *testing.T) {
@@ -329,7 +327,7 @@ func TestValidate_ResourceScopedCoverage_ReferencedIndexedSecret(t *testing.T) {
 	// A version whose secret_id references a count-indexed secret must still
 	// derive the target ARN from the secret's configured name.
 	resolver := typeKeyedResolver{
-		"aws_secretsmanager_secret":         fakeSchema{perms: map[string][]string{"create": {"secretsmanager:DescribeSecret"}}},
+		"aws_secretsmanager_secret":         actionsSchema(map[string][]string{"create": {"secretsmanager:DescribeSecret"}}),
 		"aws_secretsmanager_secret_version": secretVersionSchema(),
 	}
 
@@ -369,11 +367,9 @@ func TestValidate_ResourceScopedCoverage_SecretItself(t *testing.T) {
 	// aws_secretsmanager_secret resources are targets too: a grant on
 	// example-a must not cover a secret named example-b, and DescribeSecret
 	// (its create permission) must be reported missing for secret b only.
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"create": {"secretsmanager:DescribeSecret"},
-		},
-	}
+	schema := actionsSchema(map[string][]string{
+		"create": {"secretsmanager:DescribeSecret"},
+	})
 	resolver := fakeResolver{schema}
 
 	changes := []*plan.ResourceChange{

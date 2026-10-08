@@ -267,13 +267,13 @@ func TestSourceProvider_APIGatewayV2DomainName(t *testing.T) {
 	}
 	for op, actions := range want {
 		for _, a := range actions {
-			if !contains(schema.Permissions[op], a) {
-				t.Errorf("%s: expected %s, got %v", op, a, schema.Permissions[op])
+			if !contains(schema.Actions(op), a) {
+				t.Errorf("%s: expected %s, got %v", op, a, schema.Actions(op))
 			}
 		}
 	}
-	for op, actions := range schema.Permissions {
-		for _, a := range actions {
+	for op := range schema.Ops {
+		for _, a := range schema.Actions(op) {
 			verb := strings.TrimPrefix(a, "apigateway:")
 			if verb == a || verb != strings.ToUpper(verb) {
 				t.Errorf("%s: %s is not an apigateway HTTP verb action", op, a)
@@ -282,8 +282,8 @@ func TestSourceProvider_APIGatewayV2DomainName(t *testing.T) {
 	}
 	// CreateDomainName needs POST whether or not tags are set, so the tagging
 	// call's tags gate must not attach to it.
-	if cond := schema.Conditional["create"]["apigateway:POST"]; cond != "" {
-		t.Errorf("create: apigateway:POST gated on %q, want unconditional", cond)
+	if gates := schema.Gates("create", "apigateway:POST"); !reflect.DeepEqual(gates, []iam.Gate{{}}) {
+		t.Errorf("create: apigateway:POST gates = %+v, want one ungated path", gates)
 	}
 }
 
@@ -293,33 +293,23 @@ func TestSourceProvider_APIGatewayV2DomainName(t *testing.T) {
 // action is needed when either attribute is set. An action one call makes
 // with no gate stays ungated.
 func TestAddTagActions_SharedVerb(t *testing.T) {
-	schema := &cloud.Schema{
-		Permissions: map[string][]string{"create": {"apigateway:POST", "apigateway:PUT", "apigateway:PATCH"}},
-		Conditional: map[string]map[string]string{"create": {"apigateway:PUT": "body"}},
-		ChangeGated: map[string]map[string]string{"create": {"apigateway:PATCH": "body"}},
-	}
+	schema := &cloud.Schema{Ops: map[string][]iam.Requirement{"create": {
+		{Action: "apigateway:POST"},
+		{Action: "apigateway:PUT", Gate: iam.Gate{Attribute: "body"}},
+		{Action: "apigateway:PATCH", Gate: iam.Gate{Changed: "body"}},
+	}}}
 	addTagActions(schema, "create", []string{"apigateway:POST", "apigateway:PUT", "apigateway:PATCH", "apigateway:DELETE"})
 
-	if got := schema.Permissions["create"]; len(got) != 4 {
-		t.Errorf("create = %v, want POST, PUT, PATCH and DELETE once each", got)
+	tags := iam.Gate{Attribute: "tags"}
+	want := []iam.Requirement{
+		{Action: "apigateway:POST"},
+		{Action: "apigateway:PUT", Gate: iam.Gate{Attribute: "body"}},
+		{Action: "apigateway:PUT", Gate: tags},
+		{Action: "apigateway:PATCH", Gate: iam.Gate{Changed: "body"}},
+		{Action: "apigateway:PATCH", Gate: tags},
+		{Action: "apigateway:DELETE", Gate: tags},
 	}
-	if gate := schema.Conditional["create"]["apigateway:POST"]; gate != "" || schema.Gates["create"]["apigateway:POST"] != nil {
-		t.Errorf("apigateway:POST gated, want ungated")
-	}
-	wantGates := map[string][]iam.Gate{
-		"apigateway:PUT":   {{Attribute: "body"}, {Attribute: "tags"}},
-		"apigateway:PATCH": {{Changed: "body"}, {Attribute: "tags"}},
-	}
-	for action, want := range wantGates {
-		got := schema.Gates["create"][action]
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%s gates = %+v, want %+v", action, got, want)
-		}
-		if schema.Conditional["create"][action] != "" || schema.ChangeGated["create"][action] != "" {
-			t.Errorf("%s keeps a single-valued gate beside its gate list", action)
-		}
-	}
-	if gate := schema.Conditional["create"]["apigateway:DELETE"]; gate != "tags" {
-		t.Errorf("apigateway:DELETE gated on %q, want tags", gate)
+	if got := schema.Ops["create"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("create = %+v, want %+v", got, want)
 	}
 }

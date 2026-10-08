@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // cfnSchema is the subset of a CloudFormation resource schema we need.
@@ -220,16 +222,18 @@ func (p *AWSProvider) fetch(key string) (*cfnSchema, error) {
 	return &s, nil
 }
 
-// toSchema converts a CloudFormation schema to our agnostic Schema type.
+// toSchema converts a CloudFormation schema to our agnostic Schema type. The
+// registry lists handler permissions without gates, so every requirement is
+// ungated. Every handler is a known operation, even one with no permissions.
 func toSchema(cfn *cfnSchema) *Schema {
 	return &Schema{
 		TypeName: cfn.TypeName,
-		Permissions: map[string][]string{
-			"create": cfn.Handlers.Create.Permissions,
-			"read":   cfn.Handlers.Read.Permissions,
-			"update": cfn.Handlers.Update.Permissions,
-			"delete": cfn.Handlers.Delete.Permissions,
-			"list":   cfn.Handlers.List.Permissions,
+		Ops: map[string][]iam.Requirement{
+			"create": iam.Unconditional(cfn.Handlers.Create.Permissions...),
+			"read":   iam.Unconditional(cfn.Handlers.Read.Permissions...),
+			"update": iam.Unconditional(cfn.Handlers.Update.Permissions...),
+			"delete": iam.Unconditional(cfn.Handlers.Delete.Permissions...),
+			"list":   iam.Unconditional(cfn.Handlers.List.Permissions...),
 		},
 	}
 }

@@ -12,13 +12,6 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
-// resolverAdapter lets iam.Validate use a cloud.Provider, as main does.
-type resolverAdapter struct{ p cloud.Provider }
-
-func (a resolverAdapter) Resolve(tfType string) (iam.SchemaLike, error) {
-	return a.p.Resolve(tfType)
-}
-
 // stubProvider stands in for the CloudFormation registry.
 type stubProvider map[string]*cloud.Schema
 
@@ -32,7 +25,7 @@ func (s stubProvider) Resolve(tfType string) (*cloud.Schema, error) {
 
 // missingFor validates a bare create of tfType against a policy that allows
 // only s3:ListBucket (what HeadBucket needs) and returns the missing actions.
-func missingFor(t *testing.T, resolver cloud.Provider, tfType string) map[string]bool {
+func missingFor(t *testing.T, resolver iam.Resolver, tfType string) map[string]bool {
 	t.Helper()
 	policy, err := iam.ParsePolicy([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
 	if err != nil {
@@ -45,7 +38,7 @@ func missingFor(t *testing.T, resolver cloud.Provider, tfType string) map[string
 		Attributes:        map[string]bool{"bucket": true},
 		ChangedAttributes: map[string]bool{"bucket": true},
 	}}
-	missing, err := iam.Validate(changes, policy, resolverAdapter{resolver}, iam.DefaultFilter())
+	missing, err := iam.Validate(changes, policy, resolver, iam.DefaultFilter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,8 +130,8 @@ func TestBareS3BucketCreateNeedsCreateBucket_Fixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(schema.Permissions["read"], "s3:GetBucketPolicy") {
-		t.Errorf("read = %v, want s3:GetBucketPolicy from the other file", schema.Permissions["read"])
+	if !contains(schema.Actions("read"), "s3:GetBucketPolicy") {
+		t.Errorf("read = %v, want s3:GetBucketPolicy from the other file", schema.Actions("read"))
 	}
 }
 
@@ -193,25 +186,26 @@ func resourceWidgetDelete(ctx context.Context, d *schema.ResourceData, meta inte
 		t.Fatal(err)
 	}
 	if !schema.Incomplete["create"] {
-		t.Errorf("create should be incomplete: %v", schema.Permissions)
+		t.Errorf("create should be incomplete: %v", schema.Ops)
 	}
 	if schema.Incomplete["read"] || schema.Incomplete["delete"] {
 		t.Errorf("read and the no-op delete should be complete, got Incomplete=%v", schema.Incomplete)
 	}
 
-	cfn := stubProvider{"aws_thing_widget": {TypeName: "AWS::Thing::Widget", Permissions: map[string][]string{
-		"create": {"thing:CreateWidget"},
-		"delete": {"thing:DeleteWidget"},
+	cfn := stubProvider{"aws_thing_widget": {TypeName: "AWS::Thing::Widget", Ops: map[string][]iam.Requirement{
+		"create": iam.Unconditional("thing:CreateWidget"),
+		"delete": iam.Unconditional("thing:DeleteWidget"),
 	}}}
-	merged, err := cloud.NewChainProvider(source, cfn).Resolve("aws_thing_widget")
+	resolved, err := cloud.NewChainProvider(source, cfn).Resolve("aws_thing_widget")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(merged.Permissions["create"], "thing:CreateWidget") || !contains(merged.Permissions["create"], "thing:GetWidget") {
-		t.Errorf("create = %v, want the parsed read plus thing:CreateWidget", merged.Permissions["create"])
+	merged := resolved.(*cloud.Schema)
+	if !contains(merged.Actions("create"), "thing:CreateWidget") || !contains(merged.Actions("create"), "thing:GetWidget") {
+		t.Errorf("create = %v, want the parsed read plus thing:CreateWidget", merged.Actions("create"))
 	}
-	if contains(merged.Permissions["delete"], "thing:DeleteWidget") {
-		t.Errorf("the no-op delete took the fallback's actions: %v", merged.Permissions["delete"])
+	if contains(merged.Actions("delete"), "thing:DeleteWidget") {
+		t.Errorf("the no-op delete took the fallback's actions: %v", merged.Actions("delete"))
 	}
 }
 
@@ -266,8 +260,8 @@ func TestBareS3BucketCreateNeedsCreateBucket_Checkout(t *testing.T) {
 		}
 		for op, wants := range ops {
 			for _, want := range wants {
-				if !contains(schema.Permissions[op], want) {
-					t.Errorf("%s %s is missing %s; got %v", tfType, op, want, schema.Permissions[op])
+				if !contains(schema.Actions(op), want) {
+					t.Errorf("%s %s is missing %s; got %v", tfType, op, want, schema.Actions(op))
 				}
 			}
 		}

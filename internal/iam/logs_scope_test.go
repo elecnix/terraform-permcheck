@@ -10,12 +10,12 @@ import (
 // logsResolver serves the permissions the provider source yields for the
 // CloudWatch Logs resources in testdata/logs_plan.json.
 var logsResolver = typeKeyedResolver{
-	"aws_cloudwatch_log_group": fakeSchema{perms: map[string][]string{
+	"aws_cloudwatch_log_group": actionsSchema(map[string][]string{
 		"create": {"logs:CreateLogGroup", "logs:PutRetentionPolicy"},
-	}},
-	"aws_cloudwatch_log_stream": fakeSchema{perms: map[string][]string{
+	}),
+	"aws_cloudwatch_log_stream": actionsSchema(map[string][]string{
 		"create": {"logs:CreateLogStream"},
-	}},
+	}),
 }
 
 // logsPlan parses the plan from issue #54: a log group under

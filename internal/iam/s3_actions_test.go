@@ -225,7 +225,7 @@ func TestS3SubresourcePermissions_EveryRowMatchesASchemaName(t *testing.T) {
 // TestValidate_BareS3Bucket reproduces issue #75: a bucket with only a name,
 // resolved through the CloudFormation schema, against an empty policy.
 func TestValidate_BareS3Bucket(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: cfnS3BucketHandlers(t)}}
+	resolver := fakeResolver{actionsSchema(cfnS3BucketHandlers(t))}
 	tests := []struct {
 		change string
 		want   []string
@@ -257,9 +257,9 @@ func TestValidate_BareS3Bucket(t *testing.T) {
 // A dedicated sub-resource still reports its own call as [required] under the
 // default filter, even though the same call is optional on aws_s3_bucket.
 func TestValidate_S3SubresourceKeepsItsOwnAction(t *testing.T) {
-	resolver := fakeResolver{fakeSchema{perms: map[string][]string{
+	resolver := fakeResolver{actionsSchema(map[string][]string{
 		"update": {"s3:PutBucketVersioning"},
-	}}}
+	})}
 	changes := []*plan.ResourceChange{{Type: "aws_s3_bucket_versioning", Name: "logs", Change: "update"}}
 	missing, err := Validate(changes, denyAll{}, resolver, DefaultFilter())
 	if err != nil {
@@ -270,21 +270,11 @@ func TestValidate_S3SubresourceKeepsItsOwnAction(t *testing.T) {
 	}
 }
 
-// typeResolver resolves each terraform type to its own schema.
-type typeResolver map[string]SchemaLike
-
-func (r typeResolver) Resolve(tfType string) (SchemaLike, error) {
-	if s, ok := r[tfType]; ok {
-		return s, nil
-	}
-	return fakeSchema{}, nil
-}
-
 // With every sub-resource in the plan, the parent bucket's update keeps only
 // the actions that no sub-resource owns. Optional actions are kept here, so
 // absorption alone has to remove the CloudFormation spellings.
 func TestValidate_S3SubresourcesAbsorbParentSchemaNames(t *testing.T) {
-	resolver := typeResolver{"aws_s3_bucket": fakeSchema{perms: cfnS3BucketHandlers(t)}}
+	resolver := typeKeyedResolver{"aws_s3_bucket": actionsSchema(cfnS3BucketHandlers(t))}
 	changes := []*plan.ResourceChange{{Type: "aws_s3_bucket", Name: "logs", Change: "update"}}
 	for subType := range s3SubresourcePermissions {
 		changes = append(changes, &plan.ResourceChange{Type: subType, Name: "logs", Change: "update"})

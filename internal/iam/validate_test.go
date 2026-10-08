@@ -142,32 +142,29 @@ func TestS3SubresourceAbsorbed(t *testing.T) {
 	}
 }
 
-// fakeSchema is a test SchemaLike with conditional metadata.
-type fakeSchema struct {
-	perms       map[string][]string
-	cond        map[string]map[string]string
-	changeGated map[string]map[string]string
-	// valueCond marks actions whose gating attribute is compared by value, so
-	// the gate needs the attribute configured rather than merely present.
-	valueCond map[string]map[string]bool
-	// bestEffort marks actions whose failure the provider ignores.
-	bestEffort map[string]map[string]bool
-	// gates lists the gated paths of actions reached by several of them.
-	gates map[string]map[string][]Gate
+// fakeSchema is the test Schema: operation → requirements, one per path
+// that reaches an action, each carrying its own gate.
+type fakeSchema map[string][]Requirement
+
+func (f fakeSchema) Requirements(op string) ([]Requirement, bool) {
+	reqs, ok := f[op]
+	return reqs, ok
 }
 
-func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
-func (f fakeSchema) GetConditional() map[string]map[string]string { return f.cond }
-func (f fakeSchema) GetChangeGated() map[string]map[string]string { return f.changeGated }
-func (f fakeSchema) GetValueConditional() map[string]map[string]bool {
-	return f.valueCond
+// actionsSchema builds a fakeSchema of ungated requirements from
+// operation → actions.
+func actionsSchema(perms map[string][]string) fakeSchema {
+	s := make(fakeSchema, len(perms))
+	for op, actions := range perms {
+		s[op] = Unconditional(actions...)
+	}
+	return s
 }
-func (f fakeSchema) GetBestEffort() map[string]map[string]bool { return f.bestEffort }
-func (f fakeSchema) GetGates() map[string]map[string][]Gate    { return f.gates }
 
-type fakeResolver struct{ s SchemaLike }
+// fakeResolver serves one schema for every terraform resource type.
+type fakeResolver struct{ s Schema }
 
-func (r fakeResolver) Resolve(string) (SchemaLike, error) { return r.s, nil }
+func (r fakeResolver) Resolve(string) (Schema, error) { return r.s, nil }
 
 // denyAll covers no actions.
 type denyAll struct{}
@@ -178,10 +175,10 @@ func (denyAll) Covers(string) bool { return false }
 // provider ignores is never reported as required. The default filter drops
 // it, and with no filter it is tagged [optional].
 func TestValidate_BestEffortIsOptional(t *testing.T) {
-	schema := fakeSchema{
-		perms:      map[string][]string{"read": {"dynamodb:DescribeTable", "kms:DescribeKey"}},
-		bestEffort: map[string]map[string]bool{"read": {"kms:DescribeKey": true}},
-	}
+	schema := fakeSchema{"read": {
+		{Action: "dynamodb:DescribeTable"},
+		{Action: "kms:DescribeKey", Gate: Gate{BestEffort: true}},
+	}}
 	changes := []*plan.ResourceChange{{Type: "aws_dynamodb_table", Name: "t", Change: "read"}}
 
 	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, DefaultFilter())
@@ -209,14 +206,10 @@ func TestValidate_BestEffortIsOptional(t *testing.T) {
 }
 
 func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"create": {"kms:CreateKey", "kms:TagResource"},
-		},
-		cond: map[string]map[string]string{
-			"create": {"kms:TagResource": "tags"},
-		},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "kms:CreateKey"},
+		{Action: "kms:TagResource", Gate: Gate{Attribute: "tags"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// Case 1: tags present → kms:TagResource is required (reported missing).
@@ -265,14 +258,10 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 func TestValidate_ConditionalGatedOnAttribute_Delete(t *testing.T) {
 	// A conditional permission on a delete change must be evaluated against
 	// prior state (change.before), not treated as unknown.
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"delete": {"secretsmanager:DeleteSecret", "secretsmanager:UpdateSecretVersionStage"},
-		},
-		cond: map[string]map[string]string{
-			"delete": {"secretsmanager:UpdateSecretVersionStage": "version_stages"},
-		},
-	}
+	schema := fakeSchema{"delete": {
+		{Action: "secretsmanager:DeleteSecret"},
+		{Action: "secretsmanager:UpdateSecretVersionStage", Gate: Gate{Attribute: "version_stages"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// Case 1: before-state has version_stages set → permission still required.
@@ -515,14 +504,10 @@ func TestFormatMissing_ConditionalAttribute(t *testing.T) {
 }
 
 func TestValidate_ExcludeConditional(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"create": {"kms:CreateKey", "kms:CreateGrant"},
-		},
-		cond: map[string]map[string]string{
-			"create": {"kms:CreateGrant": "kms_key_arn"},
-		},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "kms:CreateKey"},
+		{Action: "kms:CreateGrant", Gate: Gate{Attribute: "kms_key_arn"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	changes := []*plan.ResourceChange{
@@ -707,17 +692,11 @@ func TestFormatMissing_StripIndexForLookup(t *testing.T) {
 // d.HasChange: the plan shows whether the attribute changed, so the permission
 // is reported only when it did.
 func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"update": {"iam:UpdateRole", "iam:PutRolePermissionsBoundary", "iam:DeleteRolePermissionsBoundary"},
-		},
-		changeGated: map[string]map[string]string{
-			"update": {
-				"iam:PutRolePermissionsBoundary":    "permissions_boundary",
-				"iam:DeleteRolePermissionsBoundary": "permissions_boundary",
-			},
-		},
-	}
+	schema := fakeSchema{"update": {
+		{Action: "iam:UpdateRole"},
+		{Action: "iam:PutRolePermissionsBoundary", Gate: Gate{Changed: "permissions_boundary"}},
+		{Action: "iam:DeleteRolePermissionsBoundary", Gate: Gate{Changed: "permissions_boundary"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// Case 1: the attribute changed → both gated actions are required.
@@ -791,12 +770,9 @@ func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
 // TestValidate_ChangeGatedKeepsPresenceGates checks the two gate kinds do not
 // interfere: a change-gated action is not dropped by attribute presence.
 func TestValidate_ChangeGatedKeepsPresenceGates(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"create": {"kms:TagResource"}},
-		changeGated: map[string]map[string]string{
-			"create": {"kms:TagResource": "permissions_boundary"},
-		},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "kms:TagResource", Gate: Gate{Changed: "permissions_boundary"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// The attribute is unset and unchanged, but this action is gated on the
@@ -823,13 +799,9 @@ func TestValidate_ChangeGatedKeepsPresenceGates(t *testing.T) {
 // presence gate and a change gate. Both must hold, and the report must name
 // both attributes, since either one can suppress the action.
 func TestValidate_BothGatesOnOneAction(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"update": {"iam:UpdateRolePolicy"}},
-		cond:  map[string]map[string]string{"update": {"iam:UpdateRolePolicy": "tags"}},
-		changeGated: map[string]map[string]string{
-			"update": {"iam:UpdateRolePolicy": "policy"},
-		},
-	}
+	schema := fakeSchema{"update": {
+		{Action: "iam:UpdateRolePolicy", Gate: Gate{Attribute: "tags", Changed: "policy"}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// Both gates hold → reported, naming both attributes.
@@ -894,17 +866,10 @@ func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
 	// A call guarded by a comparison on the attribute's value (a set that must
 	// be non-empty) fires only when the author configured it. The attribute's
 	// default keeps the value non-zero, so presence in state proves nothing.
-	schema := fakeSchema{
-		perms: map[string][]string{
-			"delete": {"secretsmanager:DeleteSecret", "secretsmanager:UpdateSecretVersionStage"},
-		},
-		cond: map[string]map[string]string{
-			"delete": {"secretsmanager:UpdateSecretVersionStage": "version_stages"},
-		},
-		valueCond: map[string]map[string]bool{
-			"delete": {"secretsmanager:UpdateSecretVersionStage": true},
-		},
-	}
+	schema := fakeSchema{"delete": {
+		{Action: "secretsmanager:DeleteSecret"},
+		{Action: "secretsmanager:UpdateSecretVersionStage", Gate: Gate{Attribute: "version_stages", ValueGuarded: true}},
+	}}
 	resolver := fakeResolver{schema}
 
 	// Case 1: before-state holds the default label, but the author wrote no
@@ -959,5 +924,33 @@ func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
 	}
 	if !hasAction(missing, "secretsmanager:UpdateSecretVersionStage") {
 		t.Error("expected UpdateSecretVersionStage kept when the configuration is unknown")
+	}
+}
+
+// An operation the schema knows, even with no requirements, is answered on
+// its own. Only an operation the schema does not know falls back to create.
+func TestValidate_KnownEmptyOperationDoesNotFallBack(t *testing.T) {
+	schema := fakeSchema{
+		"create": Unconditional("kms:CreateKey"),
+		"update": nil,
+	}
+	resolver := fakeResolver{schema}
+
+	update := []*plan.ResourceChange{{Type: "aws_kms_key", Name: "k", Change: "update"}}
+	missing, err := Validate(update, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Errorf("known empty update reported %+v, want nothing", missing)
+	}
+
+	del := []*plan.ResourceChange{{Type: "aws_kms_key", Name: "k", Change: "delete"}}
+	missing, err = Validate(del, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "kms:CreateKey") {
+		t.Errorf("unknown delete reported %+v, want the create fallback", missing)
 	}
 }

@@ -11,13 +11,10 @@ import (
 // and again for replicas when a replica is configured. The action is needed
 // when either gate holds.
 func TestValidate_AnyGateHolds(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"create": {"dynamodb:TagResource"}},
-		gates: map[string]map[string][]Gate{"create": {"dynamodb:TagResource": {
-			{Attribute: "tags"},
-			{Attribute: "replica", ValueGuarded: true},
-		}}},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "dynamodb:TagResource", Gate: Gate{Attribute: "tags"}},
+		{Action: "dynamodb:TagResource", Gate: Gate{Attribute: "replica", ValueGuarded: true}},
+	}}
 	cases := []struct {
 		name       string
 		attrs      map[string]bool
@@ -55,10 +52,10 @@ func TestValidate_AnyGateHolds(t *testing.T) {
 // TestValidate_AnyGateUngatedPath covers an action that one path reaches with
 // no gate: it is required whatever the other gates say.
 func TestValidate_AnyGateUngatedPath(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"create": {"apigateway:POST"}},
-		gates: map[string]map[string][]Gate{"create": {"apigateway:POST": {{Attribute: "tags"}, {}}}},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "apigateway:POST", Gate: Gate{Attribute: "tags"}},
+		{Action: "apigateway:POST"},
+	}}
 	changes := []*plan.ResourceChange{{Type: "aws_apigatewayv2_domain_name", Name: "api", Change: "create", Attributes: map[string]bool{}}}
 	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{ExcludeConditional: true})
 	if err != nil {
@@ -74,13 +71,10 @@ func TestValidate_AnyGateUngatedPath(t *testing.T) {
 // attribute is set. With the attribute set, the action is required and the
 // tag names that attribute.
 func TestValidate_AnyGateRequiredPathDecidesTag(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"create": {"widget:PutWidgetNote"}},
-		gates: map[string]map[string][]Gate{"create": {"widget:PutWidgetNote": {
-			{BestEffort: true},
-			{Attribute: "note"},
-		}}},
-	}
+	schema := fakeSchema{"create": {
+		{Action: "widget:PutWidgetNote", Gate: Gate{BestEffort: true}},
+		{Action: "widget:PutWidgetNote", Gate: Gate{Attribute: "note"}},
+	}}
 	for _, c := range []struct {
 		attrs     map[string]bool
 		wantClass string
@@ -104,13 +98,10 @@ func TestValidate_AnyGateRequiredPathDecidesTag(t *testing.T) {
 // best-effort path. The action is optional when only best-effort paths hold,
 // and required when a path whose failure counts holds.
 func TestValidate_AnyGateChangeAndBestEffort(t *testing.T) {
-	schema := fakeSchema{
-		perms: map[string][]string{"update": {"iam:UpdateRolePolicy"}},
-		gates: map[string]map[string][]Gate{"update": {"iam:UpdateRolePolicy": {
-			{Changed: "policy"},
-			{Attribute: "tags", BestEffort: true},
-		}}},
-	}
+	schema := fakeSchema{"update": {
+		{Action: "iam:UpdateRolePolicy", Gate: Gate{Changed: "policy"}},
+		{Action: "iam:UpdateRolePolicy", Gate: Gate{Attribute: "tags", BestEffort: true}},
+	}}
 	cases := []struct {
 		name    string
 		changed map[string]bool

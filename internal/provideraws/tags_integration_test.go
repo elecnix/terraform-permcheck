@@ -3,7 +3,10 @@ package provideraws
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // TestSourceProvider_TagSideEffects verifies that a resource opting into
@@ -51,27 +54,27 @@ func resourceKeyDelete(ctx context.Context, d *schema.ResourceData, meta any) di
 		t.Fatalf("Resolve failed: %v", err)
 	}
 
-	create := schema.Permissions["create"]
+	create := schema.Actions("create")
 	if !contains(create, "kms:CreateKey") {
 		t.Errorf("expected kms:CreateKey in create perms, got %v", create)
 	}
 	if !contains(create, "kms:TagResource") {
 		t.Errorf("expected kms:TagResource added to create perms, got %v", create)
 	}
-	if schema.Conditional["create"]["kms:TagResource"] != "tags" {
-		t.Errorf("expected kms:TagResource gated on tags, got %q", schema.Conditional["create"]["kms:TagResource"])
+	if gates := schema.Gates("create", "kms:TagResource"); !reflect.DeepEqual(gates, []iam.Gate{{Attribute: "tags"}}) {
+		t.Errorf("expected kms:TagResource gated on tags, got %+v", gates)
 	}
 
 	// UntagResource is an update-only side effect (no removals on create).
 	if contains(create, "kms:UntagResource") {
 		t.Errorf("did not expect kms:UntagResource in create perms, got %v", create)
 	}
-	update := schema.Permissions["update"]
+	update := schema.Actions("update")
 	if !contains(update, "kms:UntagResource") {
 		t.Errorf("expected kms:UntagResource in update perms, got %v", update)
 	}
-	if schema.Conditional["update"]["kms:UntagResource"] != "tags" {
-		t.Errorf("expected kms:UntagResource gated on tags in update, got %q", schema.Conditional["update"]["kms:UntagResource"])
+	if gates := schema.Gates("update", "kms:UntagResource"); !reflect.DeepEqual(gates, []iam.Gate{{Attribute: "tags"}}) {
+		t.Errorf("expected kms:UntagResource gated on tags in update, got %+v", gates)
 	}
 }
 
@@ -128,25 +131,25 @@ func resourceKeyDelete(ctx context.Context, d *schema.ResourceData, meta any) di
 	}
 
 	// Read should have ListResourceTags (unconditional — listTags is called on every Read).
-	read := schema.Permissions["read"]
+	read := schema.Actions("read")
 	if !contains(read, "kms:ListResourceTags") {
 		t.Errorf("expected kms:ListResourceTags in read perms, got %v", read)
 	}
 	// ListResourceTags on read is unconditional — never gated on tags.
-	if cond, ok := schema.Conditional["read"]; ok {
-		if attr, exists := cond["kms:ListResourceTags"]; exists && attr != "" {
-			t.Errorf("ListResourceTags on read must be unconditional (no gating attribute), got %q", attr)
+	for _, g := range schema.Gates("read", "kms:ListResourceTags") {
+		if g.Attribute != "" {
+			t.Errorf("ListResourceTags on read must be unconditional (no gating attribute), got %q", g.Attribute)
 		}
 	}
 
 	// Create should also have ListResourceTags (Create returns Read).
-	create := schema.Permissions["create"]
+	create := schema.Actions("create")
 	if !contains(create, "kms:ListResourceTags") {
 		t.Errorf("expected kms:ListResourceTags in create perms (Create returns Read), got %v", create)
 	}
-	if cond, ok := schema.Conditional["create"]; ok {
-		if attr, exists := cond["kms:ListResourceTags"]; exists && attr != "" {
-			t.Errorf("ListResourceTags on create must be unconditional, got %q", attr)
+	for _, g := range schema.Gates("create", "kms:ListResourceTags") {
+		if g.Attribute != "" {
+			t.Errorf("ListResourceTags on create must be unconditional, got %q", g.Attribute)
 		}
 	}
 }
@@ -193,11 +196,11 @@ func resourceKeyPolicyRead(ctx context.Context, d *schema.ResourceData, meta any
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
-	if contains(schema.Permissions["read"], "kms:ListResourceTags") {
-		t.Errorf("did not expect list-tags action on non-taggable resource read, got %v", schema.Permissions["read"])
+	if contains(schema.Actions("read"), "kms:ListResourceTags") {
+		t.Errorf("did not expect list-tags action on non-taggable resource read, got %v", schema.Actions("read"))
 	}
-	if contains(schema.Permissions["create"], "kms:TagResource") {
-		t.Errorf("did not expect tag actions on non-taggable resource, got %v", schema.Permissions["create"])
+	if contains(schema.Actions("create"), "kms:TagResource") {
+		t.Errorf("did not expect tag actions on non-taggable resource, got %v", schema.Actions("create"))
 	}
 }
 
@@ -236,7 +239,7 @@ func resourceKeyPolicyCreate(ctx context.Context, d *schema.ResourceData, meta a
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
-	if contains(schema.Permissions["create"], "kms:TagResource") {
-		t.Errorf("did not expect tag actions on non-taggable resource, got %v", schema.Permissions["create"])
+	if contains(schema.Actions("create"), "kms:TagResource") {
+		t.Errorf("did not expect tag actions on non-taggable resource, got %v", schema.Actions("create"))
 	}
 }

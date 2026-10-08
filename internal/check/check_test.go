@@ -17,7 +17,7 @@ import (
 // schemas, so the tests need no provider clone and no network.
 type fakeResolver map[string]*cloud.Schema
 
-func (r fakeResolver) Resolve(tfType string) (iam.SchemaLike, error) {
+func (r fakeResolver) Resolve(tfType string) (iam.Schema, error) {
 	s, ok := r[tfType]
 	if !ok {
 		return nil, errors.New("unknown type " + tfType)
@@ -55,14 +55,15 @@ func actions(missing []iam.MissingAction) []string {
 
 var kmsKey = &cloud.Schema{
 	TypeName: "aws_kms_key",
-	Permissions: map[string][]string{
-		"create": {"kms:CreateKey", "kms:TagResource", "kms:Decrypt"},
-		"read":   {"kms:DescribeKey"},
-		"update": {"kms:CreateKey", "kms:EnableKeyRotation"},
-		"delete": {"kms:ScheduleKeyDeletion"},
-	},
-	Conditional: map[string]map[string]string{
-		"create": {"kms:TagResource": "tags"},
+	Ops: map[string][]iam.Requirement{
+		"create": {
+			{Action: "kms:CreateKey"},
+			{Action: "kms:TagResource", Gate: iam.Gate{Attribute: "tags"}},
+			{Action: "kms:Decrypt"},
+		},
+		"read":   iam.Unconditional("kms:DescribeKey"),
+		"update": iam.Unconditional("kms:CreateKey", "kms:EnableKeyRotation"),
+		"delete": iam.Unconditional("kms:ScheduleKeyDeletion"),
 	},
 }
 
@@ -226,7 +227,7 @@ func TestRun_Exclusions(t *testing.T) {
 // so the test exercises the producer's real output shape (permissions,
 // presence gates, transparent tagging) without the provider clone.
 func TestRun_ProviderSourceOutput(t *testing.T) {
-	resolver := FromProvider(provideraws.NewSourceProviderWithPath("testdata/provider"))
+	resolver := cloud.NewChainProvider(provideraws.NewSourceProviderWithPath("testdata/provider"))
 	allowed := policy("backup:CreateBackupVault", "backup:DescribeBackupVault", "backup:DeleteBackupVault")
 
 	for _, tc := range []struct {
