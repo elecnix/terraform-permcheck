@@ -146,10 +146,20 @@ func TestParseConfig_Needs(t *testing.T) {
 		{`{"needs":[{"sid":"A","actions":["s3:Get*"]}]}`, "single service:Action"},
 		{`{"needs":[{"sid":"A","actions":["s3:GetObject"],"resources":["my-bucket"]}]}`, "must be \"*\" or an ARN"},
 		{`{"needs":[{"sid":"A","actions":["s3:GetObject"]},{"sid":"A","actions":["s3:PutObject"]}]}`, "duplicate sid"},
+		// A need without a principal runs with every principal, so its sid
+		// clashes with the same sid under a named principal, in either order.
+		{`{"needs":[{"sid":"A","actions":["s3:GetObject"]},{"sid":"A","principal":"ci","actions":["s3:PutObject"]}]}`, "duplicate sid"},
+		{`{"needs":[{"sid":"A","principal":"ci","actions":["s3:GetObject"]},{"sid":"A","actions":["s3:PutObject"]}]}`, "duplicate sid"},
 	} {
 		if _, err := parseConfig([]byte(tt.raw)); err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("parseConfig(%s): want error containing %q, got %v", tt.raw, tt.want, err)
 		}
+	}
+
+	// Needs under two different principals never run together, so they may
+	// share a sid.
+	if _, err := parseConfig([]byte(`{"needs":[{"sid":"A","principal":"ci","actions":["s3:GetObject"]},{"sid":"A","principal":"app","actions":["s3:PutObject"]}]}`)); err != nil {
+		t.Errorf("parseConfig: one sid under two principals: %v", err)
 	}
 }
 

@@ -318,7 +318,10 @@ config file, and PermCheck checks them against the same policy as the plan:
 }
 ```
 
-- **`sid`** (required) names the need in the report.
+- **`sid`** (required) names the need in the report. Needs that run together
+  must have different sids. A need without a principal runs on every run, so
+  no other need may reuse its sid. Needs under two different principals may
+  share a sid.
 - **`actions`** (required) lists the IAM actions, each a single
   `service:Action` name without wildcards.
 - **`resources`** (optional) lists the ARNs or ARN patterns the actions act

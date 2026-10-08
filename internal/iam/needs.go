@@ -28,8 +28,15 @@ type Need struct {
 }
 
 // validateNeeds checks the needs list of a config file.
+//
+// Two needs that run together must have different sids, or the report shows
+// two findings with the same source. A need without a principal runs with
+// every principal, so its sid must be unique in the whole list. Needs under
+// two different principals never run together, so they may share a sid.
 func validateNeeds(needs []Need) error {
-	seen := map[string]bool{}
+	seen := map[string]bool{}     // principal and sid
+	unnamed := map[string]bool{}  // sids of needs without a principal
+	anyNamed := map[string]bool{} // sids of needs with a principal
 	for i, n := range needs {
 		if strings.TrimSpace(n.Sid) == "" {
 			return fmt.Errorf("needs[%d]: sid is required", i)
@@ -38,7 +45,15 @@ func validateNeeds(needs []Need) error {
 		if seen[key] {
 			return fmt.Errorf("needs[%d]: duplicate sid %q", i, n.Sid)
 		}
+		if (n.Principal == "" && anyNamed[n.Sid]) || (n.Principal != "" && unnamed[n.Sid]) {
+			return fmt.Errorf("needs[%d]: duplicate sid %q: a need without a principal runs with every principal, so its sid must be unique", i, n.Sid)
+		}
 		seen[key] = true
+		if n.Principal == "" {
+			unnamed[n.Sid] = true
+		} else {
+			anyNamed[n.Sid] = true
+		}
 		if len(n.Actions) == 0 {
 			return fmt.Errorf("needs[%d] (%s): actions is required", i, n.Sid)
 		}
