@@ -82,15 +82,46 @@ jobs:
           plan-file: testdata/plan.json
           policy-file: testdata/policy_partial.json
 
-      - name: Check the exit codes
+      # The failed action has no outputs, so read the environment variables
+      # its check step set.
+      - name: Check the failing run
+        env:
+          OUTCOME: ${{ steps.partial.outcome }}
+        run: |
+          test "$OUTCOME" = failure || { echo "partial run outcome $OUTCOME, want failure"; exit 1; }
+          test "$PERMCHECK_EXIT_CODE" = 1 || { echo "partial run exited $PERMCHECK_EXIT_CODE, want 1"; exit 1; }
+          grep -q '::warning' "$PERMCHECK_REPORT_FILE" || { echo "partial report has no annotations"; exit 1; }
+
+      - name: Run the action with JSON output and fail-on-gaps off
+        id: json
+        uses: ./
+        with:
+          plan-file: testdata/plan.json
+          policy-file: testdata/policy_partial.json
+          format: json
+          fail-on-gaps: "false"
+
+      - name: Run the action in static HCL mode
+        id: static
+        uses: ./
+        with:
+          terraform-root: testdata/cfn  # holds no .tf files
+          policy-file: testdata/policy_full.json
+          format: text
+
+      - name: Check the exit codes and outputs
         env:
           COVERED: ${{ steps.covered.outputs.exit-code }}
-          PARTIAL: ${{ steps.partial.outputs.exit-code }}
-          REPORT: ${{ steps.partial.outputs.report-file }}
+          JSON_CODE: ${{ steps.json.outputs.exit-code }}
+          JSON_REPORT: ${{ steps.json.outputs.report-file }}
+          JSON_LOG: ${{ steps.json.outputs.log-file }}
+          STATIC: ${{ steps.static.outputs.exit-code }}
         run: |
           test "$COVERED" = 0 || { echo "covered run exited $COVERED, want 0"; exit 1; }
-          test "$PARTIAL" = 1 || { echo "partial run exited $PARTIAL, want 1"; exit 1; }
-          grep -q '::warning' "$REPORT" || { echo "partial report has no annotations"; exit 1; }
+          test "$JSON_CODE" = 1 || { echo "json run exited $JSON_CODE, want 1"; exit 1; }
+          jq -e '.status == "gaps_found"' "$JSON_REPORT" || { echo "json report does not parse"; exit 1; }
+          test -f "$JSON_LOG" || { echo "json run has no log file"; exit 1; }
+          test "$STATIC" = 0 || { echo "static run exited $STATIC, want 0"; exit 1; }
 
   # Builds every release archive the way the tag push does, so a change that
   # breaks the release fails here instead of on the tag.
