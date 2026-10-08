@@ -311,7 +311,7 @@ func decide(tfType, action string, bestEffort, dedicated bool, inPlan map[string
 //
 // The rule needs no list of types, so it holds for every producer and every
 // new resource. A type with no create operation is not dedicated.
-func isDedicated(s Schema) bool {
+func isDedicated(s *Schema) bool {
 	if s == nil {
 		return false
 	}

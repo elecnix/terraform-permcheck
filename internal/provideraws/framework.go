@@ -334,9 +334,9 @@ func frameworkGuard(call *ast.CallExpr, ctx *walkContext) ([]condGuard, bool) {
 	}
 	switch {
 	case sel.Sel.Name == "IsNull" && len(call.Args) == 0:
-		return []condGuard{{Attribute: attr, Kind: ConditionPresence}}, false
+		return []condGuard{{Attribute: attr}}, false
 	case sel.Sel.Name == "Equal" && len(call.Args) == 1 && ctx.modelAttribute(call.Args[0]) == attr:
-		return []condGuard{{Attribute: attr, Kind: ConditionChange}}, false
+		return []condGuard{{Attribute: attr, Change: true}}, false
 	}
 	return nil, false
 }

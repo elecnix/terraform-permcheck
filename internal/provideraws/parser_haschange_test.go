@@ -3,11 +3,13 @@ package provideraws
 import (
 	"reflect"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // TestParseResourceFileStructured_HasChangeCalls covers update-path SDK calls
 // the provider makes only when an attribute changed. Such a call must be
-// marked conditional with the change kind, so plan mode can suppress it when
+// gated on a change of that attribute, so plan mode can suppress it when
 // the plan shows no change to that attribute.
 func TestParseResourceFileStructured_HasChangeCalls(t *testing.T) {
 	src := `
@@ -70,84 +72,29 @@ func refreshRoleInlinePolicies(ctx context.Context, conn *iam.Client, d *schema.
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	updateActions := actions["update"]
-
-	byAction := make(map[string]ExtractedAction, len(updateActions))
-	for _, ea := range updateActions {
-		byAction[ea.Action] = ea
-	}
-
-	// Unconditional update call stays unconditional.
-	if ea, ok := byAction["iam:UpdateRole"]; !ok {
-		t.Error("expected iam:UpdateRole in update actions")
-	} else if ea.Conditional {
-		t.Errorf("iam:UpdateRole should be unconditional, got condition %q", ea.Condition)
-	}
-
-	// Change-gated calls carry the attribute and the change kind.
-	for _, action := range []string{
-		"iam:PutRolePermissionsBoundary",
-		"iam:DeleteRolePermissionsBoundary",
-		"iam:UpdateRoleDescription",
-	} {
-		ea, ok := byAction[action]
-		if !ok {
-			t.Errorf("expected %s in update actions, got %v", action, updateActions)
-			continue
-		}
-		if !ea.Conditional {
-			t.Errorf("%s should be conditional", action)
-		}
-		if ea.ConditionKind != ConditionChange {
-			t.Errorf("%s condition kind = %q, want %q", action, ea.ConditionKind, ConditionChange)
-		}
-	}
-
-	if ea := byAction["iam:PutRolePermissionsBoundary"]; ea.Condition != "permissions_boundary" {
-		t.Errorf("PutRolePermissionsBoundary condition = %q, want permissions_boundary", ea.Condition)
-	}
-	if ea := byAction["iam:UpdateRoleDescription"]; ea.Condition != "path" {
-		t.Errorf("UpdateRoleDescription condition = %q, want path", ea.Condition)
-	}
-
-	// A negated guard and an else branch are not change gates.
-	for _, action := range []string{"iam:DeleteRolePolicy", "iam:TagRole"} {
-		ea, ok := byAction[action]
-		if !ok {
-			t.Errorf("expected %s in update actions, got %v", action, updateActions)
-			continue
-		}
-		if ea.Conditional || ea.Condition != "" || ea.ConditionKind != "" {
-			t.Errorf("%s should be unconditional, got (%v, %q, %q)",
-				action, ea.Conditional, ea.Condition, ea.ConditionKind)
-		}
-	}
-
-	// A presence guard nested inside a change guard keeps the outer gate, which
-	// is the stricter of the two.
-	if ea := byAction["iam:DeleteRolePermissionsBoundary"]; ea.ConditionKind != ConditionChange || ea.Condition != "permissions_boundary" {
-		t.Errorf("DeleteRolePermissionsBoundary gate = (%q, %q), want (%q, permissions_boundary)",
-			ea.ConditionKind, ea.Condition, ConditionChange)
-	}
-
-	// Helper calls inherit the call-site gate.
-	ea, ok := byAction["iam:PutRolePolicy"]
-	if !ok {
-		t.Errorf("expected iam:PutRolePolicy from the helper call, got %v", updateActions)
-	} else {
-		if !ea.Conditional || ea.ConditionKind != ConditionChange || ea.Condition != "max_session_duration" {
-			t.Errorf("iam:PutRolePolicy gate = (%v, %q, %q), want (true, %q, max_session_duration)",
-				ea.Conditional, ea.ConditionKind, ea.Condition, ConditionChange)
-		}
-	}
+	checkGates(t, withoutErrorHandling(actions), "update", []gateCase{
+		// Unconditional update call stays unconditional.
+		{"iam:UpdateRole", always},
+		// Change-gated calls carry the attribute as a change gate.
+		{"iam:PutRolePermissionsBoundary", []iam.Gate{changed("permissions_boundary")}},
+		{"iam:UpdateRoleDescription", []iam.Gate{changed("path")}},
+		// A presence guard nested inside a change guard keeps the outer
+		// gate, which is the stricter of the two.
+		{"iam:DeleteRolePermissionsBoundary", []iam.Gate{changed("permissions_boundary")}},
+		// A negated guard and an else branch are not change gates.
+		{"iam:DeleteRolePolicy", always},
+		{"iam:TagRole", always},
+		// Helper calls inherit the call-site gate.
+		{"iam:PutRolePolicy", []iam.Gate{changed("max_session_duration")}},
+	})
 }
 
 // TestBranchGuards covers each guard form the parser reads, the gate it puts
 // on the body and the gate it puts on the else branch, including the
 // d.HasChange forms and the methods that are not gates.
 func TestBranchGuards(t *testing.T) {
-	pres := func(a string) []condGuard { return []condGuard{{Attribute: a, Kind: ConditionPresence}} }
-	chg := func(a string) []condGuard { return []condGuard{{Attribute: a, Kind: ConditionChange}} }
+	pres := func(a string) []condGuard { return []condGuard{{Attribute: a}} }
+	chg := func(a string) []condGuard { return []condGuard{{Attribute: a, Change: true}} }
 	tests := []struct {
 		src       string
 		then, els []condGuard
@@ -211,33 +158,16 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]ExtractedAction{}
-	for _, ea := range actions["update"] {
-		got[ea.Action] = ea
-	}
-	want := map[string]string{
-		"iam:UpdateRoleDescription": "path",
-		"iam:PutRolePolicy":         "description",
-		"iam:TagRole":               "",
-	}
-	for action, attr := range want {
-		ea, ok := got[action]
-		if !ok {
-			t.Errorf("expected %s, got %v", action, actions["update"])
-			continue
-		}
-		if ea.Condition != attr {
-			t.Errorf("%s condition = %q, want %q", action, ea.Condition, attr)
-		}
-		if attr == "" && (ea.Conditional || ea.ConditionKind != "") {
-			t.Errorf("%s should be unconditional, got (%v, %q)", action, ea.Conditional, ea.ConditionKind)
-		}
-	}
+	checkGates(t, withoutErrorHandling(actions), "update", []gateCase{
+		{"iam:UpdateRoleDescription", []iam.Gate{changed("path")}},
+		{"iam:PutRolePolicy", []iam.Gate{changed("description")}},
+		{"iam:TagRole", always},
+	})
 }
 
 // TestParseResourceFileStructured_UnconditionalFirstKeepsNoKind covers an action
-// called both unconditionally and under a change guard: the surviving entry is
-// unconditional and carries no gate kind, whichever call comes first.
+// called both unconditionally and under a change guard: the one surviving
+// requirement is ungated, whichever call comes first.
 func TestParseResourceFileStructured_UnconditionalFirstKeepsNoKind(t *testing.T) {
 	for name, body := range map[string]string{
 		"unconditional first": `conn.PutRolePolicy(ctx, &iam.PutRolePolicyInput{})
@@ -255,13 +185,9 @@ func TestParseResourceFileStructured_UnconditionalFirstKeepsNoKind(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(actions["update"]) != 1 {
-				t.Fatalf("expected one deduplicated action, got %v", actions["update"])
-			}
-			ea := actions["update"][0]
-			if ea.Conditional || ea.Condition != "" || ea.ConditionKind != "" {
-				t.Errorf("got (%v, %q, %q), want an unconditional entry with no kind",
-					ea.Conditional, ea.Condition, ea.ConditionKind)
+			want := []iam.Requirement{{Action: "iam:PutRolePolicy"}}
+			if got := ignoreErrorHandling(actions["update"]); !reflect.DeepEqual(got, want) {
+				t.Errorf("update = %+v, want the single ungated %+v", got, want)
 			}
 		})
 	}
@@ -293,26 +219,9 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]ExtractedAction{}
-	for _, ea := range actions["update"] {
-		got[ea.Action] = ea
-	}
-	want := map[string]string{
-		"iam:UpdateRoleDescription": "path",
-		"iam:TagRole":               "",
-		"iam:PutRolePolicy":         "",
-	}
-	for action, attr := range want {
-		ea, ok := got[action]
-		if !ok {
-			t.Errorf("expected %s, got %v", action, actions["update"])
-			continue
-		}
-		if ea.Condition != attr {
-			t.Errorf("%s condition = %q, want %q", action, ea.Condition, attr)
-		}
-		if attr == "" && (ea.Conditional || ea.ConditionKind != "") {
-			t.Errorf("%s should be unconditional, got (%v, %q)", action, ea.Conditional, ea.ConditionKind)
-		}
-	}
+	checkGates(t, withoutErrorHandling(actions), "update", []gateCase{
+		{"iam:UpdateRoleDescription", []iam.Gate{changed("path")}},
+		{"iam:TagRole", always},
+		{"iam:PutRolePolicy", always},
+	})
 }

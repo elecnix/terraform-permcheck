@@ -22,15 +22,11 @@ func changed(attr string) iam.Gate  { return iam.Gate{Changed: attr} }
 var always = []iam.Gate{{}}
 
 // checkGates compares the gates of each action of op with the cases.
-func checkGates(t *testing.T, actions map[string][]ExtractedAction, op string, cases []gateCase) {
+func checkGates(t *testing.T, actions map[string][]iam.Requirement, op string, cases []gateCase) {
 	t.Helper()
-	got := map[string][]iam.Gate{}
-	for _, ea := range actions[op] {
-		got[ea.Action] = ea.paths()
-	}
 	for _, c := range cases {
-		gates, ok := got[c.action]
-		if !ok {
+		gates := gatesOf(actions[op], c.action)
+		if gates == nil {
 			t.Errorf("%s: %s not extracted, got %v", op, c.action, actions[op])
 			continue
 		}
@@ -41,7 +37,7 @@ func checkGates(t *testing.T, actions map[string][]ExtractedAction, op string, c
 }
 
 // parseCreate parses a create function body of an SDK resource.
-func parseCreate(t *testing.T, body string) map[string][]ExtractedAction {
+func parseCreate(t *testing.T, body string) map[string][]iam.Requirement {
 	t.Helper()
 	src := "package x\n\nfunc resourceThingCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {\n" +
 		"\tconn := meta.(*conns.AWSClient).DynamoDBClient(ctx)\n" + body + "\n\treturn nil\n}\n"

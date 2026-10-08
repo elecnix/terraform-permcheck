@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
@@ -165,7 +164,7 @@ func frameworkProvider(t *testing.T) *SourceProvider {
 	return p
 }
 
-func resolveSchema(t *testing.T, p *SourceProvider, tfType string) *cloud.Schema {
+func resolveSchema(t *testing.T, p *SourceProvider, tfType string) *iam.Schema {
 	t.Helper()
 	s, err := p.Resolve(tfType)
 	if err != nil {

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
@@ -151,8 +150,8 @@ func resourceTableCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 }
 
-func TestSourceProvider_ImplementsCloudProvider(t *testing.T) {
-	var _ cloud.Provider = (*SourceProvider)(nil)
+func TestSourceProvider_ImplementsResolver(t *testing.T) {
+	var _ iam.Resolver = (*SourceProvider)(nil)
 }
 
 func TestResourceTypeFromAnnotation(t *testing.T) {

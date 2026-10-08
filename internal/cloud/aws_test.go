@@ -49,9 +49,6 @@ func TestCfnKeysNonAWS(t *testing.T) {
 
 func TestNewAWSProvider(t *testing.T) {
 	p := NewAWSProvider()
-	if p.Name() != "aws" {
-		t.Errorf("expected name 'aws', got %q", p.Name())
-	}
 	if p.baseURL == "" {
 		t.Error("expected non-empty baseURL")
 	}

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
@@ -14,8 +13,8 @@ import (
 // sample is a table that uses every field the format stores: each gate
 // field, a known operation with no requirements, an action reached on two
 // paths, and an incomplete operation.
-func sample() map[string]*cloud.Schema {
-	return map[string]*cloud.Schema{
+func sample() map[string]*iam.Schema {
+	return map[string]*iam.Schema{
 		"aws_widget": {
 			TypeName: "aws_widget",
 			Ops: map[string][]iam.Requirement{
@@ -41,7 +40,7 @@ func sample() map[string]*cloud.Schema {
 // the same schemas.
 func TestEncodeDecode_RoundTrip(t *testing.T) {
 	want := sample()
-	data, err := encode("v1.2.3", want)
+	data, err := Generate(want, "v1.2.3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,12 +57,12 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 // TestEncode_Deterministic checks that the same table always encodes to the
 // same bytes, whatever order the maps were built in.
 func TestEncode_Deterministic(t *testing.T) {
-	first, err := encode("v1", sample())
+	first, err := Generate(sample(), "v1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 20; i++ {
-		again, err := encode("v1", sample())
+		again, err := Generate(sample(), "v1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,15 +103,21 @@ func TestGateFields(t *testing.T) {
 // tree and checks that the decoded table serves the same requirements as the
 // parser itself.
 func TestGenerate_MatchesSourceProvider(t *testing.T) {
+	generate := func(src *provideraws.SourceProvider) []byte {
+		t.Helper()
+		schemas, err := src.Schemas()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := Generate(schemas, provideraws.DefaultProviderRef)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
 	src := provideraws.NewSourceProviderWithPath("../check/testdata/provider")
-	data, err := Generate(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, err := Generate(provideraws.NewSourceProviderWithPath("../check/testdata/provider"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := generate(src)
+	again := generate(provideraws.NewSourceProviderWithPath("../check/testdata/provider"))
 	if !bytes.Equal(data, again) {
 		t.Error("two generations from the same tree differ")
 	}
@@ -136,14 +141,14 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Resolve(%s): %v", tfType, err)
 		}
-		assertSameSchemas(t, map[string]*cloud.Schema{tfType: got}, map[string]*cloud.Schema{tfType: w})
+		assertSameSchemas(t, map[string]*iam.Schema{tfType: got}, map[string]*iam.Schema{tfType: w})
 	}
 }
 
 // TestProvider_UnknownType checks that a type the table lacks is an error, so
 // the chain falls back to the next provider.
 func TestProvider_UnknownType(t *testing.T) {
-	data, err := encode("v1", sample())
+	data, err := Generate(sample(), "v1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +192,7 @@ func TestEmbedded_KeyTypes(t *testing.T) {
 	}
 }
 
-func assertSameSchemas(t *testing.T, got, want map[string]*cloud.Schema) {
+func assertSameSchemas(t *testing.T, got, want map[string]*iam.Schema) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("got %d types, want %d", len(got), len(want))

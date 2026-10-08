@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
@@ -34,7 +33,7 @@ const DefaultProviderRef = "v5.90.0"
 type SourceProvider struct {
 	mu        sync.RWMutex
 	repoPath  string
-	schemas   map[string]*cloud.Schema // tfType -> schema
+	schemas   map[string]*iam.Schema // tfType -> schema
 	parsed    bool
 	parseErr  error  // the error of the one parse, returned by every later Ensure
 	skipClone bool   // true when repoPath already has provider source
@@ -47,7 +46,7 @@ type SourceProvider struct {
 func NewSourceProvider() *SourceProvider {
 	return &SourceProvider{
 		repoPath:  defaultCacheDir(),
-		schemas:   make(map[string]*cloud.Schema),
+		schemas:   make(map[string]*iam.Schema),
 		remoteURL: upstreamURL,
 	}
 }
@@ -57,13 +56,10 @@ func NewSourceProvider() *SourceProvider {
 func NewSourceProviderWithPath(repoPath string) *SourceProvider {
 	return &SourceProvider{
 		repoPath:  repoPath,
-		schemas:   make(map[string]*cloud.Schema),
+		schemas:   make(map[string]*iam.Schema),
 		skipClone: true,
 	}
 }
-
-// Name returns "aws".
-func (p *SourceProvider) Name() string { return "aws" }
 
 // Ensure checks that the provider repo is available and parses all resource
 // files. If the repo can't be cloned or located, it returns an error so
@@ -90,7 +86,7 @@ func (p *SourceProvider) Ensure() error {
 
 // Resolve maps a terraform resource type to its required IAM permissions.
 // Returns an error if the provider source is unavailable (allowing fallback).
-func (p *SourceProvider) Resolve(tfType string) (*cloud.Schema, error) {
+func (p *SourceProvider) Resolve(tfType string) (*iam.Schema, error) {
 	if err := p.Ensure(); err != nil {
 		return nil, err
 	}
@@ -110,7 +106,7 @@ func (p *SourceProvider) Resolve(tfType string) (*cloud.Schema, error) {
 // type it found. The map is a copy; the schemas are the ones Resolve returns.
 // It fails when the source holds no resources, so a generator never writes an
 // empty table.
-func (p *SourceProvider) Schemas() (map[string]*cloud.Schema, error) {
+func (p *SourceProvider) Schemas() (map[string]*iam.Schema, error) {
 	if err := p.Ensure(); err != nil {
 		return nil, err
 	}
@@ -119,7 +115,7 @@ func (p *SourceProvider) Schemas() (map[string]*cloud.Schema, error) {
 	if len(p.schemas) == 0 {
 		return nil, fmt.Errorf("no resources found in provider source at %s", p.repoPath)
 	}
-	out := make(map[string]*cloud.Schema, len(p.schemas))
+	out := make(map[string]*iam.Schema, len(p.schemas))
 	for tfType, s := range p.schemas {
 		out[tfType] = s
 	}
@@ -315,27 +311,21 @@ func tagActionsForService(svcDir string) TagActions {
 	return ta
 }
 
-// schema builds the cloud.Schema of one resource.
-func (r resourceFile) schema() *cloud.Schema {
+// schema builds the iam.Schema of one resource.
+func (r resourceFile) schema() *iam.Schema {
 	actions, bound := r.pkg.actionsFor(r.funcs), boundFuncs(r.funcs)
 
-	// Build the cloud.Schema: one requirement per path that reaches an
+	// Build the iam.Schema: one requirement per path that reaches an
 	// action, each carrying the path's gate: presence (d.GetOk/d.Get), change
 	// (d.HasChange), a value guard (the attribute's value is tested rather
 	// than its presence), and whether the provider ignores the call's failure.
-	schema := &cloud.Schema{
+	schema := &iam.Schema{
 		TypeName: r.tfType,
 		Ops:      make(map[string][]iam.Requirement, len(actions)),
 	}
 
-	for op, eas := range actions {
-		reqs := make([]iam.Requirement, 0, len(eas))
-		for _, ea := range eas {
-			for _, g := range ea.paths() {
-				reqs = append(reqs, iam.Requirement{Action: ea.Action, Gate: g})
-			}
-		}
-		schema.Ops[op] = reqs
+	for op, reqs := range actions {
+		schema.Ops[op] = append([]iam.Requirement(nil), reqs...)
 	}
 
 	schema.Incomplete = incompleteOperations(actions, bound, r.pkg.idx.reachesClient)
@@ -362,7 +352,7 @@ func (r resourceFile) schema() *cloud.Schema {
 
 // addUnconditionalActions adds actions to the given operation without any
 // conditional gating, skipping any already present for that operation.
-func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) {
+func addUnconditionalActions(schema *iam.Schema, op string, actions []string) {
 	if len(actions) == 0 {
 		return
 	}
@@ -387,7 +377,7 @@ func addUnconditionalActions(schema *cloud.Schema, op string, actions []string) 
 // TagResource are both apigateway:POST. The action is then reached on two
 // paths and is needed when either gate holds, so the tags gate joins the
 // gates the action already has.
-func addTagActions(schema *cloud.Schema, op string, actions []string) {
+func addTagActions(schema *iam.Schema, op string, actions []string) {
 	tags := iam.Gate{Attribute: "tags"}
 	for _, action := range actions {
 		setGates(schema, op, action, append(schema.Gates(op, action), tags))
@@ -398,7 +388,7 @@ func addTagActions(schema *cloud.Schema, op string, actions []string) {
 // paths another path subsumes. A path that always runs and whose failure
 // counts leaves the action ungated. The action keeps its place among the
 // operation's requirements, or goes last when it is new.
-func setGates(schema *cloud.Schema, op, action string, gates []iam.Gate) {
+func setGates(schema *iam.Schema, op, action string, gates []iam.Gate) {
 	paths := make([]iam.Requirement, 0, len(gates))
 	for _, g := range essentialGates(gates) {
 		paths = append(paths, iam.Requirement{Action: action, Gate: g})
@@ -478,7 +468,7 @@ func resourceNameFromFile(f *ast.File) string {
 // must not be taken as the full permission set. An operation bound to a no-op
 // such as schema.NoopContext, or to a function that never touches a client,
 // is not incomplete.
-func incompleteOperations(actions map[string][]ExtractedAction, bound map[string]string, usesClient func(string) bool) map[string]bool {
+func incompleteOperations(actions map[string][]iam.Requirement, bound map[string]string, usesClient func(string) bool) map[string]bool {
 	var out map[string]bool
 	for _, op := range []string{"create", "read", "delete"} {
 		fn, ok := bound[op]
@@ -488,8 +478,8 @@ func incompleteOperations(actions map[string][]ExtractedAction, bound map[string
 		complete := len(actions[op]) > 0
 		if complete && op != "read" {
 			complete = false
-			for _, ea := range actions[op] {
-				if !isReadOnlyAction(ea.Action) {
+			for _, r := range actions[op] {
+				if !isReadOnlyAction(r.Action) {
 					complete = true
 					break
 				}

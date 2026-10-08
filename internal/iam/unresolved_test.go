@@ -41,7 +41,7 @@ func TestValidate_ReportsUnresolvedType(t *testing.T) {
 // errResolver fails every lookup with err.
 type errResolver struct{ err error }
 
-func (r errResolver) Resolve(string) (Schema, error) { return nil, r.err }
+func (r errResolver) Resolve(string) (*Schema, error) { return nil, r.err }
 
 func TestValidate_TypedNotFoundIsUnresolved(t *testing.T) {
 	changes := []*plan.ResourceChange{{Type: "aws_new_thing", Name: "a", Change: "create"}}

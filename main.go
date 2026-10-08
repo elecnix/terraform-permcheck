@@ -396,7 +396,11 @@ func generatePermissionsCmd(args []string) error {
 	if *providerDir != "" {
 		src = provideraws.NewSourceProviderWithPath(*providerDir)
 	}
-	data, err := permdata.Generate(src)
+	schemas, err := src.Schemas()
+	if err != nil {
+		return fmt.Errorf("generate permissions: %w", err)
+	}
+	data, err := permdata.Generate(schemas, provideraws.DefaultProviderRef)
 	if err != nil {
 		return fmt.Errorf("generate permissions: %w", err)
 	}

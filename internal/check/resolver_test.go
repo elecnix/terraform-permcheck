@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
@@ -35,7 +36,7 @@ func TestProviders_Order(t *testing.T) {
 	if len(embedded) != 2 {
 		t.Fatalf("embedded chain has %d providers, want 2", len(embedded))
 	}
-	if embedded[0] != cloud.Provider(permdata.Embedded()) {
+	if embedded[0] != iam.Resolver(permdata.Embedded()) {
 		t.Errorf("embedded chain starts with %T, want the embedded table", embedded[0])
 	}
 	if _, ok := embedded[1].(*cloud.AWSProvider); !ok {

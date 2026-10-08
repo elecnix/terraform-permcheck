@@ -54,11 +54,11 @@ func embeddedSchemas(t *testing.T) map[string]fakeSchema {
 func hiddenOps(schemas map[string]fakeSchema, op string) []string {
 	var hidden []string
 	for typ, s := range schemas {
-		reqs, _ := s.Requirements(op)
+		reqs := s[op]
 		if len(reqs) == 0 {
 			continue
 		}
-		dedicated := isDedicated(s)
+		dedicated := isDedicated(s.schema())
 		all := true
 		for _, r := range reqs {
 			if decide(typ, r.Action, r.BestEffort, dedicated, nil).class == classManagement {
@@ -93,7 +93,7 @@ func TestEmbedded_NoTypeHidesItsOwnWork(t *testing.T) {
 func TestEmbedded_ParentsKeepTheirClasses(t *testing.T) {
 	schemas := embeddedSchemas(t)
 	for _, typ := range []string{"aws_s3_bucket", "aws_dynamodb_table", "aws_backup_vault", "aws_iam_user", "aws_kms_key", "aws_s3_directory_bucket"} {
-		if isDedicated(schemas[typ]) {
+		if isDedicated(schemas[typ].schema()) {
 			t.Errorf("%s counts as dedicated, want a parent", typ)
 		}
 	}
@@ -102,7 +102,7 @@ func TestEmbedded_ParentsKeepTheirClasses(t *testing.T) {
 		"aws_kms_ciphertext", "aws_s3tables_table_bucket", "aws_backup_vault_lock_configuration",
 		"aws_dynamodb_kinesis_streaming_destination",
 	} {
-		if !isDedicated(schemas[typ]) {
+		if !isDedicated(schemas[typ].schema()) {
 			t.Errorf("%s does not count as dedicated", typ)
 		}
 	}

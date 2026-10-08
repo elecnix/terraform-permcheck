@@ -97,11 +97,10 @@ func TestNewAWSProvider_HasTimeout(t *testing.T) {
 // failingProvider fails every lookup with err.
 type failingProvider struct{ err error }
 
-func (failingProvider) Name() string                      { return "failing" }
-func (p failingProvider) Resolve(string) (*Schema, error) { return nil, p.err }
+func (p failingProvider) Resolve(string) (*iam.Schema, error) { return nil, p.err }
 
 func TestChainProvider_ErrorKinds(t *testing.T) {
-	unknown := &mockProvider{name: "table", schemas: map[string]*Schema{}}
+	unknown := &mockProvider{schemas: map[string]*iam.Schema{}}
 	down := failingProvider{fmt.Errorf("HTTP 503: %w", iam.ErrLookupFailed)}
 
 	if _, err := NewChainProvider(unknown, unknown).Resolve("aws_x"); !errors.Is(err, iam.ErrUnknownType) {
@@ -119,7 +118,7 @@ func TestChainProvider_ErrorKinds(t *testing.T) {
 // filling an incomplete operation is an error. Dropping it would report the
 // operation as needing only what the first source found.
 func TestChainProvider_FillFailureIsAnError(t *testing.T) {
-	primary := &mockProvider{name: "table", schemas: map[string]*Schema{
+	primary := &mockProvider{schemas: map[string]*iam.Schema{
 		"aws_x": {TypeName: "aws_x", Ops: ungated(map[string][]string{"create": {"x:Tag"}}), Incomplete: map[string]bool{"create": true}},
 	}}
 	down := failingProvider{fmt.Errorf("HTTP 503: %w", iam.ErrLookupFailed)}

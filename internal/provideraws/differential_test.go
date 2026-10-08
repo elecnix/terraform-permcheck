@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
 // TestParseResourceFileStructured_MatchesPreRefactorWalker is the differential
@@ -163,8 +165,15 @@ const legacyGoldens = `{
   }
 }`
 
+// legacyAction is the shape the pre-refactor walker emitted for each action.
+type legacyAction struct {
+	Action      string
+	Conditional bool
+	Condition   string
+}
+
 func TestParseResourceFileStructured_MatchesPreRefactorWalker(t *testing.T) {
-	var want map[string]map[string][]ExtractedAction
+	var want map[string]map[string][]legacyAction
 	if err := json.Unmarshal([]byte(legacyGoldens), &want); err != nil {
 		t.Fatalf("parse legacyGoldens: %v", err)
 	}
@@ -177,22 +186,22 @@ func TestParseResourceFileStructured_MatchesPreRefactorWalker(t *testing.T) {
 			}
 			// legacyGoldens holds the pre-refactor output exactly as captured
 			// from main, so it carries only the fields that walker produced.
-			// ConditionKind is this branch's addition and is asserted separately
-			// below rather than written into the golden: editing the golden to
-			// include a field the old walker never emitted would make the test
-			// assert itself instead of the old behaviour.
-			gotLegacy, wantLegacy := legacyShape(got), legacyShape(want[name])
-			if !reflect.DeepEqual(gotLegacy, wantLegacy) {
+			// The gate kind and best-effort flag came later and are asserted
+			// separately below rather than written into the golden: editing
+			// the golden to include a field the old walker never emitted
+			// would make the test assert itself instead of the old behaviour.
+			gotLegacy := legacyShape(got)
+			if !reflect.DeepEqual(gotLegacy, want[name]) {
 				t.Errorf("merged traversal diverges from the pre-refactor walker\n got: %s\nwant: %s",
-					formatActionMap(gotLegacy), formatActionMap(wantLegacy))
+					formatActionMap(gotLegacy), formatActionMap(want[name]))
 			}
 
 			// Every fixture here gates on d.GetOk or d.Get, so each gated call
-			// must carry the presence kind.
-			for _, actions := range got {
-				for _, a := range actions {
-					if a.Conditional && a.ConditionKind != ConditionPresence {
-						t.Errorf("%s: ConditionKind = %q, want %q", a.Action, a.ConditionKind, ConditionPresence)
+			// must carry a presence gate.
+			for _, reqs := range got {
+				for _, r := range reqs {
+					if r.Changed != "" {
+						t.Errorf("%s: gate %+v tests a change, want presence", r.Action, r.Gate)
 					}
 				}
 			}
@@ -200,7 +209,7 @@ func TestParseResourceFileStructured_MatchesPreRefactorWalker(t *testing.T) {
 	}
 }
 
-func formatActionMap(m map[string][]ExtractedAction) string {
+func formatActionMap(m map[string][]legacyAction) string {
 	var b strings.Builder
 	for op, actions := range m {
 		for _, a := range actions {
@@ -210,18 +219,21 @@ func formatActionMap(m map[string][]ExtractedAction) string {
 	return b.String()
 }
 
-// legacyShape clears the fields this branch added, so the pre-refactor golden
-// can stay byte-for-byte as it was captured from main.
-func legacyShape(m map[string][]ExtractedAction) map[string][]ExtractedAction {
-	out := make(map[string][]ExtractedAction, len(m))
-	for op, actions := range m {
-		stripped := make([]ExtractedAction, 0, len(actions))
-		for _, a := range actions {
-			a.ConditionKind = ""
-			a.BestEffort = false
-			stripped = append(stripped, a)
+// legacyShape keeps only what the pre-refactor walker emitted, so its golden
+// can stay byte-for-byte as it was captured from main. Every fixture reaches
+// each action on one path.
+func legacyShape(m map[string][]iam.Requirement) map[string][]legacyAction {
+	out := make(map[string][]legacyAction, len(m))
+	for op, reqs := range m {
+		actions := make([]legacyAction, 0, len(reqs))
+		for _, r := range reqs {
+			cond := r.Attribute
+			if cond == "" {
+				cond = r.Changed
+			}
+			actions = append(actions, legacyAction{Action: r.Action, Conditional: !r.Ungated(), Condition: cond})
 		}
-		out[op] = stripped
+		out[op] = actions
 	}
 	return out
 }

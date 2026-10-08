@@ -16,9 +16,9 @@ import (
 
 // fakeResolver resolves terraform resource types from a fixed table of
 // schemas, so the tests need no provider clone and no network.
-type fakeResolver map[string]*cloud.Schema
+type fakeResolver map[string]*iam.Schema
 
-func (r fakeResolver) Resolve(tfType string) (iam.Schema, error) {
+func (r fakeResolver) Resolve(tfType string) (*iam.Schema, error) {
 	s, ok := r[tfType]
 	if !ok {
 		return nil, errors.New("unknown type " + tfType)
@@ -29,7 +29,7 @@ func (r fakeResolver) Resolve(tfType string) (iam.Schema, error) {
 // failingResolver fails every lookup as a registry outage would.
 type failingResolver struct{}
 
-func (failingResolver) Resolve(tfType string) (iam.Schema, error) {
+func (failingResolver) Resolve(tfType string) (*iam.Schema, error) {
 	return nil, fmt.Errorf("fetch %s: HTTP 503: %w", tfType, iam.ErrLookupFailed)
 }
 
@@ -39,7 +39,7 @@ type countingResolver struct {
 	calls map[string]int
 }
 
-func (r countingResolver) Resolve(tfType string) (iam.Schema, error) {
+func (r countingResolver) Resolve(tfType string) (*iam.Schema, error) {
 	r.calls[tfType]++
 	return r.Resolver.Resolve(tfType)
 }
@@ -81,7 +81,7 @@ func actions(missing []iam.MissingAction) []string {
 	return out
 }
 
-var kmsKey = &cloud.Schema{
+var kmsKey = &iam.Schema{
 	TypeName: "aws_kms_key",
 	Ops: map[string][]iam.Requirement{
 		"create": {
