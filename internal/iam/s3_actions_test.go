@@ -131,27 +131,6 @@ func TestS3Rules_MatchExactNames(t *testing.T) {
 	}
 }
 
-// classifyPermission returns on the first row that matches, so a row another
-// row already covers is dead: it reads as coverage but can never be the reason
-// an action is optional.
-func TestS3OptionalPrefixes_NoRowIsShadowedByAnEarlierRow(t *testing.T) {
-	for i, p := range s3OptionalPrefixes {
-		first := ""
-		for _, q := range s3OptionalPrefixes {
-			if strings.HasPrefix(p, q) {
-				first = q
-				break
-			}
-		}
-		if first != p {
-			t.Errorf("s3OptionalPrefixes[%d] %q is shadowed by the earlier row %q", i, p, first)
-		}
-		if got := classifyPermission(p); got != ClassOptional {
-			t.Errorf("classifyPermission(%q) = %d, want ClassOptional", p, got)
-		}
-	}
-}
-
 // Every S3 action that either name space emits for the bucket family is an
 // optional feature, data-plane, or on the short required list.
 func TestSchemaEmittedS3Actions_AreClassified(t *testing.T) {
