@@ -9,6 +9,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
@@ -184,7 +185,7 @@ func (r *Report) Write(f Format, stdout, stderr io.Writer) {
 			fmt.Fprintln(stdout, r.allClear())
 		} else {
 			if t := r.text(); t != "" {
-				fmt.Fprintf(stderr, "%s\n\n", t)
+				fmt.Fprintf(stderr, "%s\n", t)
 			}
 			fmt.Fprintln(stderr, r.summary())
 		}
@@ -209,31 +210,57 @@ func (r *Report) allowedUnresolved() int {
 	return n
 }
 
-// checkedLabel names what the checked count covers, declared needs included.
-// The json report carries the plain label, so only the text lines use this.
-func (r *Report) checkedLabel() string {
+// checkedCount is the checked count in words, with what it counts and the
+// declared needs: "1 resource change", "4 resource changes, 2 declared
+// needs". The json report carries the plain label, so only the text lines
+// use this.
+func (r *Report) checkedCount() string {
+	s := fmt.Sprintf("%d %s", r.checked, countNoun(r.checked, r.label))
 	switch {
 	case r.needs == 1:
-		return r.label + ", 1 declared need"
+		s += ", 1 declared need"
 	case r.needs > 1:
-		return r.label + fmt.Sprintf(", %d declared needs", r.needs)
+		s += fmt.Sprintf(", %d declared needs", r.needs)
 	}
-	return r.label
+	return s
+}
+
+// countNoun returns label for a count of n. A label is a plural noun with
+// an optional note, as in "resource types (static HCL mode)", so a count of
+// one drops the noun's final s.
+func countNoun(n int, label string) string {
+	if n != 1 {
+		return label
+	}
+	noun, note, hasNote := strings.Cut(label, " (")
+	noun = strings.TrimSuffix(noun, "s")
+	if hasNote {
+		return noun + " (" + note
+	}
+	return noun
 }
 
 // summary is the closing line of a report that is not all clear. It
 // mentions unverified findings and unresolved types only when there are
-// some.
+// some. An unresolved type is allowed when the run allows them, and
+// excluded when a config exclusion covers it.
 func (r *Report) summary() string {
-	line := fmt.Sprintf("%d %s checked, %d distinct missing permissions found", r.checked, r.checkedLabel(), len(r.missing))
+	permissions := "permissions"
+	if len(r.missing) == 1 {
+		permissions = "permission"
+	}
+	line := fmt.Sprintf("%s checked, %d distinct missing %s found", r.checkedCount(), len(r.missing), permissions)
 	if len(r.unverified) > 0 {
 		line += fmt.Sprintf(", %d unverified (resource scope)", len(r.unverified))
 	}
-	if n := len(r.unresolved); n > 0 && !r.unresolvedAllowed {
+	if n := len(r.unresolved); n > 0 {
 		line += ", " + resourceTypes(n) + " unresolved"
+		if r.unresolvedAllowed {
+			line += " (allowed)"
+		}
 	}
-	if n := r.allowedUnresolved(); n > 0 {
-		line += ", " + resourceTypes(n) + " unresolved (allowed)"
+	if n := r.excludedUnresolved; n > 0 {
+		line += ", " + resourceTypes(n) + " unresolved (excluded)"
 	}
 	return line + "."
 }
@@ -259,9 +286,13 @@ func excludedLabel(m iam.MissingAction) string {
 	return m.Action
 }
 
-// allClear is the line of a report with no findings.
+// allClear is the line of a report with no findings. A run that checked
+// nothing covered nothing either, so it says so.
 func (r *Report) allClear() string {
-	return fmt.Sprintf("All required permissions covered (%d %s checked).", r.checked, r.checkedLabel())
+	if r.checked == 0 && r.needs == 0 {
+		return "No resources to check."
+	}
+	return fmt.Sprintf("All required permissions covered (%s checked).", r.checkedCount())
 }
 
 // source names what needs the action: the terraform resource change, or the

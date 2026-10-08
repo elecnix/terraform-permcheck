@@ -4,5 +4,5 @@
 ::warning title=Missing IAM permission::logs:CreateLogGroup needed by: needs "Logs"
 ::warning title=Unverified IAM permission::logs:PutLogEvents [unverified: resource scope] needed by: needs "Logs"
 
-1 resource changes, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).
+1 resource change, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).
 --- stderr ---

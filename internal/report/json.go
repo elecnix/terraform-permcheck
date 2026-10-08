@@ -47,10 +47,10 @@ type JSONExcluded struct {
 	Change         string `json:"change,omitempty"`
 	Need           string `json:"need,omitempty"`
 	NeedResource   string `json:"need_resource,omitempty"`
-	ExcludedAction string `json:"excluded_action"`
+	ExcludedAction string `json:"excluded_action,omitempty"`
 	Reason         string `json:"reason,omitempty"`
 	// Unresolved is true for an excluded resource type no schema source
-	// knows. Its excluded_action is empty.
+	// knows. It has no excluded_action.
 	Unresolved bool `json:"unresolved,omitempty"`
 }
 

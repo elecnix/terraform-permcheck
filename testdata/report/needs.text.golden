@@ -12,5 +12,4 @@ Unverified IAM permissions (1), granted only on resources whose ARN the plan doe
   logs:PutLogEvents [required] [unverified: resource scope]
     → needs "Logs"
 
-
-1 resource changes, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).
+1 resource change, 2 declared needs checked, 3 distinct missing permissions found, 1 unverified (resource scope).

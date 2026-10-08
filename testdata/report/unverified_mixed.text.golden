@@ -11,5 +11,4 @@ Unverified IAM permissions (1), granted only on resources whose ARN the plan doe
     → aws_sqs_queue.q (create)
     → aws_sqs_queue.r["k"] (create) [sqs.tf:7]
 
-
 3 resource changes checked, 2 distinct missing permissions found, 1 unverified (resource scope).

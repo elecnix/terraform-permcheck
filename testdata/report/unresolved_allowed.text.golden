@@ -7,5 +7,4 @@ Unresolved resource types (2), no permission data (allowed):
   aws_other_new
     → aws_other_new.x (delete)
 
-
 3 resource changes checked, 0 distinct missing permissions found, 2 resource types unresolved (allowed).

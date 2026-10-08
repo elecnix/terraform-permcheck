@@ -151,7 +151,7 @@ func TestReport_UnresolvedNeverAllClear(t *testing.T) {
 	}{
 		{"failing", check.Result{Unresolved: []iam.MissingAction{u}}, true, "1 resource type unresolved."},
 		{"allowed", check.Result{Unresolved: []iam.MissingAction{u}, UnresolvedAllowed: true}, false, "1 resource type unresolved (allowed)."},
-		{"excluded", check.Result{Excluded: []iam.ExcludedAction{{MissingAction: u}}}, false, "1 resource type unresolved (allowed)."},
+		{"excluded", check.Result{Excluded: []iam.ExcludedAction{{MissingAction: u}}}, false, "1 resource type unresolved (excluded)."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

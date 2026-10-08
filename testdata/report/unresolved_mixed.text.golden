@@ -15,5 +15,4 @@ Unresolved resource types (2), no permission data:
   aws_other_new
     → aws_other_new.x (delete)
 
-
-5 resource changes checked, 1 distinct missing permissions found, 1 unverified (resource scope), 2 resource types unresolved.
+5 resource changes checked, 1 distinct missing permission found, 1 unverified (resource scope), 2 resource types unresolved.

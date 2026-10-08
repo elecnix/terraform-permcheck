@@ -13,5 +13,4 @@ Missing IAM permissions (4):
     → aws_backup_vault.v (delete) [modules/backup/main.tf:40]
     → aws_sns_topic.t[1] (create)
 
-
 6 resource changes checked, 4 distinct missing permissions found.

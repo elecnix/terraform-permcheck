@@ -5,5 +5,4 @@ Unresolved resource types (1), no permission data:
     → aws_new_thing.a (create)
     → aws_new_thing.b["k"] (update) [new.tf:9]
 
-
 2 resource changes checked, 0 distinct missing permissions found, 1 resource type unresolved.
