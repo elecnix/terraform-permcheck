@@ -137,14 +137,30 @@ func (p *SourceProvider) populate(dir string) error {
 		return fmt.Errorf("provider checkout in %s is not at %s", tmp, DefaultProviderRef)
 	}
 
-	// Move any stale checkout aside first: rename cannot replace a
-	// non-empty directory.
+	return installCheckout(tmp, dir)
+}
+
+// installCheckout moves the freshly populated checkout at tmp into dir, moving
+// any existing checkout aside first because rename cannot replace a non-empty
+// directory.
+//
+// If the swap fails, the previous checkout is moved back before returning. The
+// earlier version left it to a deferred RemoveAll, which ran whether or not the
+// swap succeeded: a failure then deleted the working checkout and left the cache
+// with nothing, so the next run re-cloned the provider from the network.
+func installCheckout(tmp, dir string) error {
 	if _, err := os.Lstat(dir); err == nil {
 		stale := tmp + ".old"
 		if err := os.Rename(dir, stale); err != nil {
 			return fmt.Errorf("move stale provider checkout aside: %w", err)
 		}
-		defer os.RemoveAll(stale)
+		if err := os.Rename(tmp, dir); err != nil {
+			if restoreErr := os.Rename(stale, dir); restoreErr != nil {
+				return fmt.Errorf("install provider checkout: %w; restoring the previous one also failed: %v", err, restoreErr)
+			}
+			return fmt.Errorf("install provider checkout: %w", err)
+		}
+		return os.RemoveAll(stale)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

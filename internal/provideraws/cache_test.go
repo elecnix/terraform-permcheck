@@ -1,6 +1,7 @@
 package provideraws
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -242,5 +243,41 @@ func TestEnsureRepo_ConcurrentProcessesDoNotCorrupt(t *testing.T) {
 	}
 	if status := git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("checkout is not clean:\n%s", status)
+	}
+}
+
+// TestInstallCheckout_RestoresPreviousOnFailure reproduces the cache-loss path
+// by execution: the swap is made to fail, and the previous checkout must still
+// be where it was. The earlier implementation moved dir aside and removed it
+// from a deferred cleanup regardless of the outcome, so this case left the
+// cache empty and the next run re-cloned the provider.
+func TestInstallCheckout_RestoresPreviousOnFailure(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "provider-aws")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(dir, "REVISION")
+	if err := os.WriteFile(marker, []byte("previous checkout"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A tmp that does not exist makes os.Rename(tmp, dir) fail, which is the
+	// step that used to strand the cache.
+	missingTmp := filepath.Join(parent, "provider-aws.tmp-gone")
+
+	if err := installCheckout(missingTmp, dir); err == nil {
+		t.Fatal("expected the swap to fail when tmp does not exist")
+	}
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("previous checkout was lost after a failed swap: %v", err)
+	}
+	if string(got) != "previous checkout" {
+		t.Errorf("previous checkout content = %q, want it restored intact", got)
+	}
+	if _, err := os.Lstat(missingTmp + ".old"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("stale directory left behind next to the cache: %v", err)
 	}
 }
