@@ -34,6 +34,21 @@ the cross-reference:
 4. Diffs against your declared IAM policy documents.
 5. Fails the pipeline if any required permission is missing.
 
+### Provider source first, CloudFormation second
+
+For AWS, PermCheck first reads the terraform-provider-aws source and lists
+the SDK calls each resource's create, read, update and delete functions make.
+It follows calls into helper functions, retry closures and paginators, in any
+file of the service package and in other service packages. When it can't
+resolve a type from the source, it uses the CloudFormation schema.
+
+Sometimes the source parse comes back incomplete. A create or delete function
+uses an SDK client, yet the parser finds no call that changes anything. A read
+function finds no call at all. PermCheck then adds the CloudFormation
+permissions for that operation to what the parse found. A function that never
+touches a client, such as a delete that only logs that the resource can't be
+destroyed, counts as complete.
+
 ### Conditional & side-effect permissions
 
 Some permissions are only needed when a particular attribute is set. The AWS

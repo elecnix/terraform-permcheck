@@ -48,6 +48,8 @@ var s3OptionalPrefixes = []string{
 	"s3:GetBucketMetricsConfiguration", "s3:DeleteBucketMetricsConfiguration",
 	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
 	"s3:GetBucketIntelligentTieringConfiguration", "s3:DeleteBucketIntelligentTieringConfiguration",
+	"s3:PutBucketAnalyticsConfiguration", "s3:PutBucketInventoryConfiguration",
+	"s3:PutBucketMetricsConfiguration", "s3:PutBucketIntelligentTieringConfiguration",
 	// Object lock
 	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
 	"s3:PutObjectLockConfiguration",
@@ -56,16 +58,17 @@ var s3OptionalPrefixes = []string{
 	"s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration",
 	// Lifecycle
 	"s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration", "s3:DeleteBucketLifecycle",
+	"s3:PutBucketLifecycleConfiguration", "s3:GetBucketLifecycleConfiguration",
 	// Notifications, versioning, ownership controls, public access block
 	"s3:PutBucketNotification", "s3:GetBucketNotification",
 	"s3:PutBucketVersioning", "s3:GetBucketVersioning",
-	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls",
+	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls", "s3:DeleteBucketOwnershipControls",
 	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock", "s3:DeleteBucketPublicAccessBlock",
 	// Tags
-	"s3:PutBucketTagging", "s3:GetBucketTagging",
+	"s3:PutBucketTagging", "s3:GetBucketTagging", "s3:DeleteBucketTagging",
 	"s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource",
 	// Bucket policy and requester pays
-	"s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
+	"s3:PutBucketPolicy", "s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
 	"s3:PutBucketRequestPayment", "s3:GetBucketRequestPayment",
 	// Attribute-based access control
 	"s3:PutBucketAbac", "s3:GetBucketAbac",
@@ -92,6 +95,8 @@ func classifyPermission(action string) PermissionClass {
 		"s3:GetObject": true, "s3:GetObjectMetadata": true,
 		"s3:PutObject": true, "s3:PutObjectAcl": true,
 		"s3:DeleteObject": true, "s3:AbortMultipartUpload": true,
+		// The SDK names of the calls that empty a bucket on force_destroy
+		"s3:DeleteObjects": true, "s3:HeadObject": true, "s3:ListObjectVersions": true,
 		// KMS data-plane (encrypt/decrypt at object level)
 		"kms:Encrypt": true, "kms:Decrypt": true,
 		"kms:GenerateDataKey": true, "kms:GenerateDataKeyWithoutPlaintext": true,

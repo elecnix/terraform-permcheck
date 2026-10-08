@@ -11,6 +11,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"sort"
 	"strings"
 )
 
@@ -46,9 +47,11 @@ type ExtractedAction struct {
 	ValueGuarded bool
 }
 
-// helperCall records a helper function call and the conditional context at the
-// call site (e.g., if d.GetOk("replica") { removeSecretReplicas(...) }).
+// helperCall records a call to a function of the same package and the
+// conditional context at the call site (e.g., if d.GetOk("replica") {
+// removeSecretReplicas(...) }).
 type helperCall struct {
+	Pkg        string        // service package of the helper, "" for the caller's own
 	Name       string        // helper function name
 	CondReason string        // attribute from call-site d.GetOk/d.Get/d.HasChange guard, empty if unconditional
 	CondKind   ConditionKind // kind of the call-site guard, empty if unconditional
@@ -58,15 +61,12 @@ type helperCall struct {
 // and extracts the IAM permissions (actions) required by each CRUD function.
 //
 // It handles:
-// - Direct conn.Method() calls in CRUD function bodies
+// - Direct conn.Method() calls in CRUD function bodies, closures included
+// - Paginators: pkg.NewXxxPaginator(conn, input) → service:Xxx
 // - Conditional calls gated by d.GetOk(), d.Get(), or d.HasChange()
-// - Helper function calls: retryCreateRole(ctx, conn, ...) → conn.CreateRole
-// - Recursive helper chains: findRoleByName → findRole → conn.GetRole
-// - Function return following (Create returns Read → include Read permissions)
-//
-// It does not descend into anonymous function bodies, so SDK calls made inside
-// a closure (for example the function passed to tfresource.RetryWhen) are not
-// reported.
+// - Calls to other functions of the file, followed transitively:
+// retryCreateRole(ctx, conn, ...) → conn.CreateRole, and Create returning
+// Read includes the Read permissions
 //
 // Returns all actions (both unconditional and conditional) as plain strings.
 func ParseResourceFile(src string, tfType string, resourceName string) (map[string][]string, error) {
@@ -87,154 +87,489 @@ func ParseResourceFile(src string, tfType string, resourceName string) (map[stri
 // ParseResourceFileStructured parses a Go source file and returns extracted
 // actions with conditional metadata (whether the call is inside an if-statement
 // guarded by d.GetOk() or d.Get()). Follows helper function call chains
-// transitively within the same file.
+// transitively within the same file. ParsePackage does the same across all the
+// files of a service package.
 func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, tfType+".go", src, parser.ParseComments)
+	name := tfType + ".go"
+	pkg, err := ParsePackage(map[string]string{name: src})
 	if err != nil {
-		return nil, fmt.Errorf("parse Go source: %w", err)
+		return nil, err
 	}
+	actions, _ := pkg.ResourceActions(name, resourceName)
+	return actions, nil
+}
 
-	// Phase 1: Extract direct SDK calls from ALL functions (helpers + CRUD)
-	allSdkCalls := make(map[string][]ExtractedAction) // funcName -> actions
-	funcConnVar := make(map[string]string)            // funcName -> connVar
-	funcService := make(map[string]string)            // funcName -> service
+// Package is the parsed source of one provider service package. A resource's
+// CRUD functions often call helpers that live in another file of the package
+// (the S3 bucket read calls findBucketPolicy from bucket_policy.go), so the
+// call graph is built over every file.
+type Package struct {
+	files map[string]*ast.File
+	idx   *pkgIndex
+}
 
-	for _, decl := range f.Decls {
-		fd, ok := decl.(*ast.FuncDecl)
+// ParsePackage parses the given files (file name → Go source) as one package.
+func ParsePackage(srcs map[string]string) (*Package, error) {
+	fset := token.NewFileSet()
+	files := make(map[string]*ast.File, len(srcs))
+	for name, src := range srcs {
+		f, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("parse Go source: %w", err)
+		}
+		files[name] = f
+	}
+	return newPackage(files), nil
+}
+
+// newPackage indexes already parsed files as one package.
+func newPackage(files map[string]*ast.File) *Package {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	ordered := make([]*ast.File, 0, len(names))
+	for _, name := range names {
+		ordered = append(ordered, files[name])
+	}
+	return &Package{files: files, idx: newPkgIndex(ordered)}
+}
+
+// ResourceActions returns the actions each CRUD operation of the resource in
+// fileName needs, and the function bound to each operation the resource
+// declares. An operation bound to something other than a package function,
+// such as schema.NoopContext, maps to "": it is declared but makes no call.
+//
+// The bindings come from the schema.Resource literal (CreateWithoutTimeout:
+// resourceBucketCreate). A file without one falls back to the naming
+// convention resource<Name><Op>.
+func (p *Package) ResourceActions(fileName, resourceName string) (map[string][]ExtractedAction, map[string]string) {
+	funcs := p.resourceFuncs(fileName, resourceName)
+	if funcs == nil {
+		return nil, nil
+	}
+	return p.actionsFor(funcs), boundFuncs(funcs)
+}
+
+// resourceFuncs returns the functions bound to each operation of the resource
+// in fileName, or nil when the package has no such file.
+func (p *Package) resourceFuncs(fileName, resourceName string) map[string][]string {
+	f := p.files[fileName]
+	if f == nil {
+		return nil
+	}
+	byName := operationsByName(f, resourceName)
+	funcs := operationBindings(f)
+	if len(funcs) == 0 {
+		return byName
+	}
+	// An importer bound inline or not at all still has its function found
+	// by name, as resource<Name>Import.
+	if _, ok := funcs["import"]; !ok && len(byName["import"]) > 0 {
+		funcs["import"] = byName["import"]
+	}
+	return funcs
+}
+
+// actionsFor resolves the actions of each operation's functions.
+func (p *Package) actionsFor(funcs map[string][]string) map[string][]ExtractedAction {
+	actions := make(map[string][]ExtractedAction)
+	for op, fns := range funcs {
+		var acts []ExtractedAction
+		for _, fn := range fns {
+			if fn != "" {
+				acts = append(acts, p.idx.resolve(fn)...)
+			}
+		}
+		if len(acts) > 0 {
+			actions[op] = dedupActions(acts)
+		}
+	}
+	return actions
+}
+
+// boundFuncs keeps the first function of each operation.
+func boundFuncs(funcs map[string][]string) map[string]string {
+	bound := make(map[string]string, len(funcs))
+	for op, fns := range funcs {
+		bound[op] = fns[0]
+	}
+	return bound
+}
+
+// schemaOperationKeys maps the schema.Resource fields that bind a CRUD
+// function to the operation they bind.
+var schemaOperationKeys = map[string]string{
+	"Create": "create", "CreateContext": "create", "CreateWithoutTimeout": "create",
+	"Read": "read", "ReadContext": "read", "ReadWithoutTimeout": "read",
+	"Update": "update", "UpdateContext": "update", "UpdateWithoutTimeout": "update",
+	"Delete": "delete", "DeleteContext": "delete", "DeleteWithoutTimeout": "delete",
+}
+
+// importerOperationKeys are the schema.ResourceImporter fields that bind the
+// import function.
+var importerOperationKeys = map[string]string{"State": "import", "StateContext": "import"}
+
+// operationBindings reads the CRUD bindings from the first schema.Resource
+// literal that declares each operation. A binding is a function name
+// (resourceBucketCreate) or a call to a factory that returns the function
+// (resourceResourcePolicyPut(cond)), in which case the factory's body, closure
+// included, holds the calls. Any other binding (schema.NoopContext) maps to "".
+func operationBindings(f *ast.File) map[string][]string {
+	bound := make(map[string][]string)
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
 		if !ok {
-			continue
+			return true
 		}
-		name := fd.Name.Name
-		calls, connVar, service := extractSDKCallsWithConnInfo(fd)
-		if len(calls) > 0 {
-			allSdkCalls[name] = dedupActions(calls)
+		keys := schemaOperationKeys
+		if !isSchemaResourceType(lit.Type) {
+			if !isSchemaType(lit.Type, "ResourceImporter") {
+				return true
+			}
+			keys = importerOperationKeys
 		}
-		if connVar != "" {
-			funcConnVar[name] = connVar
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			op, ok := keys[key.Name]
+			if !ok || bound[op] != nil {
+				continue
+			}
+			fn := ""
+			switch v := kv.Value.(type) {
+			case *ast.Ident:
+				fn = v.Name
+			case *ast.CallExpr:
+				if ident, ok := v.Fun.(*ast.Ident); ok {
+					fn = ident.Name
+				}
+			}
+			bound[op] = []string{fn}
 		}
-		if service != "" {
-			funcService[name] = service
-		}
-	}
+		return true
+	})
+	return bound
+}
 
-	// Phase 1b: Build call graph — for each function, track which helpers it calls
-	callGraph := make(map[string][]helperCall) // funcName -> helper calls
+// isSchemaResourceType reports whether a composite literal's type is
+// schema.Resource.
+func isSchemaResourceType(expr ast.Expr) bool {
+	return isSchemaType(expr, "Resource")
+}
+
+// isSchemaType reports whether a composite literal's type is schema.<name>.
+func isSchemaType(expr ast.Expr, name string) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != name {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "schema"
+}
+
+// operationsByName maps the file's resource<...><Op> functions whose name
+// contains resourceName to their operation.
+func operationsByName(f *ast.File, resourceName string) map[string][]string {
+	suffixes := []struct{ suffix, op string }{
+		{"Create", "create"}, {"Read", "read"}, {"Update", "update"}, {"Delete", "delete"}, {"Import", "import"},
+	}
+	out := make(map[string][]string)
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
-		if !ok || fd.Body == nil {
-			continue
-		}
-		connVar := funcConnVar[fd.Name.Name]
-		if connVar == "" {
-			continue
-		}
-		helpers := findHelperCalls(fd, connVar, f)
-		if len(helpers) > 0 {
-			callGraph[fd.Name.Name] = helpers
-		}
-	}
-
-	// Phase 1c: Resolve transitive SDK calls for each resource function
-	resolvedCalls := make(map[string][]ExtractedAction) // funcName -> resolved actions
-	for _, decl := range f.Decls {
-		fd, ok := decl.(*ast.FuncDecl)
-		if !ok {
+		if !ok || fd.Recv != nil {
 			continue
 		}
 		name := fd.Name.Name
 		if !strings.HasPrefix(name, "resource") || !containsIgnoreCase(name, resourceName) {
 			continue
 		}
-		resolved := resolveTransitiveExtracted(name, allSdkCalls, callGraph, make(map[string]bool), 0)
-		if len(resolved) > 0 {
-			resolvedCalls[name] = dedupActions(resolved)
-		}
-	}
-
-	// Phase 2: Map to CRUD operations
-	actions := make(map[string][]ExtractedAction)
-	operationMap := map[string]string{"Create": "create", "Read": "read", "Update": "update", "Delete": "delete", "Import": "import"}
-
-	for funcName, funcCalls := range resolvedCalls {
-		for opSuffix, opKey := range operationMap {
-			if strings.HasSuffix(funcName, opSuffix) {
-				actions[opKey] = append(actions[opKey], funcCalls...)
+		for _, s := range suffixes {
+			if strings.HasSuffix(name, s.suffix) {
+				out[s.op] = append(out[s.op], name)
 				break
 			}
 		}
 	}
+	return out
+}
 
-	// Phase 3: Follow function returns for implicit reads.
-	for _, decl := range f.Decls {
-		fd, ok := decl.(*ast.FuncDecl)
-		if !ok || !strings.HasPrefix(fd.Name.Name, "resource") || !strings.HasSuffix(fd.Name.Name, "Create") {
-			continue
+// servicePackagePrefix is the import path prefix of the provider's service
+// packages. A call into another one, such as tfiam.FindRoleByName, is followed
+// when that package is linked in.
+const servicePackagePrefix = "github.com/hashicorp/terraform-provider-aws/internal/service/"
+
+// pkgIndex holds every function of a package with its direct SDK calls and
+// the functions it calls, and memoizes the transitive resolution. It keeps no
+// syntax tree, so the indexes of every service package fit in memory at once.
+type pkgIndex struct {
+	funcs      map[string]bool // every function and method, by name
+	plain      map[string]bool // the functions without a receiver
+	direct     map[string][]ExtractedAction
+	calls      map[string][]helperCall
+	memo       map[string][]ExtractedAction
+	inProgress map[string]bool
+
+	// clients names the functions that obtain or receive an SDK client
+	// themselves; reach memoizes reachesClient.
+	clients map[string]bool
+	reach   map[string]bool
+
+	// others resolves calls into other service packages, by package
+	// directory name. It is nil until the packages are linked.
+	others map[string]*pkgIndex
+}
+
+func newPkgIndex(files []*ast.File) *pkgIndex {
+	idx := &pkgIndex{
+		funcs:      make(map[string]bool),
+		plain:      make(map[string]bool),
+		direct:     make(map[string][]ExtractedAction),
+		calls:      make(map[string][]helperCall),
+		memo:       make(map[string][]ExtractedAction),
+		inProgress: make(map[string]bool),
+		clients:    make(map[string]bool),
+		reach:      make(map[string]bool),
+	}
+
+	// A plain function wins over a method of the same name, since call sites
+	// name plain functions directly.
+	type declared struct {
+		fd      *ast.FuncDecl
+		imports map[string]string
+	}
+	decls := make(map[string]declared)
+	for _, f := range files {
+		imports := serviceImports(f)
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			if prev, ok := decls[fd.Name.Name]; ok && (prev.fd.Recv == nil || fd.Recv != nil) {
+				continue
+			}
+			decls[fd.Name.Name] = declared{fd, imports}
+			idx.funcs[fd.Name.Name] = true
+			idx.plain[fd.Name.Name] = fd.Recv == nil
 		}
-		calledFuncs := findReturnedResourceCalls(fd)
-		for _, calledName := range calledFuncs {
-			if calledActions, ok := resolvedCalls[calledName]; ok {
-				actions["create"] = append(actions["create"], calledActions...)
+	}
+	// exports.go publishes unexported helpers to other packages as
+	// var FindRoleByName = findRoleByName; such an alias calls its target.
+	for _, f := range files {
+		for alias, target := range funcAliases(f) {
+			if _, ok := decls[target]; ok && !idx.funcs[alias] {
+				idx.funcs[alias] = true
+				idx.plain[alias] = true
+				idx.calls[alias] = []helperCall{{Name: target}}
 			}
 		}
 	}
-
-	// Deduplicate
-	for k, v := range actions {
-		actions[k] = dedupActions(v)
+	for name, d := range decls {
+		if calls := extractSDKCallsWithConnInfo(d.fd); len(calls) > 0 {
+			idx.direct[name] = calls
+		}
+		if helpers := findHelperCalls(d.fd, idx, d.imports); len(helpers) > 0 {
+			idx.calls[name] = helpers
+		}
+		if touchesClient(d.fd) {
+			idx.clients[name] = true
+		}
 	}
-
-	return actions, nil
+	return idx
 }
 
-// extractSDKCalls walks the body of a function and extracts all AWS SDK API
-// calls, distinguishing unconditional calls from those inside conditional
-// blocks (e.g., if d.GetOk("attribute") or d.Get(...)).
-func extractSDKCalls(fd *ast.FuncDecl) []ExtractedAction {
-	if fd.Body == nil {
+// touchesClient reports whether a function obtains an SDK client through an
+// accessor such as meta.(*conns.AWSClient).S3Client(ctx), or receives one as
+// a parameter.
+func touchesClient(fd *ast.FuncDecl) bool {
+	ctx := &walkContext{}
+	bindConnParams(fd.Type, ctx)
+	if len(ctx.conns) > 0 {
+		return true
+	}
+	found := false
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok && clientAccessorService(call) != "" {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// reachesClient reports whether a function, or any function it calls, uses
+// an SDK client. A function that never does, such as a delete that only logs
+// that the resource cannot be destroyed, makes no AWS call by design.
+func (idx *pkgIndex) reachesClient(name string) bool {
+	if r, ok := idx.reach[name]; ok {
+		return r
+	}
+	idx.reach[name] = false // a cycle adds nothing
+	found := idx.clients[name]
+	for _, hc := range idx.calls[name] {
+		if found {
+			break
+		}
+		target := idx
+		if hc.Pkg != "" {
+			if target = idx.others[hc.Pkg]; target == nil {
+				continue
+			}
+		}
+		found = target.reachesClient(hc.Name)
+	}
+	idx.reach[name] = found
+	return found
+}
+
+// funcAliases returns the package-level variables a file sets to a plain
+// identifier, alias → identifier, as in var FindRoleByName = findRoleByName.
+func funcAliases(f *ast.File) map[string]string {
+	out := make(map[string]string)
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok || len(vs.Names) != len(vs.Values) {
+				continue
+			}
+			for i, name := range vs.Names {
+				if ident, ok := vs.Values[i].(*ast.Ident); ok {
+					out[name.Name] = ident.Name
+				}
+			}
+		}
+	}
+	return out
+}
+
+// serviceImports maps the names a file imports provider service packages
+// under to the packages' directory names, e.g. "tfiam" → "iam".
+func serviceImports(f *ast.File) map[string]string {
+	var out map[string]string
+	for _, spec := range f.Imports {
+		path := strings.Trim(spec.Path.Value, `"`)
+		if !strings.HasPrefix(path, servicePackagePrefix) {
+			continue
+		}
+		dir := strings.TrimPrefix(path, servicePackagePrefix)
+		name := dir
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		if out == nil {
+			out = make(map[string]string)
+		}
+		out[name] = dir
+	}
+	return out
+}
+
+// has reports whether the package declares a function or method with this
+// name.
+func (idx *pkgIndex) has(name string) bool {
+	return idx.funcs[name]
+}
+
+// hasPlain reports whether the package declares a function without a receiver
+// with this name, the only kind a bare identifier can name.
+func (idx *pkgIndex) hasPlain(name string) bool {
+	return idx.plain[name]
+}
+
+// resolve collects the SDK calls of a function and of every function it
+// calls, transitively. When a call site sits inside a conditional block (if
+// d.GetOk("attr")), the call-site condition is given to the callee's actions,
+// unless an action already carries a more specific condition of its own. A
+// recursive call contributes nothing beyond what the cycle already resolved.
+func (idx *pkgIndex) resolve(name string) []ExtractedAction {
+	if r, ok := idx.memo[name]; ok {
+		return r
+	}
+	if idx.inProgress[name] {
 		return nil
 	}
+	idx.inProgress[name] = true
+	defer delete(idx.inProgress, name)
 
-	ctx := &walkContext{}
-	obs := &sdkCallObserver{}
-	walkBody(fd.Body, ctx, obs)
-	return obs.actions
+	resolved := append([]ExtractedAction(nil), idx.direct[name]...)
+	for _, hc := range idx.calls[name] {
+		target := idx
+		if hc.Pkg != "" {
+			if target = idx.others[hc.Pkg]; target == nil {
+				continue
+			}
+		}
+		for _, ea := range target.resolve(hc.Name) {
+			if hc.CondReason != "" && ea.Condition == "" {
+				ea.Conditional = true
+				ea.Condition = hc.CondReason
+				ea.ConditionKind = hc.CondKind
+			}
+			resolved = append(resolved, ea)
+		}
+	}
+	resolved = dedupActions(resolved)
+	idx.memo[name] = resolved
+	return resolved
 }
 
 // walkContext is the state the traversal owns: how many conditional blocks
 // deep the traversal is, the attribute name of the guard that put it there,
-// and the connection variable and service currently in scope. Observers read
-// it to label what they find; the traversal restores it when an if-statement
-// ends.
+// and the client variables currently in scope. Observers read it to label
+// what they find; the traversal restores it when a block ends.
 type walkContext struct {
 	condDepth  int           // how many conditional if-blocks deep we are
 	condReason string        // attribute name from the outermost conditional guard
 	condKind   ConditionKind // kind of that guard
-	connVar    string        // connection variable in scope, e.g. "conn"
-	service    string        // AWS service connVar talks to, e.g. "backup"
+
+	// conns maps each client variable in scope to the AWS service it talks
+	// to, e.g. "conn" → "backup". It is copied on write, so restoring a saved
+	// context also restores the scope.
+	conns map[string]string
 
 	// valueGuard is the attribute from the innermost value-comparison guard,
 	// empty when the call is not under one.
 	valueGuard string
 }
 
+// bindConn records that variable name holds a client for service.
+func (c *walkContext) bindConn(name, service string) {
+	m := make(map[string]string, len(c.conns)+1)
+	for k, v := range c.conns {
+		m[k] = v
+	}
+	m[name] = service
+	c.conns = m
+}
+
 // walker observes one traversal of a function body. The traversal owns body
-// walking and conditional tracking; an observer only decides what to do with
-// the call expressions and assignments it is handed, and never sees the
+// walking, conditional tracking and client scope; an observer only decides
+// what to do with the call expressions it is handed, and never sees the
 // recursion itself.
-//
-// Each observer gets its own traversal pass, so an observer that consumes a
-// call expression prunes exactly the subtree it pruned when the traversal was
-// specialised for that observer alone.
 type walker interface {
 	// onCall is called for every call expression the traversal reaches.
 	// Returning true means the observer consumed the node, and the traversal
-	// will not descend into the call's arguments.
+	// will not descend into the call's function or arguments.
 	onCall(call *ast.CallExpr, ctx *walkContext) bool
+}
 
-	// onAssign is called for every assignment statement, before the traversal
-	// descends into its operands.
-	onAssign(assign *ast.AssignStmt, ctx *walkContext)
+// funcRefObserver is a walker that also wants every identifier the traversal
+// reaches as a value, such as a function assigned to a variable or passed as
+// an argument rather than called.
+type funcRefObserver interface {
+	onFuncRef(ident *ast.Ident, ctx *walkContext)
 }
 
 // sdkCallObserver collects the AWS SDK calls the traversal reaches, each tagged
@@ -244,8 +579,8 @@ type sdkCallObserver struct {
 }
 
 func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
-	// SDK API call: conn.MethodName(ctx, ...)
-	action := extractCallAction(call, ctx.connVar, ctx.service)
+	// SDK API call: conn.MethodName(ctx, ...), or a paginator over one.
+	action := extractCallAction(call, ctx.conns)
 	if action == "" {
 		return false
 	}
@@ -259,34 +594,27 @@ func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	return true
 }
 
-func (o *sdkCallObserver) onAssign(assign *ast.AssignStmt, ctx *walkContext) {
-	if svc, conn := findClientAssignment(assign); svc != "" {
-		ctx.service = svc
-		ctx.connVar = conn
-	}
-}
-
-// walkBody is the single AST traversal of this package. It walks statement
-// bodies and tracks conditional context from if-statements that gate on
-// d.GetOk(), d.Get(), or d.HasChange(), reporting call expressions and assignments to obs.
+// walkBody is the single AST traversal of this package. It walks every
+// statement and expression, function literals included: the provider makes
+// most of its retried calls inside the closure it passes to tfresource.Retry*.
+// It tracks conditional context from if-statements that gate on d.GetOk(),
+// d.Get(), or d.HasChange(), binds client variables as they are assigned, and
+// reports call expressions to obs.
 func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 	if node == nil {
 		return
 	}
 
 	switch n := node.(type) {
-	case *ast.BlockStmt:
-		for _, stmt := range n.List {
-			walkBody(stmt, ctx, obs)
-		}
-
-	case *ast.ExprStmt:
-		walkBody(n.X, ctx, obs)
-
 	case *ast.IfStmt:
 		// Save the whole context so nested guards and nested client
 		// assignments cannot leak out of the block.
 		saved := *ctx
+
+		// The init statement and the condition run whether or not the body
+		// does, so they are walked in the enclosing context.
+		walkBody(n.Init, ctx, obs)
+		walkBody(n.Cond, ctx, obs)
 
 		// A guard here is one of three kinds: presence (d.GetOk/d.Get), change
 		// (d.HasChange), or a value comparison. The outermost guard wins as the
@@ -328,10 +656,11 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 		*ctx = saved
 
 	case *ast.AssignStmt:
-		// The observer may install a new connection scope, as in
+		// Install a new connection scope, as in
 		// conn := meta.(*conns.AWSClient).BackupClient(ctx).
-		obs.onAssign(n, ctx)
-		// Walk operands (the right-hand side might hold calls).
+		if svc, conn := findClientAssignment(n); svc != "" {
+			ctx.bindConn(conn, svc)
+		}
 		for _, expr := range n.Lhs {
 			walkBody(expr, ctx, obs)
 		}
@@ -339,55 +668,66 @@ func walkBody(node ast.Node, ctx *walkContext, obs walker) {
 			walkBody(expr, ctx, obs)
 		}
 
-	case *ast.ReturnStmt:
-		for _, expr := range n.Results {
-			walkBody(expr, ctx, obs)
-		}
-
 	case *ast.CallExpr:
 		if obs.onCall(n, ctx) {
 			return
 		}
-		// Walk arguments (recursive calls might contain more calls)
+		// A function called by name was reported by onCall, so only a
+		// computed callee, such as conn.Foo(ctx).Bar, is walked.
+		if _, named := unwrapIndex(n.Fun).(*ast.Ident); !named {
+			walkBody(n.Fun, ctx, obs)
+		}
 		for _, arg := range n.Args {
 			walkBody(arg, ctx, obs)
 		}
 
-	case *ast.ForStmt:
-		walkBody(n.Body, ctx, obs)
-
-	case *ast.RangeStmt:
-		walkBody(n.Body, ctx, obs)
-
-	case *ast.SwitchStmt:
-		walkBody(n.Body, ctx, obs)
-
-	case *ast.CaseClause:
-		for _, stmt := range n.Body {
-			walkBody(stmt, ctx, obs)
+	case *ast.Ident:
+		if o, ok := obs.(funcRefObserver); ok {
+			o.onFuncRef(n, ctx)
 		}
 
-	case *ast.DeferStmt:
-		walkBody(n.Call, ctx, obs)
+	case *ast.SelectorExpr:
+		// The selected name is a field or method, and a bare operand is a
+		// variable or an imported package, so neither refers to a package
+		// function. Only a computed operand is walked.
+		if _, bare := n.X.(*ast.Ident); !bare {
+			walkBody(n.X, ctx, obs)
+		}
 
-	case *ast.GoStmt:
-		walkBody(n.Call, ctx, obs)
+	case *ast.KeyValueExpr:
+		// A composite literal key names a field, not a value.
+		walkBody(n.Value, ctx, obs)
 
-	case *ast.LabeledStmt:
-		walkBody(n.Stmt, ctx, obs)
+	case *ast.CompositeLit:
+		// A nested schema.Resource literal declares a resource rather than
+		// running it: its CRUD bindings are references to functions the
+		// literal does not call.
+		if isSchemaResourceType(n.Type) {
+			return
+		}
+		for _, elt := range n.Elts {
+			walkBody(elt, ctx, obs)
+		}
 
-	case *ast.SendStmt:
-		// Channel send — the value expression is not walked
-
-	case *ast.IncDecStmt:
-		// Increment/decrement — nothing to report
-
-	case *ast.BranchStmt:
-		// break, continue, goto
+	case *ast.FuncLit:
+		// A closure runs in the context it is written in, but client
+		// variables it binds stay inside it.
+		saved := *ctx
+		bindConnParams(n.Type, ctx)
+		walkBody(n.Body, ctx, obs)
+		*ctx = saved
 
 	default:
-		// Ident, Literal, FuncLit, etc. — nothing to report. Anonymous
-		// function bodies are deliberately not walked.
+		// Every other node: walk its direct children in order.
+		ast.Inspect(node, func(child ast.Node) bool {
+			if child == node {
+				return true
+			}
+			if child != nil {
+				walkBody(child, ctx, obs)
+			}
+			return false
+		})
 	}
 }
 
@@ -685,132 +1025,120 @@ func localAttrBindings(init ast.Stmt) map[string]string {
 //
 // Returns (service, connVar) where service is "backup" and connVar is "conn".
 func findClientAssignment(stmt *ast.AssignStmt) (string, string) {
-	if len(stmt.Lhs) != 1 || stmt.Tok != token.DEFINE {
+	if len(stmt.Lhs) != 1 || len(stmt.Rhs) != 1 || stmt.Tok != token.DEFINE {
 		return "", ""
 	}
-
 	lhsIdent, ok := stmt.Lhs[0].(*ast.Ident)
 	if !ok {
 		return "", ""
 	}
-
-	if len(stmt.Rhs) != 1 {
+	service := clientAccessorService(stmt.Rhs[0])
+	if service == "" {
 		return "", ""
 	}
-
-	// Unwrap the chain: meta.(*conns.AWSClient).BackupClient(ctx)
-	call, ok := stmt.Rhs[0].(*ast.CallExpr)
-	if !ok {
-		return "", ""
-	}
-
-	// The method call itself: .BackupClient(ctx)
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return "", ""
-	}
-
-	clientMethod := sel.Sel.Name // e.g., "BackupClient"
-	if !strings.HasSuffix(clientMethod, "Client") {
-		return "", ""
-	}
-
-	service := clientMethodToService(clientMethod)
 	return service, lhsIdent.Name
 }
 
-// extractCallAction checks if a call expression is an AWS SDK API call on the
-// connection variable, e.g., conn.CreateBackupVault(ctx, input).
-// Returns the IAM action string (e.g., "backup:CreateBackupVault") or "".
-func extractCallAction(call *ast.CallExpr, connVar string, service string) string {
-	if connVar == "" || service == "" {
+// clientAccessorService returns the service of a client accessor call such as
+// meta.(*conns.AWSClient).S3Client(ctx) or awsClient.EC2Client(ctx), or "" when
+// the expression is not one.
+func clientAccessorService(expr ast.Expr) string {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
 		return ""
 	}
-
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return ""
 	}
-
-	ident, ok := sel.X.(*ast.Ident)
-	if !ok {
+	if !isClientAccessor(sel.Sel.Name) {
 		return ""
 	}
+	return clientMethodToService(sel.Sel.Name)
+}
 
-	if ident.Name != connVar {
+// isClientAccessor reports whether a method name reads like an AWSClient
+// accessor for one service's SDK client, e.g. "BackupClient".
+func isClientAccessor(name string) bool {
+	if !strings.HasSuffix(name, "Client") || len(name) == len("Client") {
+		return false
+	}
+	if name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	// A constructor such as s3.NewPresignClient builds a client from
+	// another rather than reading one off the AWSClient.
+	if strings.HasPrefix(name, "New") || name == "HTTPClient" {
+		return false
+	}
+	return true
+}
+
+// clientService returns the service an expression's client talks to: a
+// client variable in scope, or an inline client accessor call.
+func clientService(expr ast.Expr, conns map[string]string) string {
+	if ident, ok := expr.(*ast.Ident); ok {
+		return conns[ident.Name]
+	}
+	return clientAccessorService(expr)
+}
+
+// extractCallAction checks if a call expression is an AWS SDK API call on a
+// client, e.g., conn.CreateBackupVault(ctx, input), or builds a paginator over
+// one, e.g., cloudwatchlogs.NewDescribeLogGroupsPaginator(conn, input).
+// Returns the IAM action string (e.g., "backup:CreateBackupVault") or "".
+func extractCallAction(call *ast.CallExpr, conns map[string]string) string {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
 		return ""
 	}
 
 	method := sel.Sel.Name // e.g., "CreateBackupVault"
-	if isAWSMethod(method) {
-		return sdKMethodToIAMAction(method, service)
+	if service := clientService(sel.X, conns); service != "" {
+		if isAWSMethod(method) {
+			return sdKMethodToIAMAction(method, service)
+		}
+		return ""
 	}
 
+	// A paginator calls the operation it is named after on every page.
+	if op := paginatorOperation(method); op != "" && len(call.Args) > 0 {
+		if service := clientService(call.Args[0], conns); service != "" {
+			return sdKMethodToIAMAction(op, service)
+		}
+	}
+
+	// The S3 feature manager makes S3 calls with the client it is handed.
+	if op, ok := s3ManagerCalls[method]; ok {
+		for _, arg := range call.Args {
+			if clientService(arg, conns) == "s3" {
+				return sdKMethodToIAMAction(op, "s3")
+			}
+		}
+	}
 	return ""
 }
 
-// findReturnedResourceCalls finds resource function calls in return
-// statements, like:
-//
-//	return append(diags, resourceVaultRead(ctx, d, meta)...)
-//
-// Returns the names of called resource functions (e.g., ["resourceVaultRead"]).
-func findReturnedResourceCalls(fd *ast.FuncDecl) []string {
-	if fd.Body == nil {
-		return nil
+// s3ManagerCalls maps the S3 feature manager functions
+// (github.com/aws/aws-sdk-go-v2/feature/s3/manager) to the S3 operation they
+// make. An upload needs s3:PutObject whether it goes in one part or many.
+var s3ManagerCalls = map[string]string{
+	"NewUploader":     "PutObject",
+	"NewDownloader":   "GetObject",
+	"GetBucketRegion": "HeadBucket",
+}
+
+// paginatorOperation returns the operation a paginator constructor pages
+// through, "DescribeLogGroups" for "NewDescribeLogGroupsPaginator", or "".
+func paginatorOperation(name string) string {
+	if !strings.HasPrefix(name, "New") || !strings.HasSuffix(name, "Paginator") {
+		return ""
 	}
-
-	var calls []string
-
-	ast.Inspect(fd.Body, func(n ast.Node) bool {
-		ret, ok := n.(*ast.ReturnStmt)
-		if !ok {
-			return true
-		}
-
-		for _, expr := range ret.Results {
-			calls = append(calls, extractResourceFuncCalls(expr)...)
-		}
-		return true
-	})
-
-	return calls
-}
-
-// extractResourceFuncCalls extracts resource function names from an expression.
-// e.g., from "append(diags, resourceVaultRead(ctx, d, meta)...)" returns ["resourceVaultRead"].
-func extractResourceFuncCalls(expr ast.Expr) []string {
-	var calls []string
-
-	ast.Inspect(expr, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		switch fn := call.Fun.(type) {
-		case *ast.Ident:
-			if isResourceFunc(fn.Name) {
-				calls = append(calls, fn.Name)
-			}
-		case *ast.SelectorExpr:
-			if isResourceFunc(fn.Sel.Name) {
-				calls = append(calls, fn.Sel.Name)
-			}
-		}
-		return true
-	})
-
-	return calls
-}
-
-// isResourceFunc checks if a function name looks like a resource CRUD function.
-func isResourceFunc(name string) bool {
-	return strings.HasPrefix(name, "resource") &&
-		(strings.HasSuffix(name, "Create") ||
-			strings.HasSuffix(name, "Read") ||
-			strings.HasSuffix(name, "Update") ||
-			strings.HasSuffix(name, "Delete") ||
-			strings.HasSuffix(name, "Import"))
+	op := strings.TrimSuffix(strings.TrimPrefix(name, "New"), "Paginator")
+	if !isAWSMethod(op) {
+		return ""
+	}
+	return op
 }
 
 // isAWSMethod checks if a method name looks like an AWS SDK API method
@@ -823,7 +1151,8 @@ func isAWSMethod(name string) bool {
 	if name[0] < 'A' || name[0] > 'Z' {
 		return false
 	}
-	return true
+	// Options returns the client's configuration; it calls no API.
+	return name != "Options"
 }
 
 // sdKMethodToIAMAction converts an AWS SDK method name and service to an IAM
@@ -1010,58 +1339,40 @@ func dedupActions(actions []ExtractedAction) []ExtractedAction {
 }
 
 // extractSDKCallsWithConnInfo walks the body of a function and extracts all AWS
-// SDK API calls, detecting the connection variable and service from either a
-// client assignment (conn := meta.(*conns.AWSClient).XxxClient) or a typed
-// parameter (func helper(ctx, conn *iam.Client)).
-// Returns (actions, connVar, service).
-func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) ([]ExtractedAction, string, string) {
+// SDK API calls. Clients come from client assignments
+// (conn := meta.(*conns.AWSClient).XxxClient(ctx)), from typed parameters
+// (func helper(ctx, conn *iam.Client)), and from inline accessor calls.
+func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) []ExtractedAction {
 	if fd.Body == nil {
-		return nil, "", ""
+		return nil
 	}
-
-	state := &walkContext{}
+	ctx := &walkContext{}
+	bindConnParams(fd.Type, ctx)
 	obs := &sdkCallObserver{}
-
-	// First, check for conn in function parameters (helper functions)
-	findConnParam(fd, &state.connVar, &state.service)
-
-	// Then walk the body for client assignments and SDK calls
-	walkBody(fd.Body, state, obs)
-
-	return dedupActions(obs.actions), state.connVar, state.service
+	walkBody(fd.Body, ctx, obs)
+	return dedupActions(obs.actions)
 }
 
-// findConnParam checks function parameters for a conn variable with a typed
-// SDK client (e.g., conn *iam.Client, conn *backup.Client).
-// Sets connVar and service if found.
-func findConnParam(fd *ast.FuncDecl, connVar *string, service *string) {
-	if fd.Type.Params == nil {
+// bindConnParams binds every parameter typed as an SDK client, such as
+// conn *iam.Client or svc *backup.Client.
+func bindConnParams(ft *ast.FuncType, ctx *walkContext) {
+	if ft == nil || ft.Params == nil {
 		return
 	}
-	for _, param := range fd.Type.Params.List {
+	for _, param := range ft.Params.List {
+		svc := paramTypeToService(param.Type)
+		if svc == "" {
+			continue
+		}
 		for _, name := range param.Names {
-			if isConnParamName(name.Name) {
-				if svc := paramTypeToService(param.Type); svc != "" {
-					*connVar = name.Name
-					*service = svc
-					return
-				}
-			}
+			ctx.bindConn(name.Name, svc)
 		}
 	}
 }
 
-// isConnParamName checks if a parameter name looks like a connection variable.
-func isConnParamName(name string) bool {
-	switch name {
-	case "conn", "c", "client":
-		return true
-	}
-	return false
-}
-
 // paramTypeToService extracts the AWS service name from a parameter type
 // like *iam.Client -> iam, *backup.Client -> backup, *dynamodb.Client -> dynamodb.
+// Any type other than a pointer to a package's Client yields "".
 // Falls back to a lookup table for package names that differ from IAM service names
 // (e.g., *cloudwatchlogs.Client -> "logs", not "cloudwatchlogs").
 func paramTypeToService(expr ast.Expr) string {
@@ -1070,7 +1381,7 @@ func paramTypeToService(expr ast.Expr) string {
 		return ""
 	}
 	sel, ok := star.X.(*ast.SelectorExpr)
-	if !ok {
+	if !ok || sel.Sel.Name != "Client" {
 		return ""
 	}
 	ident, ok := sel.X.(*ast.Ident)
@@ -1093,143 +1404,104 @@ func paramTypeToService(expr ast.Expr) string {
 // are listed.
 func sdkPackageToIAMService(pkg string) string {
 	pkgToService := map[string]string{
-		"cloudwatchlogs":         "logs",
-		"eventbridge":            "events", // EventBridge authorizes under its CloudWatch Events IAM prefix
-		"s3control":              "s3",
-		"elasticloadbalancingv2": "elasticloadbalancing",
-		"sfn":                    "states",
-		"mobiletargeting":        "mobiletargeting", // pinpoint → mobiletargeting
+		"cloudwatchlogs":          "logs",
+		"eventbridge":             "events", // EventBridge authorizes under its CloudWatch Events IAM prefix
+		"s3control":               "s3",
+		"elasticloadbalancingv2":  "elasticloadbalancing",
+		"sfn":                     "states",
+		"mobiletargeting":         "mobiletargeting", // pinpoint → mobiletargeting
+		"cognitoidentityprovider": "cognito-idp",
+		"lexmodelbuildingservice": "lex",
 	}
 	return pkgToService[pkg]
 }
 
-// findHelperCalls finds all helper function calls (functions defined in the same
-// file that use the given connVar as an argument) within a function body,
-// tracking the conditional context at each call site.
-func findHelperCalls(fd *ast.FuncDecl, connVar string, f *ast.File) []helperCall {
-	if fd.Body == nil || connVar == "" {
+// findHelperCalls finds the calls a function body makes to other functions of
+// the package, or to functions of the service packages in imports, tracking
+// the conditional context at each call site.
+func findHelperCalls(fd *ast.FuncDecl, idx *pkgIndex, imports map[string]string) []helperCall {
+	if fd.Body == nil {
 		return nil
 	}
-
-	obs := &helperCallObserver{
-		connVar: connVar,
-		f:       f,
-	}
-	walkBody(fd.Body, &walkContext{}, obs)
+	ctx := &walkContext{}
+	bindConnParams(fd.Type, ctx)
+	obs := &helperCallObserver{idx: idx, imports: imports}
+	walkBody(fd.Body, ctx, obs)
 	return obs.helpers
 }
 
-// helperCallObserver collects the calls to functions defined in the same file
-// that receive the connection variable, each tagged with the conditional reason
-// in force at the call site (e.g. removeSecretReplicas(ctx, conn, id) reached
-// from inside if _, ok := d.GetOk("replica"); ok).
+// helperCallObserver collects the calls to functions of the same package, each
+// tagged with the conditional reason in force at the call site (e.g.
+// removeSecretReplicas(ctx, conn, id) reached from inside
+// if _, ok := d.GetOk("replica"); ok).
 type helperCallObserver struct {
-	connVar string
-	f       *ast.File
+	idx     *pkgIndex
+	imports map[string]string // import name → service package directory
 	helpers []helperCall
 }
 
+// onCall records a helper call but never consumes it: its arguments may hold
+// further helper calls or closures that make some.
 func (o *helperCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
-	hc := findHelperCall(call, o.connVar, o.f, ctx.condReason, ctx.condKind)
-	if hc == nil {
-		return false
-	}
-	o.helpers = append(o.helpers, *hc)
-	return true
-}
-
-// onAssign is a no-op: helper discovery only cares about call sites, but the
-// traversal reports assignments to every observer.
-func (o *helperCallObserver) onAssign(*ast.AssignStmt, *walkContext) {}
-
-// findHelperCall checks if a CallExpr is a call to a helper function (defined
-// in the same file) that passes connVar. If so, returns a helperCall populated
-// with the current condReason.
-func findHelperCall(call *ast.CallExpr, connVar string, f *ast.File, condReason string, condKind ConditionKind) *helperCall {
-	fnName := ""
-	switch fn := call.Fun.(type) {
-	case *ast.Ident:
-		fnName = fn.Name
-	case *ast.SelectorExpr:
-		fnName = fn.Sel.Name
-	default:
-		return nil
-	}
-
-	if !funcDefinedInFile(f, fnName) {
-		return nil
-	}
-
-	for _, arg := range call.Args {
-		if ident, ok := arg.(*ast.Ident); ok && ident.Name == connVar {
-			return &helperCall{Name: fnName, CondReason: condReason, CondKind: condKind}
-		}
-	}
-
-	return nil
-}
-
-// funcDefinedInFile checks if a function with the given name is declared in the
-// same Go source file.
-func funcDefinedInFile(f *ast.File, name string) bool {
-	for _, decl := range f.Decls {
-		fd, ok := decl.(*ast.FuncDecl)
-		if ok && fd.Name.Name == name {
-			return true
-		}
+	if pkg, name := o.callee(call, ctx); name != "" {
+		o.record(pkg, name, ctx)
 	}
 	return false
 }
 
-// resolveTransitiveExtracted recursively collects SDK calls from a function and
-// all helpers it transitively calls. When a helper is called at a call site
-// inside a conditional block (if d.GetOk("attr")), the call-site condition is
-// propagated to the helper's resolved actions — unless the helper already has
-// a more specific condition on the action itself.
-// Uses a depth limit (5) and a visited set to prevent infinite recursion.
-func resolveTransitiveExtracted(funcName string, allSdkCalls map[string][]ExtractedAction, callGraph map[string][]helperCall, visited map[string]bool, depth int) []ExtractedAction {
-	const maxHelperDepth = 5
-	if depth > maxHelperDepth || visited[funcName] {
-		return nil
+// onFuncRef records a package function used as a value, as in
+// routeFinder = findRouteByIPv4Destination: the code calls it later.
+func (o *helperCallObserver) onFuncRef(ident *ast.Ident, ctx *walkContext) {
+	if o.idx.hasPlain(ident.Name) {
+		o.record("", ident.Name, ctx)
 	}
-	visited[funcName] = true
+}
 
-	var resolved []ExtractedAction
+func (o *helperCallObserver) record(pkg, name string, ctx *walkContext) {
+	o.helpers = append(o.helpers, helperCall{Pkg: pkg, Name: name, CondReason: ctx.condReason, CondKind: ctx.condKind})
+}
 
-	// Include this function's own SDK calls
-	if calls, ok := allSdkCalls[funcName]; ok {
-		resolved = append(resolved, calls...)
-	}
-
-	// Follow helper calls
-	if helpers, ok := callGraph[funcName]; ok {
-		for _, hc := range helpers {
-			// Copy visited map to isolate each branch
-			branchVisited := make(map[string]bool)
-			for k := range visited {
-				branchVisited[k] = true
+// callee returns the function a call invokes, with the service package it
+// lives in ("" for this one), or "" for the name. A call by plain name
+// (findBucket(...), or a generic findX[T](...)) counts when the package
+// declares it, and so does an exported function of an imported service
+// package (tfiam.FindRoleByName(...)). Another selector call (r.findX(...))
+// counts only when it hands over an SDK client, since the selector may name
+// some other package.
+func (o *helperCallObserver) callee(call *ast.CallExpr, ctx *walkContext) (string, string) {
+	switch fn := unwrapIndex(call.Fun).(type) {
+	case *ast.Ident:
+		if o.idx.hasPlain(fn.Name) {
+			return "", fn.Name
+		}
+	case *ast.SelectorExpr:
+		if x, ok := fn.X.(*ast.Ident); ok {
+			if pkg, ok := o.imports[x.Name]; ok {
+				return pkg, fn.Sel.Name
 			}
-			helperActions := resolveTransitiveExtracted(hc.Name, allSdkCalls, callGraph, branchVisited, depth+1)
-
-			// Propagate call-site condition to helper-resolved actions.
-			// Do NOT override a more specific condition the helper itself
-			// carries (i.e., if the helper's action already has a non-empty
-			// Condition, keep it — it's more precise).
-			if hc.CondReason != "" {
-				for i := range helperActions {
-					if helperActions[i].Condition == "" {
-						helperActions[i].Conditional = true
-						helperActions[i].Condition = hc.CondReason
-						helperActions[i].ConditionKind = hc.CondKind
-					}
-				}
+		}
+		if !o.idx.has(fn.Sel.Name) || clientService(fn.X, ctx.conns) != "" {
+			return "", ""
+		}
+		for _, arg := range call.Args {
+			if clientService(arg, ctx.conns) != "" {
+				return "", fn.Sel.Name
 			}
-
-			resolved = append(resolved, helperActions...)
 		}
 	}
+	return "", ""
+}
 
-	return resolved
+// unwrapIndex strips the type arguments of a generic function reference, so
+// findX[T] reads as findX.
+func unwrapIndex(expr ast.Expr) ast.Expr {
+	switch e := expr.(type) {
+	case *ast.IndexExpr:
+		return e.X
+	case *ast.IndexListExpr:
+		return e.X
+	}
+	return expr
 }
 
 // extractGetOkAttribute checks if an expression is d.GetOk("attr") or

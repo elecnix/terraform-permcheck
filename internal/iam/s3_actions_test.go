@@ -21,12 +21,14 @@ const (
 )
 
 // s3RequiredActions lists the S3 actions that stay [required]: the bucket's
-// own lifecycle, its ACL, and the object-level calls of aws_s3_bucket_object.
+// own lifecycle and location, its ACL, and the object-level calls of
+// aws_s3_bucket_object.
 // Every other S3 action either side emits is an optional bucket feature.
 var s3RequiredActions = map[string]bool{
 	"s3:CreateBucket":       true,
 	"s3:DeleteBucket":       true,
 	"s3:HeadBucket":         true,
+	"s3:GetBucketLocation":  true,
 	"s3:ListBucket":         true,
 	"s3:ListAllMyBuckets":   true,
 	"s3:GetBucketAcl":       true,

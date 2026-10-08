@@ -19,6 +19,12 @@ type Schema struct {
 	// compared by value, not by presence (op → action → true). The attribute
 	// carries a default, so the call only runs when the author configured it.
 	ValueConditional map[string]map[string]bool
+
+	// Incomplete names the operations whose permissions the provider could
+	// not fully determine, such as a create in which the provider-source
+	// parser found no call that creates anything. ChainProvider merges in a
+	// later provider's permissions for these operations.
+	Incomplete map[string]bool
 }
 
 // GetPermissions returns the permission map (implements iam.SchemaLike).
@@ -75,15 +81,114 @@ func (c *ChainProvider) Name() string {
 	return "chain"
 }
 
-// Resolve tries each provider in order, returning the first successful result.
+// Resolve tries each provider in order and returns the first successful
+// result. When that result marks operations incomplete, each later provider
+// that knows the type adds its actions for those operations, so a parse that
+// missed a call cannot report it as not needed.
 func (c *ChainProvider) Resolve(tfType string) (*Schema, error) {
 	var lastErr error
-	for _, p := range c.providers {
+	for i, p := range c.providers {
 		schema, err := p.Resolve(tfType)
 		if err == nil {
-			return schema, nil
+			return c.completeFrom(schema, tfType, c.providers[i+1:]), nil
 		}
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+// completeFrom fills the incomplete operations of schema from the first later
+// provider that knows the type and has actions for them. It returns schema
+// itself when nothing needs or can take filling, and a merged copy otherwise.
+func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provider) *Schema {
+	merged := schema
+	for _, p := range rest {
+		if len(merged.Incomplete) == 0 {
+			break
+		}
+		fallback, err := p.Resolve(tfType)
+		if err != nil {
+			continue
+		}
+		for op := range merged.Incomplete {
+			if len(fallback.Permissions[op]) == 0 {
+				continue
+			}
+			if merged == schema {
+				merged = schema.clone()
+			}
+			merged.mergeOperation(op, fallback)
+		}
+	}
+	return merged
+}
+
+// clone copies a schema deeply enough that merging into the copy leaves the
+// original, which a provider may cache, unchanged.
+func (s *Schema) clone() *Schema {
+	out := *s
+	out.Permissions = make(map[string][]string, len(s.Permissions))
+	for op, actions := range s.Permissions {
+		out.Permissions[op] = append([]string(nil), actions...)
+	}
+	out.Conditional = cloneNested(s.Conditional)
+	out.ChangeGated = cloneNested(s.ChangeGated)
+	out.ValueConditional = cloneNested(s.ValueConditional)
+	out.Incomplete = make(map[string]bool, len(s.Incomplete))
+	for op, v := range s.Incomplete {
+		out.Incomplete[op] = v
+	}
+	return &out
+}
+
+// mergeOperation adds the fallback's actions for op that s lacks, with the
+// gates the fallback puts on them, and marks op complete. Actions s already
+// has keep their own gates.
+func (s *Schema) mergeOperation(op string, fallback *Schema) {
+	have := make(map[string]bool, len(s.Permissions[op]))
+	for _, a := range s.Permissions[op] {
+		have[a] = true
+	}
+	for _, a := range fallback.Permissions[op] {
+		if have[a] {
+			continue
+		}
+		have[a] = true
+		s.Permissions[op] = append(s.Permissions[op], a)
+		copyGate(&s.Conditional, fallback.Conditional, op, a)
+		copyGate(&s.ChangeGated, fallback.ChangeGated, op, a)
+		copyGate(&s.ValueConditional, fallback.ValueConditional, op, a)
+	}
+	delete(s.Incomplete, op)
+}
+
+// cloneNested copies a two-level op → action → value map.
+func cloneNested[V any](m map[string]map[string]V) map[string]map[string]V {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]map[string]V, len(m))
+	for op, inner := range m {
+		cp := make(map[string]V, len(inner))
+		for k, v := range inner {
+			cp[k] = v
+		}
+		out[op] = cp
+	}
+	return out
+}
+
+// copyGate copies the gate src holds for op and action, if any, into dst.
+func copyGate[V any](dst *map[string]map[string]V, src map[string]map[string]V, op, action string) {
+	v, ok := src[op][action]
+	if !ok {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]map[string]V)
+	}
+	if (*dst)[op] == nil {
+		(*dst)[op] = make(map[string]V)
+	}
+	(*dst)[op][action] = v
 }

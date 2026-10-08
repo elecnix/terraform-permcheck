@@ -196,6 +196,13 @@ func resourceThingCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 package s3`,
 			want: "aws_s3_bucket_accelerate_configuration",
 		},
+		{
+			// Provider v5.90.0 drops the closing quote on a few annotations.
+			name: "annotation missing its closing quote",
+			src: `// @SDKResource("aws_vpc_ipam_preview_next_cidr, name="IPAM Preview Next CIDR")
+package ec2`,
+			want: "aws_vpc_ipam_preview_next_cidr",
+		},
 	}
 
 	for _, tt := range tests {

@@ -61,7 +61,7 @@ func ExtractTagActions(src string) (TagActions, error) {
 			continue
 		}
 		if fd.Name.Name == "updateTags" || fd.Name.Name == "createTags" {
-			calls, _, _ := extractSDKCallsWithConnInfo(fd)
+			calls := extractSDKCallsWithConnInfo(fd)
 			for _, ea := range calls {
 				if isRemoveTagAction(ea.Action) {
 					ta.Remove = dedup(append(ta.Remove, ea.Action))
@@ -71,7 +71,7 @@ func ExtractTagActions(src string) (TagActions, error) {
 			}
 		}
 		if fd.Name.Name == "listTags" {
-			calls, _, _ := extractSDKCallsWithConnInfo(fd)
+			calls := extractSDKCallsWithConnInfo(fd)
 			for _, ea := range calls {
 				ta.List = dedup(append(ta.List, ea.Action))
 			}

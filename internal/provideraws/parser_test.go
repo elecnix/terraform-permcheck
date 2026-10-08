@@ -839,9 +839,8 @@ func removeSecretReplicas(ctx context.Context, conn *secretsmanager.Client, id s
 }
 
 // traversalCoverageSrc exercises every node type the AST traversal knows how
-// to descend into, plus the shapes the traversal deliberately skips. Both
-// walkers (SDK call extraction and helper call discovery) run over this same
-// source in the tests below, so the expectations pin one traversal's behaviour
+// to descend into. Both walkers (SDK call extraction and helper call
+// discovery) run over this same source in the tests below, so the expectations pin one traversal's behaviour
 // for both observers at once.
 const traversalCoverageSrc = `package walk
 
@@ -887,7 +886,7 @@ func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) d
 		conn.DescribeBackupVault(ctx, nil)
 	}
 
-	// ForStmt body is walked; the init statement is not.
+	// ForStmt init, condition, post and body are all walked.
 	for i := 0; i < 3; i++ {
 		conn.ListTags(ctx, nil)
 	}
@@ -895,7 +894,7 @@ func resourceWalkCreate(ctx context.Context, d *schema.ResourceData, meta any) d
 		_ = i
 	}
 
-	// RangeStmt body is walked; the range expression is not.
+	// RangeStmt range expression and body are both walked.
 	for _, m := range modes {
 		if m == "a" {
 			conn.ListTagsForResource(ctx, nil)
@@ -931,10 +930,10 @@ outer:
 	// Call arguments are walked when the outer call is not an SDK call.
 	_ = wrapError(conn.DescribeBackupVaultAccountSettings(ctx, nil))
 
-	// SendStmt is not walked.
+	// SendStmt values are walked.
 	ch <- conn.ListBackupVaults(ctx, nil)
 
-	// Anonymous function bodies are not walked.
+	// Anonymous function bodies are walked.
 	_ = func() { conn.ListTagsForResource(ctx, nil) }
 
 	// A call to a file-local helper; the helper's own SDK calls are resolved
@@ -964,8 +963,8 @@ func wrapError(err error) error {
 `
 
 // TestParseResourceFileStructured_TraversalCoverage pins the exact actions the
-// traversal reports for the SDK-call observer, including which shapes are
-// deliberately not descended into.
+// traversal reports for the SDK-call observer. Every statement and expression
+// is descended into, function literals included.
 func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 	actions, err := ParseResourceFileStructured(traversalCoverageSrc, "aws_backup_vault", "Walk")
 	if err != nil {
@@ -982,7 +981,9 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 		{Action: "backup:DescribeCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
 		{Action: "backup:DescribeBackupVault"},
 		{Action: "backup:ListTags"},
+		{Action: "backup:ListBackupPlanTemplates"},
 		{Action: "backup:ListTagsForResource"},
+		{Action: "backup:ListProtectedPlanTemplates"},
 		{Action: "backup:PutBackupVaultNotification"},
 		{Action: "backup:GetBackupVaultNotification"},
 		{Action: "backup:ListRecoveryPointsByBackupVault"},
@@ -990,6 +991,7 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 		{Action: "backup:DescribeRegionSettings"},
 		{Action: "backup:DescribeGlobalSettings"},
 		{Action: "backup:DescribeBackupVaultAccountSettings"},
+		{Action: "backup:ListBackupVaults"},
 		{Action: "backup:GetBackupVaultAccessPolicy"},
 		{Action: "backup:GetBackupVault"},
 	}
@@ -1011,11 +1013,10 @@ func formatActions(actions []ExtractedAction) string {
 	return b.String()
 }
 
-// TestWalkSkipsAnonymousFunctionBodies documents the limitation that the
-// traversal does not descend into anonymous function bodies, such as the
-// closure passed to tfresource.RetryWhen. SDK calls made inside such a closure
-// are not reported.
-func TestWalkSkipsAnonymousFunctionBodies(t *testing.T) {
+// TestWalkReportsCallsInAnonymousFunctionBodies checks that SDK calls made
+// inside a closure, such as the one passed to tfresource.RetryWhen, are
+// reported. The provider makes most of its retried calls this way.
+func TestWalkReportsCallsInAnonymousFunctionBodies(t *testing.T) {
 	src := `package walk
 
 func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
@@ -1034,8 +1035,9 @@ func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	if got := actions["create"]; len(got) != 0 {
-		t.Errorf("expected no actions from inside the anonymous function body, got %s", formatActions(got))
+	want := []ExtractedAction{{Action: "backup:CreateBackupVault"}}
+	if got := actions["create"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("create actions = %s, want %s", formatActions(got), formatActions(want))
 	}
 }
 
@@ -1088,10 +1090,11 @@ outer:
 	defer helperDefer(ctx, conn)
 	go helperGo(ctx, conn)
 
-	// The outer call is not a helper call, so its arguments are walked.
+	// A package function counts as a helper whether or not it receives conn,
+	// and its arguments are walked too.
 	helperOuter(wrapError(helperInner(ctx, conn)))
 
-	// Send statements and anonymous function bodies are not walked.
+	// Send statements and anonymous function bodies are walked.
 	ch <- helperSend(ctx, conn)
 	_ = func() { helperFuncLit(ctx, conn) }
 
@@ -1150,13 +1153,14 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 		{Name: "helperLabeled"},
 		{Name: "helperDefer"},
 		{Name: "helperGo"},
-		// helperOuter is defined in the file but does not receive conn, so it
-		// is not a helper call; its arguments are still walked.
+		{Name: "helperOuter"},
 		{Name: "helperInner"},
+		{Name: "helperSend"},
+		{Name: "helperFuncLit"},
 		{Name: "helperReturned"},
 	}
 
-	got := findHelperCalls(fd, "conn", f)
+	got := findHelperCalls(fd, newPkgIndex([]*ast.File{f}), nil)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("helper calls mismatch\n got: %+v\nwant: %+v", got, want)
 	}
