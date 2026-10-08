@@ -104,28 +104,12 @@ func (r crossServiceRule) target(rc *plan.ResourceChange, set *changeSet) (map[s
 	}
 	var targets [][]string
 	for _, typ := range types {
-		for _, c := range referencedChanges(rc, set, r.arnAttribute, typ) {
-			forms := plannedARN(c, r.targetTypes[typ].arnPatterns)
-			if forms == nil {
-				return services, nil
-			}
-			targets = append(targets, forms)
-		}
+		derive := r.targetTypes[typ].arnPatterns
+		targets = append(targets, attributeTargets(rc, set, r.arnAttribute, typ, func(c *plan.ResourceChange) []string {
+			return plannedARN(c, derive)
+		})...)
 	}
 	return services, targets
-}
-
-// plannedARN returns the ARN patterns of a planned resource: its arn when the
-// plan knows it, or what derive builds from its known attributes. It returns
-// nil when neither is known.
-func plannedARN(c *plan.ResourceChange, derive func(*plan.ResourceChange) []string) []string {
-	if arn := c.AttributeValues["arn"]; isARN(arn) {
-		return []string{arn}
-	}
-	if derive == nil {
-		return nil
-	}
-	return derive(c)
 }
 
 // referencedType returns the resource type a reference names, and whether it
@@ -142,39 +126,4 @@ func referencedType(ref string) (typ string, data, ok bool) {
 		}
 	}
 	return typ, data, typ != ""
-}
-
-// albARNPatterns derives the ARN pattern of a planned application load
-// balancer from its name. AWS appends an ID it assigns, so the last segment
-// is a wildcard.
-func albARNPatterns(lb *plan.ResourceChange) []string {
-	name := lb.AttributeValues["name"]
-	if name == "" {
-		return nil
-	}
-	return []string{"arn:*:elasticloadbalancing:*:*:loadbalancer/app/" + name + "/*"}
-}
-
-// apiStageARNPatterns derives the ARN pattern of a planned API Gateway REST
-// stage from its API ID and stage name.
-func apiStageARNPatterns(stage *plan.ResourceChange) []string {
-	api, name := stage.AttributeValues["rest_api_id"], stage.AttributeValues["stage_name"]
-	if api == "" || name == "" {
-		return nil
-	}
-	return []string{"arn:*:apigateway:*::/restapis/" + api + "/stages/" + name}
-}
-
-// arnService extracts the service prefix from an AWS ARN
-// (arn:partition:service:region:account:resource). Returns "" when the string
-// is empty or not a well-formed ARN.
-func arnService(arn string) string {
-	if arn == "" {
-		return ""
-	}
-	parts := strings.SplitN(arn, ":", 6)
-	if len(parts) < 3 || parts[0] != "arn" || parts[2] == "" {
-		return ""
-	}
-	return parts[2]
 }

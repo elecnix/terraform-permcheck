@@ -67,33 +67,5 @@ func passesRole(rc *plan.ResourceChange, attr string) bool {
 // reference to managed aws_iam_role instances whose names are known. Each
 // role is one target.
 func roleTargets(rc *plan.ResourceChange, attr string, set *changeSet) [][]string {
-	if v := rc.AttributeValues[attr]; v != "" {
-		if isARN(v) {
-			return [][]string{{v}}
-		}
-		return nil
-	}
-	var targets [][]string
-	for _, c := range referencedChanges(rc, set, attr, "aws_iam_role") {
-		if forms := roleARNPatterns(c); forms != nil {
-			targets = append(targets, forms)
-		}
-	}
-	return targets
-}
-
-// roleARNPatterns builds the ARN patterns of a planned role from its path and
-// name: role/<path><name>, where the path starts and ends with a slash. When
-// the path is unknown, the role may sit at the root or under any path. It
-// returns nil when the name is unknown.
-func roleARNPatterns(role *plan.ResourceChange) []string {
-	name := role.AttributeValues["name"]
-	if name == "" {
-		return nil
-	}
-	const prefix = "arn:*:iam::*:role"
-	if path := role.AttributeValues["path"]; path != "" {
-		return []string{prefix + path + name}
-	}
-	return []string{prefix + "/" + name, prefix + "/*/" + name}
+	return attributeTargets(rc, set, attr, "aws_iam_role", roleARNPatterns)
 }

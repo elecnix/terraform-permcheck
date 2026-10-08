@@ -51,6 +51,25 @@ func referencedChanges(rc *plan.ResourceChange, set *changeSet, attr, resType st
 	return out
 }
 
+// attributeTargets returns the resources that attribute attr of rc names,
+// one list of ARN patterns per resource. A literal ARN in attr is the one
+// target. Otherwise each planned resource of type resType that attr
+// references is a target, with the patterns arnPatterns builds from it. A
+// referenced resource whose patterns are unknown is left out, so the caller
+// checks only what the plan shows.
+func attributeTargets(rc *plan.ResourceChange, set *changeSet, attr, resType string, arnPatterns func(*plan.ResourceChange) []string) [][]string {
+	if v := rc.AttributeValues[attr]; isARN(v) {
+		return [][]string{{v}}
+	}
+	var targets [][]string
+	for _, c := range referencedChanges(rc, set, attr, resType) {
+		if forms := arnPatterns(c); forms != nil {
+			targets = append(targets, forms)
+		}
+	}
+	return targets
+}
+
 // changeSet indexes the plan's changes by module, type and resource name, so
 // a reference resolves without a scan over every change. A plan with
 // thousands of references would otherwise take time quadratic in its size.
