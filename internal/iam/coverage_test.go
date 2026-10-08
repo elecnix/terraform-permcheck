@@ -52,7 +52,7 @@ func TestCrossServiceMissing_CallbackGrantOnOtherResource(t *testing.T) {
 
 	other := mustPolicy(t, `{"Statement":[{"Effect":"Allow","Action":"elasticloadbalancing:SetWebACL",
 		"Resource":"arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/example-b/*"}]}`)
-	missing := crossServiceMissing(rc, other, nil, false)
+	missing := impliedMissing(rc, other, nil, false)
 	if !hasAction(missing, "elasticloadbalancing:SetWebACL") {
 		t.Errorf("a grant on another load balancer must not cover the callback, got %+v", missing)
 	}
@@ -62,7 +62,7 @@ func TestCrossServiceMissing_CallbackGrantOnOtherResource(t *testing.T) {
 
 	same := mustPolicy(t, `{"Statement":[{"Effect":"Allow","Action":"elasticloadbalancing:SetWebACL",
 		"Resource":"arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/example-a/*"}]}`)
-	if missing := crossServiceMissing(rc, same, nil, true); len(missing) != 0 {
+	if missing := impliedMissing(rc, same, nil, true); len(missing) != 0 {
 		t.Errorf("a grant on the target load balancer must cover the callback, got %+v", missing)
 	}
 }

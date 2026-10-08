@@ -36,7 +36,7 @@ func TestCrossServiceMissing_KnownALBTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), nil, false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 
 	// Known ALB target → exactly one unconditional callback action.
 	if len(missing) != 1 {
@@ -64,7 +64,7 @@ func TestCrossServiceMissing_KnownAPIGatewayTarget(t *testing.T) {
 		},
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), nil, false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 	if len(missing) != 1 || missing[0].Action != "apigateway:SetWebACL" {
 		t.Fatalf("expected single apigateway:SetWebACL, got %+v", missing)
 	}
@@ -80,7 +80,7 @@ func TestCrossServiceMissing_UnknownTargetOverApproximates(t *testing.T) {
 		Change: "create",
 	}
 
-	missing := crossServiceMissing(rc, grantNothing(), nil, false)
+	missing := impliedMissing(rc, grantNothing(), nil, false)
 	if len(missing) < 2 {
 		t.Fatalf("expected multiple candidate callbacks when target unknown, got %+v", missing)
 	}
@@ -108,13 +108,13 @@ func TestCrossServiceMissing_CoveredByWildcard(t *testing.T) {
 	}
 
 	// elasticloadbalancing:* covers the callback → nothing missing.
-	missing := crossServiceMissing(rc, grantActions("elasticloadbalancing:*"), nil, false)
+	missing := impliedMissing(rc, grantActions("elasticloadbalancing:*"), nil, false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by service wildcard, got %+v", missing)
 	}
 
 	// Exact action grant also covers it.
-	missing = crossServiceMissing(rc, grantActions("elasticloadbalancing:SetWebACL"), nil, false)
+	missing = impliedMissing(rc, grantActions("elasticloadbalancing:SetWebACL"), nil, false)
 	if len(missing) != 0 {
 		t.Errorf("expected no missing when covered by exact action, got %+v", missing)
 	}
@@ -130,14 +130,14 @@ func TestCrossServiceMissing_KnownUnmappedTarget(t *testing.T) {
 			"resource_arn": "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_abc",
 		},
 	}
-	if missing := crossServiceMissing(rc, grantNothing(), nil, false); len(missing) != 0 {
+	if missing := impliedMissing(rc, grantNothing(), nil, false); len(missing) != 0 {
 		t.Errorf("expected no callback for unmapped target service, got %+v", missing)
 	}
 }
 
 func TestCrossServiceMissing_NonCallbackResource(t *testing.T) {
 	rc := &plan.ResourceChange{Type: "aws_s3_bucket", Name: "b", Change: "create"}
-	if missing := crossServiceMissing(rc, grantNothing(), nil, false); missing != nil {
+	if missing := impliedMissing(rc, grantNothing(), nil, false); missing != nil {
 		t.Errorf("expected nil for non-callback resource, got %+v", missing)
 	}
 }

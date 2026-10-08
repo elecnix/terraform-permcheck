@@ -103,22 +103,15 @@ func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingActi
 	var missing []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
-			add := func(resource string, unverified bool) {
-				missing = append(missing, MissingAction{
-					Action:                  action,
-					Service:                 strings.Split(action, ":")[0],
-					Class:                   classTag(classManagement),
-					Need:                    n.Sid,
-					NeedResource:            resource,
-					ResourceScopeUnverified: unverified,
-				})
+			add := func(resource string, verdict Verdict) {
+				m := newFinding(action, classManagement, verdict)
+				m.Need = n.Sid
+				m.NeedResource = resource
+				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {
-				switch policy.Coverage(action, nil, strict) {
-				case Missing:
-					add("", false)
-				case Unverified:
-					add("", true)
+				if v := policy.Coverage(action, nil, strict); v != Covered {
+					add("", v)
 				}
 				continue
 			}
@@ -128,12 +121,12 @@ func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingActi
 				// verdict decides it.
 				if r == "*" {
 					if policy.Coverage(action, nil, true) != Covered {
-						add(r, false)
+						add(r, Missing)
 					}
 					continue
 				}
-				if policy.Coverage(action, []string{r}, strict) != Covered {
-					add(r, false)
+				if v := policy.Coverage(action, []string{r}, strict); v != Covered {
+					add(r, v)
 				}
 			}
 		}

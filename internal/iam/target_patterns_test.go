@@ -61,7 +61,7 @@ func TestRoleTargets_PathAndName(t *testing.T) {
 			changes := roleWith(c.values)
 			policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 				{"Effect":"Allow","Action":"iam:PassRole","Resource":"`+c.grant+`"}]}`)
-			got := len(passRoleMissing(changes[0], policy, newChangeSet(changes), false)) == 0
+			got := len(impliedMissing(changes[0], policy, newChangeSet(changes), false)) == 0
 			if got != c.want {
 				t.Errorf("covered = %v, want %v (targets %v)", got, c.want, roleTargets(changes[0], "role", newChangeSet(changes)))
 			}

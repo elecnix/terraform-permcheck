@@ -323,7 +323,7 @@ func TestPassRoleMissing_HonoursDeny(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"iam:PassRole","Resource":"*"},
 		{"Effect":"Deny","Action":"iam:PassRole","Resource":"arn:aws:iam::111122223333:role/deploy"}]}`)
-	missing := passRoleMissing(lambdaChange("arn:aws:iam::111122223333:role/deploy"), doc, nil, false)
+	missing := impliedMissing(lambdaChange("arn:aws:iam::111122223333:role/deploy"), doc, nil, false)
 	if !hasAction(missing, "iam:PassRole") {
 		t.Errorf("a Deny on the passed role must report iam:PassRole, got %+v", missing)
 	}

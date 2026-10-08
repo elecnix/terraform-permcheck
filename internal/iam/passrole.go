@@ -20,40 +20,29 @@ var passRoleAttributes = map[string][]string{
 	"aws_apigatewayv2_integration": {"credentials_arn"},
 }
 
-// passRoleMissing returns iam:PassRole when the policy does not grant it on a
-// role the resource passes. A role whose ARN is not derivable from plan values
-// is skipped, so only provable non-coverage is reported. With strict set, such
-// a role is reported unverified instead when the policy grants PassRole only
-// on some roles.
-func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, set *changeSet, strict bool) []MissingAction {
+// passRoleRequirements returns iam:PassRole on each role the resource
+// passes. A delete passes no role. A role the plan does not show is checked
+// only when the resource may set its attribute, and then only a grant scoped
+// to other roles under --strict-resources is reported (see
+// knownTargetsOnly). Every requirement is ungated, so a resource that passes
+// two roles has one finding.
+func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	if rc.Change == "delete" {
 		return nil
 	}
-	const action = "iam:PassRole"
+	var reqs []targeted
 	for _, attr := range passRoleAttributes[rc.Type] {
 		targets := roleTargets(rc, attr, set)
-		verdict := policy.worstVerdict(action, targets, strict)
-		if verdict == Covered {
+		if len(targets) == 0 && !passesRole(rc, attr) {
 			continue
 		}
-		// With the role unknown, the resource may pass none, so only an
-		// unverified grant on a role it may pass is reported.
-		if len(targets) == 0 && (verdict != Unverified || !passesRole(rc, attr)) {
-			continue
-		}
-		// One finding per resource, even when it passes two roles.
-		return []MissingAction{{
-			ModuleAddress:           rc.ModuleAddress,
-			ResourceType:            rc.Type,
-			ResourceName:            rc.InstanceName(),
-			Change:                  rc.Change,
-			Action:                  action,
-			Service:                 "iam",
-			Class:                   classTag(classManagement),
-			ResourceScopeUnverified: verdict == Unverified,
-		}}
+		reqs = append(reqs, targeted{
+			Requirement:      Requirement{Action: "iam:PassRole"},
+			targets:          targets,
+			knownTargetsOnly: true,
+		})
 	}
-	return nil
+	return reqs
 }
 
 // passesRole reports whether the resource may set the role attribute attr:

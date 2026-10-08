@@ -7,59 +7,43 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
-// crossServiceMissing returns the cross-service callback actions required by a
-// resource change but not covered by the policy.
+// crossServiceRequirements returns the cross-service callback actions a
+// resource change requires.
 //
 // When the target's service is known, only the callback for that service is
-// returned, as an unconditional [required] action. The service is known when
-// the target ARN value is known, or when the configuration references a
-// resource of a type the rule knows, such as an aws_lb whose ARN AWS assigns
-// at apply time. The target is unknown when the attribute references a
-// variable, a module output or a resource of a type the rule does not list,
-// and in static HCL mode, which shows no values. Then every candidate
-// callback is returned, gated on the ARN attribute, and --only-required drops
-// the over-approximation.
+// returned, ungated. The service is known when the target ARN value is known,
+// or when the configuration references a resource of a type the rule knows,
+// such as an aws_lb whose ARN AWS assigns at apply time. The target is
+// unknown when the attribute references a variable, a module output or a
+// resource of a type the rule does not list, and in static HCL mode, which
+// shows no values. Then every candidate callback is returned, gated on the
+// ARN attribute, and --only-required drops the over-approximation.
 //
 // The callback acts on the target resource, so a known target ARN scopes the
-// coverage check. With strict set and the target unknown, a callback the
-// policy grants only on some resources is returned as unverified.
-func crossServiceMissing(rc *plan.ResourceChange, policy *PolicyDocument, set *changeSet, strict bool) []MissingAction {
+// coverage check.
+func crossServiceRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	rule, ok := crossServiceRules[rc.Type]
 	if !ok {
 		return nil
 	}
-
 	services, targets := rule.target(rc, set)
-
-	var missing []MissingAction
+	var gate Gate
+	if len(services) != 1 {
+		// Target unknown: each candidate is one of several possibilities,
+		// gated on what the attribute ultimately points to.
+		gate.Attribute = rule.arnAttribute
+	}
+	var reqs []targeted
 	for _, cb := range rule.callbacks {
 		if len(services) > 0 && !services[cb.targetService] {
 			continue
 		}
-		verdict := policy.worstVerdict(cb.action, targets, strict)
-		if verdict == Covered {
-			continue
-		}
-		condAttr := ""
-		if len(services) != 1 {
-			// Target unknown: this candidate is one of several possibilities,
-			// gated on what resource_arn ultimately points to.
-			condAttr = rule.arnAttribute
-		}
-		missing = append(missing, MissingAction{
-			ModuleAddress:      rc.ModuleAddress,
-			ResourceType:       rc.Type,
-			ResourceName:       rc.InstanceName(),
-			Change:             rc.Change,
-			Action:             cb.action,
-			Service:            actionService(cb.action),
-			Class:              classTag(classManagement),
-			ConditionAttribute: condAttr,
-
-			ResourceScopeUnverified: verdict == Unverified,
+		reqs = append(reqs, targeted{
+			Requirement: Requirement{Action: cb.action, Gate: gate},
+			targets:     targets,
 		})
 	}
-	return missing
+	return reqs
 }
 
 // target returns the services the target attribute of rc may name, and the
