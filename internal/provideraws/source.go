@@ -36,6 +36,7 @@ type SourceProvider struct {
 	repoPath  string
 	schemas   map[string]*cloud.Schema // tfType -> schema
 	parsed    bool
+	parseErr  error  // the error of the one parse, returned by every later Ensure
 	skipClone bool   // true when repoPath already has provider source
 	remoteURL string // where ensureRepo fetches DefaultProviderRef from
 }
@@ -65,14 +66,16 @@ func NewSourceProviderWithPath(repoPath string) *SourceProvider {
 func (p *SourceProvider) Name() string { return "aws" }
 
 // Ensure checks that the provider repo is available and parses all resource
-// files. If the repo can't be cloned or located, returns an error so callers
-// can fall back to another resolver. Subsequent calls will retry.
+// files. If the repo can't be cloned or located, it returns an error so
+// callers can fall back to another resolver, and a later call retries. If the
+// parse fails, Ensure returns the parse error, and every later call returns it
+// too without parsing again.
 func (p *SourceProvider) Ensure() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.parsed {
-		return nil
+		return p.parseErr
 	}
 
 	if err := p.ensureRepo(); err != nil {
@@ -80,13 +83,9 @@ func (p *SourceProvider) Ensure() error {
 		return err
 	}
 
-	if err := p.parseAll(); err != nil {
-		p.parsed = true
-		return nil
-	}
-
+	p.parseErr = p.parseAll()
 	p.parsed = true
-	return nil
+	return p.parseErr
 }
 
 // Resolve maps a terraform resource type to its required IAM permissions.
@@ -114,6 +113,26 @@ func (p *SourceProvider) Has(tfType string) bool {
 	defer p.mu.RUnlock()
 	_, ok := p.schemas[tfType]
 	return ok
+}
+
+// Schemas parses the provider source and returns the schema of every resource
+// type it found. The map is a copy; the schemas are the ones Resolve returns.
+// It fails when the source holds no resources, so a generator never writes an
+// empty table.
+func (p *SourceProvider) Schemas() (map[string]*cloud.Schema, error) {
+	if err := p.Ensure(); err != nil {
+		return nil, err
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.schemas) == 0 {
+		return nil, fmt.Errorf("no resources found in provider source at %s", p.repoPath)
+	}
+	out := make(map[string]*cloud.Schema, len(p.schemas))
+	for tfType, s := range p.schemas {
+		out[tfType] = s
+	}
+	return out, nil
 }
 
 // runGit runs a git command in the given directory. If buf is nil, stderr is

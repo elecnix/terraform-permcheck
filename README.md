@@ -36,11 +36,14 @@ the cross-reference:
 
 ### Provider source first, CloudFormation second
 
-For AWS, PermCheck first reads the terraform-provider-aws source and lists
-the SDK calls each resource's create, read, update and delete functions make.
-It follows calls into helper functions, retry closures and paginators, in any
-file of the service package and in other service packages. When it can't
-resolve a type from the source, it uses the CloudFormation schema.
+For AWS, PermCheck first looks up the SDK calls that each resource's create,
+read, update and delete functions make in the terraform-provider-aws source.
+The parser follows calls into helper functions, retry closures and
+paginators, in any file of the service package and in other service packages.
+The binary embeds the result of that parse as a table, so a run doesn't clone
+or parse the provider (see [Embedded permissions table](#embedded-permissions-table)).
+When a type is missing from the table, PermCheck uses the CloudFormation
+schema.
 
 Sometimes the source parse comes back incomplete. A create or delete function
 uses an SDK client, yet the parser finds no call that changes anything. A read
@@ -394,6 +397,8 @@ terraform-permcheck validate \
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 | `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
+
+| `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 
 ### Exit codes
@@ -404,15 +409,29 @@ terraform-permcheck validate \
 | 1 | Permission gaps found, unverified findings under `--strict-resources` included (details printed to stderr) |
 | 2 | Invalid input or configuration error |
 
-### Provider source cache
+### Embedded permissions table
 
-For AWS, terraform-permcheck reads the `terraform-provider-aws` source at a pinned tag. The first run makes a shallow clone of that tag from GitHub. Later runs reuse the clone and do not fetch again.
+The binary embeds the permissions of every terraform-provider-aws resource type at a pinned tag, `v5.90.0`. The table is `internal/permdata/permissions.json`. For each resource type it lists, per operation, each IAM action and the attribute tests that guard the provider's call. It also marks the operations whose parse missed calls, and PermCheck adds CloudFormation permissions to those. A default run reads this table, so it doesn't need git, network access to GitHub, or a provider clone.
+
+To bump the provider version, change `DefaultProviderRef` in `internal/provideraws/source.go`, then regenerate the table and commit it:
+
+```bash
+go run . generate-permissions --out internal/permdata/permissions.json
+```
+
+The command clones the new tag into the provider cache and parses it. To parse a checkout you already have, pass `--provider-dir DIR`. The checkout must be at `DefaultProviderRef`. Without `--out`, the command writes the table to stdout. The output is deterministic, so regenerating an unchanged tree writes the same bytes. A test fails when the table's tag differs from `DefaultProviderRef`, and the CI job `permissions-drift` regenerates the table and fails when it differs from the committed one. Regenerate the table after a parser change too.
+
+### Live provider source
+
+Pass `--provider-source live`, or set `PERMCHECK_PROVIDER_SOURCE=live`, to clone and parse the provider source at run time. Use it to try a parser change without regenerating the table. The live parse takes the place of the embedded table, and CloudFormation still fills the gaps.
+
+The first live run makes a shallow clone of the pinned tag from GitHub. Later runs reuse the clone and do not fetch again.
 
 The clone goes in a directory named after the tag, under `terraform-permcheck/provider-aws` in your user cache directory. On Linux that is `$XDG_CACHE_HOME`, or `~/.cache` when it is unset. On macOS it is `~/Library/Caches`. Set `PERMCHECK_PROVIDER_CACHE_DIR` to use another base directory. The clone still goes in a subdirectory named after the tag.
 
 Concurrent runs can share one cache. Each run locks a file next to the clone before it reads or writes the clone, so runs take turns. If a clone is incomplete or at the wrong commit, the run replaces it.
 
-Earlier versions cloned straight into `~/.cache/terraform-permcheck/provider-aws`. To free that space, delete the directory. The next run clones the tag again.
+To free space, delete the clones that older versions made, unless you use the live source. Older versions cloned into the cache directory above, or into `~/.cache/terraform-permcheck/provider-aws` for the oldest.
 
 ### Terraform provider (planned)
 

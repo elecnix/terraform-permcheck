@@ -7,34 +7,90 @@ package check
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
-// DefaultResolver resolves schemas from the terraform-provider-aws source and
-// falls back to the CloudFormation schema registry. The resolver is built on
-// the first call and shared for the life of the process, so the provider
-// source is parsed once, however many checks run. It reads the provider
-// cache directory when it is built.
-func DefaultResolver() iam.Resolver {
-	defaultOnce.Do(func() {
-		defaultResolver = cloud.NewChainProvider(
-			provideraws.NewSourceProvider(),
-			cloud.NewAWSProvider(),
-		)
-	})
-	return defaultResolver
+// ProviderSource names where the default chain reads provider-source
+// requirements from.
+type ProviderSource string
+
+const (
+	// SourceEmbedded reads the table built into the binary. It needs no
+	// clone and no parse. It is the default.
+	SourceEmbedded ProviderSource = "embedded"
+	// SourceLive clones terraform-provider-aws at DefaultProviderRef into
+	// the provider cache and parses its Go source, as releases before the
+	// embedded table did. It is for developing the parser.
+	SourceLive ProviderSource = "live"
+)
+
+// ProviderSourceEnv names the environment variable that selects the provider
+// source when --provider-source is not given.
+const ProviderSourceEnv = "PERMCHECK_PROVIDER_SOURCE"
+
+// ParseProviderSource reads a provider source name. The empty string means
+// SourceEmbedded.
+func ParseProviderSource(s string) (ProviderSource, error) {
+	switch ProviderSource(strings.ToLower(s)) {
+	case "", SourceEmbedded:
+		return SourceEmbedded, nil
+	case SourceLive:
+		return SourceLive, nil
+	}
+	return "", fmt.Errorf("unknown provider source %q (supported: %s, %s)", s, SourceEmbedded, SourceLive)
 }
 
-var (
-	defaultOnce     sync.Once
-	defaultResolver iam.Resolver
-)
+// DefaultResolver resolves schemas from the embedded provider-source table
+// and falls back to the CloudFormation schema registry. It is
+// ResolverFor(SourceEmbedded).
+func DefaultResolver() iam.Resolver {
+	return ResolverFor(SourceEmbedded)
+}
+
+// ResolverFor returns the resolver chain of a provider source. Each chain is
+// built on the first call and shared for the life of the process, so the
+// table is decoded, or the provider source parsed, once however many checks
+// run. The live chain reads the provider cache directory when it is built.
+func ResolverFor(src ProviderSource) iam.Resolver {
+	r := &resolvers.embedded
+	if src == SourceLive {
+		r = &resolvers.live
+	}
+	r.once.Do(func() {
+		r.resolver = cloud.NewChainProvider(providers(src)...)
+	})
+	return r.resolver
+}
+
+// providers lists the chain of a provider source, most precise first. The
+// live parse replaces the embedded table rather than following it. Both list
+// the same operations, so a live parse after the table would fill the
+// table's incomplete operations with the same calls, mark them complete, and
+// keep CloudFormation from filling them.
+func providers(src ProviderSource) []cloud.Provider {
+	var first cloud.Provider = permdata.Embedded()
+	if src == SourceLive {
+		first = provideraws.NewSourceProvider()
+	}
+	return []cloud.Provider{first, cloud.NewAWSProvider()}
+}
+
+type sharedResolver struct {
+	once     sync.Once
+	resolver iam.Resolver
+}
+
+var resolvers struct {
+	embedded, live sharedResolver
+}
 
 // Filter holds the filter settings of the validate command.
 type Filter struct {

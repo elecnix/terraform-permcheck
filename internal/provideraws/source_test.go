@@ -658,3 +658,46 @@ func TestIsReadOnlyAction(t *testing.T) {
 		}
 	}
 }
+
+// TestSourceProvider_Schemas checks that Schemas returns every parsed
+// resource type, as Resolve would, and fails on a tree with no resources, so
+// a generator never writes an empty table.
+func TestSourceProvider_Schemas(t *testing.T) {
+	p := NewSourceProviderWithPath("../check/testdata/provider")
+	schemas, err := p.Schemas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(schemas) != 1 {
+		t.Fatalf("Schemas() = %d types, want 1", len(schemas))
+	}
+	want, err := p.Resolve("aws_backup_vault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schemas["aws_backup_vault"] != want {
+		t.Errorf("Schemas()[aws_backup_vault] is not the schema Resolve returns")
+	}
+
+	if _, err := NewSourceProviderWithPath(t.TempDir()).Schemas(); err == nil {
+		t.Error("Schemas() on an empty tree: want an error")
+	}
+}
+
+// TestSourceProvider_ParseErrorIsKept checks that a tree the parser cannot
+// read fails Ensure, Resolve and Schemas with the parse error, on the first
+// call and on later ones, so the cause is not lost.
+func TestSourceProvider_ParseErrorIsKept(t *testing.T) {
+	p := NewSourceProviderWithPath(t.TempDir())
+	for i := 0; i < 2; i++ {
+		if err := p.Ensure(); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+			t.Errorf("Ensure() call %d = %v, want the parse error", i+1, err)
+		}
+	}
+	if _, err := p.Resolve("aws_s3_bucket"); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+		t.Errorf("Resolve() = %v, want the parse error", err)
+	}
+	if _, err := p.Schemas(); err == nil || !strings.Contains(err.Error(), "service directory not found") {
+		t.Errorf("Schemas() = %v, want the parse error", err)
+	}
+}
