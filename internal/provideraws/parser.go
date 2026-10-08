@@ -1557,9 +1557,8 @@ func isAWSMethod(name string) bool {
 
 // sdKMethodToIAMAction converts an AWS SDK method name and service to an IAM
 // action string. Convention: backup + CreateBackupVault -> backup:CreateBackupVault.
-// Also normalizes SDK v2 method names where they diverge from canonical IAM action
-// names (e.g., S3 v2 SDK drops the "Bucket" infix in methods like
-// PutPublicAccessBlock, which maps to the canonical s3:PutBucketPublicAccessBlock).
+// A method that IAM does not know as an action is renamed to the action the
+// AWS service reference says it needs, e.g. s3 HeadObject -> s3:GetObject.
 func sdKMethodToIAMAction(method string, service string) string {
 	if canonical := normalizeSDKMethod(service, method); canonical != "" {
 		return service + ":" + canonical
@@ -1567,124 +1566,28 @@ func sdKMethodToIAMAction(method string, service string) string {
 	return service + ":" + method
 }
 
-// normalizeSDKMethod translates known AWS SDK v2 method names to their canonical
-// IAM action names. Returns empty string if no normalization is needed.
+// normalizeSDKMethod returns the IAM action an SDK method needs when IAM spells
+// it differently, or "" when the method name is the action.
 func normalizeSDKMethod(service, method string) string {
-	// S3 SDK v2 drops the "Bucket" infix on some methods and adds "Configuration"
-	// suffix on others. These need canonical IAM action names.
-	if service == "s3" {
-		return s3SDKMethodNormalization(method)
-	}
-	return ""
+	return sdkOperationActions[service][method]
 }
 
-// s3SDKMethodNames maps S3 SDK v2 method names to canonical IAM action names
-// where they diverge. The key is the SDK method name and the value is the IAM
-// action name, so PutPublicAccessBlock maps to PutBucketPublicAccessBlock. A
-// method that IAM spells the same way needs no row: an unmapped method passes
-// through unchanged.
-var s3SDKMethodNames = map[string]string{
-	"PutPublicAccessBlock":               "PutBucketPublicAccessBlock",
-	"GetPublicAccessBlock":               "GetBucketPublicAccessBlock",
-	"DeletePublicAccessBlock":            "DeleteBucketPublicAccessBlock",
-	"PutBucketNotificationConfiguration": "PutBucketNotification",
-	"GetBucketNotificationConfiguration": "GetBucketNotification",
-	// The SDK drops the Bucket infix that the object lock IAM actions keep.
-	"PutObjectLockConfiguration": "PutBucketObjectLockConfiguration",
-	"GetObjectLockConfiguration": "GetBucketObjectLockConfiguration",
-	// The encryption calls name the operation, not the resource, so S3
-	// spells them ...EncryptionConfiguration in IAM.
-	"GetBucketEncryption":    "GetEncryptionConfiguration",
-	"PutBucketEncryption":    "PutEncryptionConfiguration",
-	"DeleteBucketEncryption": "DeleteEncryptionConfiguration",
-}
-
-// s3SDKMethodNormalization returns the canonical IAM action name for an S3 SDK
-// v2 method, or "" when the two names agree.
-func s3SDKMethodNormalization(original string) string {
-	return s3SDKMethodNames[original]
-}
-
-// clientMethodToService extracts the AWS service name from a client accessor
-// method name (e.g., "BackupClient" -> "backup", "DynamoDBClient" -> "dynamodb").
+// clientMethodToService returns the IAM service prefix of the client an
+// AWSClient accessor returns ("ELBV2Client" -> "elasticloadbalancing"). An
+// accessor the provider does not declare falls back to its name less Client,
+// read as an SDK package name.
 func clientMethodToService(clientMethod string) string {
-	// Common mapping for client method names
-	known := map[string]string{
-		"BackupClient":             "backup",
-		"DynamoDBClient":           "dynamodb",
-		"IAMClient":                "iam",
-		"S3Client":                 "s3",
-		"STSClient":                "sts",
-		"KMSClient":                "kms",
-		"LambdaClient":             "lambda",
-		"EC2Client":                "ec2",
-		"SQSClient":                "sqs",
-		"SNSClient":                "sns",
-		"RDSClient":                "rds",
-		"CloudWatchLogsClient":     "logs",
-		"SecretsManagerClient":     "secretsmanager",
-		"CloudWatchClient":         "cloudwatch",
-		"CloudTrailClient":         "cloudtrail",
-		"Route53Client":            "route53",
-		"ELBv2Client":              "elasticloadbalancing",
-		"EFSClient":                "elasticfilesystem",
-		"SSMClient":                "ssm",
-		"SESClient":                "ses",
-		"SFNClient":                "states",
-		"CognitoIdentityClient":    "cognito-identity",
-		"CognitoIDPClient":         "cognito-idp",
-		"APIGatewayClient":         "apigateway",
-		"APIGatewayV2Client":       "apigateway",
-		"AutoscalingClient":        "autoscaling",
-		"CloudFormationClient":     "cloudformation",
-		"CloudFrontClient":         "cloudfront",
-		"CodeBuildClient":          "codebuild",
-		"CodeDeployClient":         "codedeploy",
-		"CodePipelineClient":       "codepipeline",
-		"ECRClient":                "ecr",
-		"ECSClient":                "ecs",
-		"EKSClient":                "eks",
-		"ElastiCacheClient":        "elasticache",
-		"ElasticBeanstalkClient":   "elasticbeanstalk",
-		"ElasticsearchClient":      "es",
-		"EMRClient":                "elasticmapreduce",
-		"EventBridgeClient":        "events",
-		"FirehoseClient":           "firehose",
-		"GlueClient":               "glue",
-		"GuardDutyClient":          "guardduty",
-		"IoTClient":                "iot",
-		"KinesisClient":            "kinesis",
-		"OpsWorksClient":           "opsworks",
-		"OrganizationsClient":      "organizations",
-		"PinpointClient":           "mobiletargeting",
-		"RedshiftClient":           "redshift",
-		"RedshiftServerlessClient": "redshift-serverless",
-		"Route53DomainsClient":     "route53domains",
-		"Route53ResolverClient":    "route53resolver",
-		"SageMakerClient":          "sagemaker",
-		"SecurityHubClient":        "securityhub",
-		"ServiceCatalogClient":     "servicecatalog",
-		"ServiceDiscoveryClient":   "servicediscovery",
-		"SESv2Client":              "ses",
-		"ShieldClient":             "shield",
-		"StepFunctionsClient":      "states",
-		"TransferClient":           "transfer",
-		"WAFClient":                "waf",
-		"WAFV2Client":              "wafv2",
-		"WorkLinkClient":           "worklink",
-		"WorkSpacesClient":         "workspaces",
-		"XRayClient":               "xray",
-	}
-
-	if svc, ok := known[clientMethod]; ok {
+	if svc, ok := clientAccessorIAMPrefixes[clientMethod]; ok {
 		return svc
 	}
-
-	// Fallback: strip "Client" suffix and lowercase
 	base := strings.TrimSuffix(clientMethod, "Client")
 	base = strings.TrimSuffix(base, "Regional")
 	base = strings.TrimSuffix(base, "Global")
-	return strings.ToLower(base)
+	base = strings.ToLower(base)
+	if svc := sdkPackageToIAMService(base); svc != "" {
+		return svc
+	}
+	return base
 }
 
 // containsIgnoreCase reports whether s contains substr, case-insensitively.
@@ -1779,11 +1682,9 @@ func bindConnParams(ft *ast.FuncType, ctx *walkContext) {
 	}
 }
 
-// paramTypeToService extracts the AWS service name from a parameter type
-// like *iam.Client -> iam, *backup.Client -> backup, *dynamodb.Client -> dynamodb.
-// Any type other than a pointer to a package's Client yields "".
-// Falls back to a lookup table for package names that differ from IAM service names
-// (e.g., *cloudwatchlogs.Client -> "logs", not "cloudwatchlogs").
+// paramTypeToService returns the IAM service prefix of a parameter typed as an
+// SDK client: *iam.Client -> "iam", *cloudwatchlogs.Client -> "logs". Any type
+// other than a pointer to a package's Client yields "".
 func paramTypeToService(expr ast.Expr) string {
 	star, ok := expr.(*ast.StarExpr)
 	if !ok {
@@ -1797,32 +1698,19 @@ func paramTypeToService(expr ast.Expr) string {
 	if !ok {
 		return ""
 	}
-	// ident.Name is the package, e.g., "iam", "backup", "dynamodb"
-	pkg := ident.Name
-	// Some SDK v2 package names differ from canonical IAM service names.
-	// Fall through to a lookup table to normalize them.
-	if svc := sdkPackageToIAMService(pkg); svc != "" {
+	// ident.Name is the package, or the name the file imports it under.
+	if svc := sdkPackageToIAMService(ident.Name); svc != "" {
 		return svc
 	}
-	return pkg
+	return ident.Name
 }
 
-// sdkPackageToIAMService maps AWS SDK v2 Go package names to their canonical
-// IAM service names where they diverge (e.g., "cloudwatchlogs" → "logs").
-// Many packages match exactly ("s3" → "s3", "iam" → "iam"), so only mismatches
-// are listed.
+// sdkPackageToIAMService maps an AWS SDK Go package name, or an alias the
+// provider imports one under, to its IAM service prefix
+// ("elasticloadbalancingv2" -> "elasticloadbalancing"). It returns "" for a
+// package the generated table does not know.
 func sdkPackageToIAMService(pkg string) string {
-	pkgToService := map[string]string{
-		"cloudwatchlogs":          "logs",
-		"eventbridge":             "events", // EventBridge authorizes under its CloudWatch Events IAM prefix
-		"s3control":               "s3",
-		"elasticloadbalancingv2":  "elasticloadbalancing",
-		"sfn":                     "states",
-		"mobiletargeting":         "mobiletargeting", // pinpoint → mobiletargeting
-		"cognitoidentityprovider": "cognito-idp",
-		"lexmodelbuildingservice": "lex",
-	}
-	return pkgToService[pkg]
+	return sdkPackageIAMPrefixes[pkg]
 }
 
 // findHelperCalls finds the calls a function body makes to other functions of

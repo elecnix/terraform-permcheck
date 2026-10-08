@@ -31,47 +31,35 @@ const (
 var s3OptionalPrefixes = []string{
 	// Website, CORS, logging
 	"s3:PutBucketWebsite", "s3:GetBucketWebsite", "s3:DeleteBucketWebsite",
-	"s3:PutBucketCORS", "s3:GetBucketCORS", "s3:PutBucketCors", "s3:GetBucketCors", "s3:DeleteBucketCors",
+	"s3:PutBucketCORS", "s3:GetBucketCORS", "s3:DeleteBucketCors",
 	"s3:PutBucketLogging", "s3:GetBucketLogging",
 	// Replication
-	"s3:PutBucketReplication", "s3:GetBucketReplication", "s3:DeleteBucketReplication",
+	"s3:PutBucketReplication", "s3:DeleteBucketReplication",
 	"s3:PutReplicationConfiguration", "s3:GetReplicationConfiguration",
 	// Transfer acceleration
 	"s3:PutAccelerateConfiguration", "s3:GetAccelerateConfiguration",
-	"s3:PutBucketAccelerateConfiguration", "s3:GetBucketAccelerateConfiguration",
-	// Analytics, inventory, metrics, intelligent tiering. The two spellings
-	// of a feature sit together: S3 emits the bucket-level one
-	// (s3:PutBucketAnalyticsConfiguration) in the provider source and the
-	// CloudFormation schema the configuration-level one
-	// (s3:PutAnalyticsConfiguration). Neither is a prefix of the other.
+	// Analytics, inventory, metrics, intelligent tiering
 	"s3:PutAnalyticsConfiguration", "s3:GetAnalyticsConfiguration",
-	"s3:PutBucketAnalyticsConfiguration",
-	"s3:GetBucketAnalyticsConfiguration", "s3:DeleteBucketAnalyticsConfiguration",
+	"s3:DeleteBucketAnalyticsConfiguration",
 	"s3:PutInventoryConfiguration", "s3:GetInventoryConfiguration",
-	"s3:PutBucketInventoryConfiguration",
-	"s3:GetBucketInventoryConfiguration", "s3:DeleteBucketInventoryConfiguration",
 	"s3:PutMetricsConfiguration", "s3:GetMetricsConfiguration",
-	"s3:PutBucketMetricsConfiguration",
-	"s3:GetBucketMetricsConfiguration", "s3:DeleteBucketMetricsConfiguration",
+	"s3:DeleteBucketMetricsConfiguration",
 	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
-	"s3:PutBucketIntelligentTieringConfiguration",
-	"s3:GetBucketIntelligentTieringConfiguration", "s3:DeleteBucketIntelligentTieringConfiguration",
 	// Object lock
 	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
 	"s3:PutObjectLockConfiguration",
 	// Server-side encryption
 	"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration",
-	"s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration",
+	"s3:DeleteBucketEncryption",
 	// Lifecycle
 	"s3:PutLifecycleConfiguration", "s3:GetLifecycleConfiguration", "s3:DeleteBucketLifecycle",
-	"s3:PutBucketLifecycleConfiguration", "s3:GetBucketLifecycleConfiguration",
 	// Notifications, versioning, ownership controls, public access block
 	"s3:PutBucketNotification", "s3:GetBucketNotification",
 	"s3:PutBucketVersioning", "s3:GetBucketVersioning",
-	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls", "s3:DeleteBucketOwnershipControls",
-	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock", "s3:DeleteBucketPublicAccessBlock",
+	"s3:PutBucketOwnershipControls", "s3:GetBucketOwnershipControls",
+	"s3:PutBucketPublicAccessBlock", "s3:GetBucketPublicAccessBlock",
 	// Tags
-	"s3:PutBucketTagging", "s3:GetBucketTagging", "s3:DeleteBucketTagging",
+	"s3:PutBucketTagging", "s3:GetBucketTagging",
 	"s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource",
 	// Bucket policy and requester pays
 	"s3:PutBucketPolicy", "s3:GetBucketPolicy", "s3:DeleteBucketPolicy",
@@ -101,8 +89,8 @@ func classifyPermission(action string) PermissionClass {
 		"s3:GetObject": true, "s3:GetObjectMetadata": true,
 		"s3:PutObject": true, "s3:PutObjectAcl": true,
 		"s3:DeleteObject": true, "s3:AbortMultipartUpload": true,
-		// The SDK names of the calls that empty a bucket on force_destroy
-		"s3:DeleteObjects": true, "s3:HeadObject": true, "s3:ListObjectVersions": true,
+		// Listing the versions to delete when force_destroy empties a bucket
+		"s3:ListBucketVersions": true,
 		// KMS data-plane (encrypt/decrypt at object level)
 		"kms:Encrypt": true, "kms:Decrypt": true,
 		"kms:GenerateDataKey": true, "kms:GenerateDataKeyWithoutPlaintext": true,

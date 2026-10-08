@@ -31,10 +31,10 @@ func (s stubProvider) Resolve(tfType string) (*cloud.Schema, error) {
 }
 
 // missingFor validates a bare create of tfType against a policy that allows
-// only s3:HeadBucket and returns the missing actions.
+// only s3:ListBucket (what HeadBucket needs) and returns the missing actions.
 func missingFor(t *testing.T, resolver cloud.Provider, tfType string) map[string]bool {
 	t.Helper()
-	policy, err := iam.ParsePolicy([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:HeadBucket","Resource":"*"}]}`))
+	policy, err := iam.ParsePolicy([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +128,8 @@ func TestBareS3BucketCreateNeedsCreateBucket_Fixture(t *testing.T) {
 	if !missing["s3:CreateBucket"] {
 		t.Errorf("s3:CreateBucket not reported missing; got %v", missing)
 	}
-	if missing["s3:HeadBucket"] {
-		t.Errorf("s3:HeadBucket is allowed but was reported missing")
+	if missing["s3:ListBucket"] {
+		t.Errorf("s3:ListBucket is allowed but was reported missing")
 	}
 
 	// The read reaches findBucketPolicy in bucket_policy.go.
@@ -250,7 +250,7 @@ func TestBareS3BucketCreateNeedsCreateBucket_Checkout(t *testing.T) {
 	// internal/service/s3/bucket.go and internal/service/logs/group.go.
 	for tfType, ops := range map[string]map[string][]string{
 		"aws_s3_bucket": {
-			"read":   {"s3:HeadBucket", "s3:GetBucketPolicy", "s3:GetBucketVersioning"},
+			"read":   {"s3:ListBucket", "s3:GetBucketPolicy", "s3:GetBucketVersioning"},
 			"update": {"s3:PutBucketPolicy", "s3:PutBucketVersioning"},
 			"delete": {"s3:DeleteBucket"},
 		},

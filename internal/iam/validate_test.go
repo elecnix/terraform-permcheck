@@ -126,9 +126,10 @@ func TestFilterS3Subresources_NonS3Unaffected(t *testing.T) {
 }
 
 func TestS3SubresourceAbsorbed(t *testing.T) {
-	// SSE config absorbs the encryption actions in both spellings
+	// SSE config absorbs the encryption actions in both spellings: the
+	// schema's DeleteBucketEncryption and the IAM action it needs
 	absorbed := s3SubresourceAbsorbed("aws_s3_bucket_server_side_encryption_configuration")
-	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:DeleteBucketEncryption", "s3:DeleteEncryptionConfiguration"} {
+	for _, a := range []string{"s3:PutEncryptionConfiguration", "s3:GetEncryptionConfiguration", "s3:DeleteBucketEncryption"} {
 		if !absorbed[a] {
 			t.Errorf("expected %s to be absorbed, got %v", a, absorbed)
 		}
