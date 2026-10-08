@@ -149,3 +149,57 @@ func TestChainProvider_IncompleteWithoutFallback(t *testing.T) {
 		t.Errorf("expected the primary schema back unchanged")
 	}
 }
+
+// TestChainProvider_FirstLaterProviderFillsEachOperation pins the merge rule
+// completeFrom implements: an incomplete operation takes the actions of the
+// FIRST later provider that has any for it, and no further provider's actions
+// are merged into it once it is complete.
+func TestChainProvider_FirstLaterProviderFillsEachOperation(t *testing.T) {
+	primarySchema := &Schema{
+		TypeName:    "aws_widget",
+		Permissions: map[string][]string{"create": {"widget:CreateWidget"}},
+		Incomplete:  map[string]bool{"create": true, "delete": true},
+	}
+	// The second provider knows create only, so delete stays incomplete for
+	// the third provider to fill.
+	second := &Schema{
+		TypeName:    "AWS::Widget::Widget",
+		Permissions: map[string][]string{"create": {"widget:CreateWidgetAlias"}},
+	}
+	third := &Schema{
+		TypeName: "aws_widget_alternative",
+		Permissions: map[string][]string{
+			"create": {"widget:CreateWidgetFromTemplate"},
+			"delete": {"widget:DeleteWidget"},
+		},
+	}
+
+	chain := NewChainProvider(
+		&mockProvider{name: "source", schemas: map[string]*Schema{"aws_widget": primarySchema}},
+		&mockProvider{name: "cfn", schemas: map[string]*Schema{"aws_widget": second}},
+		&mockProvider{name: "alternative", schemas: map[string]*Schema{"aws_widget": third}},
+	)
+
+	got, err := chain.Resolve("aws_widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string][]string{
+		"create": {"widget:CreateWidget", "widget:CreateWidgetAlias"},
+		"delete": {"widget:DeleteWidget"},
+	}
+	if !reflect.DeepEqual(got.Permissions, want) {
+		t.Errorf("permissions = %v, want %v", got.Permissions, want)
+	}
+	if len(got.Incomplete) != 0 {
+		t.Errorf("Incomplete = %v, want none left", got.Incomplete)
+	}
+	// The primary's cached schema must survive both merges.
+	if !reflect.DeepEqual(primarySchema.Permissions, map[string][]string{"create": {"widget:CreateWidget"}}) {
+		t.Errorf("the primary schema was modified: %v", primarySchema.Permissions)
+	}
+	if len(primarySchema.Incomplete) != 2 {
+		t.Errorf("the primary schema's Incomplete was modified: %v", primarySchema.Incomplete)
+	}
+}

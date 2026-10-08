@@ -496,9 +496,15 @@ func incompleteOperations(actions map[string][]ExtractedAction, bound map[string
 var readOnlyVerbs = []string{"Describe", "Get", "List", "Head", "BatchGet", "Search", "Lookup"}
 
 // isReadOnlyAction reports whether an IAM action only reads, judged by its
-// verb, e.g. "s3:HeadBucket" or "logs:DescribeLogGroups".
+// verb, e.g. "s3:HeadBucket" or "logs:DescribeLogGroups". The parser builds
+// every action as "service:Name", so the verb follows the colon; a name
+// without one is judged whole, which is also what a slice at Index+1 would
+// give when Index is -1.
 func isReadOnlyAction(action string) bool {
-	name := action[strings.Index(action, ":")+1:]
+	name := action
+	if i := strings.Index(action, ":"); i >= 0 {
+		name = action[i+1:]
+	}
 	for _, verb := range readOnlyVerbs {
 		if strings.HasPrefix(name, verb) {
 			return true

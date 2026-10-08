@@ -630,3 +630,33 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, meta any) d
 		t.Error("an unconditional action must not appear in ChangeGated")
 	}
 }
+
+// TestIsReadOnlyAction covers the verb test that decides whether a create or a
+// delete that found only this call is incomplete. Every action the parser
+// builds is "service:Name", and a name without a colon is judged whole rather
+// than sliced at a -1 index.
+func TestIsReadOnlyAction(t *testing.T) {
+	tests := map[string]bool{
+		"s3:HeadBucket":          true,
+		"logs:DescribeLogGroups": true,
+		"iam:ListRolePolicies":   true,
+		"ec2:BatchGetInstance":   true,
+		"s3:CreateBucket":        false,
+		"s3:PutBucketTagging":    false,
+		"s3:DeleteObjects":       false,
+		"iam:UpdateRole":         false,
+		// No colon: the whole string is the verb test's input.
+		"GetFoo":      true,
+		"ListThings":  true,
+		"TagResource": false,
+		"s3":          false,
+		"":            false,
+		// An empty verb keeps the call out of the read-only set.
+		"logs:": false,
+	}
+	for action, want := range tests {
+		if got := isReadOnlyAction(action); got != want {
+			t.Errorf("isReadOnlyAction(%q) = %v, want %v", action, got, want)
+		}
+	}
+}

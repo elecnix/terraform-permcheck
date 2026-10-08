@@ -39,17 +39,23 @@ var s3OptionalPrefixes = []string{
 	// Transfer acceleration
 	"s3:PutAccelerateConfiguration", "s3:GetAccelerateConfiguration",
 	"s3:PutBucketAccelerateConfiguration", "s3:GetBucketAccelerateConfiguration",
-	// Analytics, inventory, metrics, intelligent tiering
+	// Analytics, inventory, metrics, intelligent tiering. The two spellings
+	// of a feature sit together: S3 emits the bucket-level one
+	// (s3:PutBucketAnalyticsConfiguration) in the provider source and the
+	// CloudFormation schema the configuration-level one
+	// (s3:PutAnalyticsConfiguration). Neither is a prefix of the other.
 	"s3:PutAnalyticsConfiguration", "s3:GetAnalyticsConfiguration",
+	"s3:PutBucketAnalyticsConfiguration",
 	"s3:GetBucketAnalyticsConfiguration", "s3:DeleteBucketAnalyticsConfiguration",
 	"s3:PutInventoryConfiguration", "s3:GetInventoryConfiguration",
+	"s3:PutBucketInventoryConfiguration",
 	"s3:GetBucketInventoryConfiguration", "s3:DeleteBucketInventoryConfiguration",
 	"s3:PutMetricsConfiguration", "s3:GetMetricsConfiguration",
+	"s3:PutBucketMetricsConfiguration",
 	"s3:GetBucketMetricsConfiguration", "s3:DeleteBucketMetricsConfiguration",
 	"s3:PutIntelligentTieringConfiguration", "s3:GetIntelligentTieringConfiguration",
+	"s3:PutBucketIntelligentTieringConfiguration",
 	"s3:GetBucketIntelligentTieringConfiguration", "s3:DeleteBucketIntelligentTieringConfiguration",
-	"s3:PutBucketAnalyticsConfiguration", "s3:PutBucketInventoryConfiguration",
-	"s3:PutBucketMetricsConfiguration", "s3:PutBucketIntelligentTieringConfiguration",
 	// Object lock
 	"s3:PutBucketObjectLockConfiguration", "s3:GetBucketObjectLockConfiguration",
 	"s3:PutObjectLockConfiguration",

@@ -2,6 +2,8 @@
 // provides implementations for AWS, GCP, and Azure.
 package cloud
 
+import "sort"
+
 // Schema maps a cloud resource type to the IAM permissions required
 // to create, read, update, delete, and list it.
 type Schema struct {
@@ -112,27 +114,49 @@ func (c *ChainProvider) Resolve(tfType string) (*Schema, error) {
 // completeFrom fills the incomplete operations of schema from the first later
 // provider that knows the type and has actions for them. It returns schema
 // itself when nothing needs or can take filling, and a merged copy otherwise.
+//
+// The copy is made once, on the first operation any provider fills: the first
+// provider may have cached the schema it returned, so merging has to write to
+// a copy, and one copy serves every later provider.
 func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provider) *Schema {
 	merged := schema
+	copied := false
 	for _, p := range rest {
-		if len(merged.Incomplete) == 0 {
+		ops := incompleteOps(merged)
+		if len(ops) == 0 {
 			break
 		}
 		fallback, err := p.Resolve(tfType)
 		if err != nil {
 			continue
 		}
-		for op := range merged.Incomplete {
+		for _, op := range ops {
 			if len(fallback.Permissions[op]) == 0 {
 				continue
 			}
-			if merged == schema {
+			if !copied {
 				merged = schema.clone()
+				copied = true
 			}
 			merged.mergeOperation(op, fallback)
 		}
 	}
 	return merged
+}
+
+// incompleteOps lists the operations a schema still needs filling for, as a
+// sorted snapshot: mergeOperation clears entries from the schema's own map, so
+// walking that map directly would be walking a map under mutation.
+func incompleteOps(s *Schema) []string {
+	if len(s.Incomplete) == 0 {
+		return nil
+	}
+	ops := make([]string, 0, len(s.Incomplete))
+	for op := range s.Incomplete {
+		ops = append(ops, op)
+	}
+	sort.Strings(ops)
+	return ops
 }
 
 // clone copies a schema deeply enough that merging into the copy leaves the
