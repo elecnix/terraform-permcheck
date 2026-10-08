@@ -578,6 +578,29 @@ func TestFormat_NeedSource(t *testing.T) {
 	}
 }
 
+// A workflow command ends at a newline, and its properties end at a comma.
+// The renderer escapes them as the Actions toolkit does, so a file name or a
+// reason cannot split the command or start another one.
+func TestFormatGitHubAnnotations_EscapesCommandValues(t *testing.T) {
+	missing := []iam.MissingAction{
+		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+	}
+	locations := Locations{"aws_s3_bucket.b": {Path: "a,line=9:x%\r\n::error::y.tf", Line: 3}}
+	got := formatGitHubAnnotations(missing, locations)
+	want := "::warning file=a%2Cline=9%3Ax%25%0D%0A%3A%3Aerror%3A%3Ay.tf,line=3,title=Missing IAM permission::s3:CreateBucket needed by: aws_s3_bucket.b (create)\n"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+
+	excluded := []iam.ExcludedAction{
+		{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket"}, Reason: "50%\n::error::x"},
+	}
+	got = formatExcludedAnnotations(excluded)
+	if strings.Count(got, "\n") != 1 || !strings.Contains(got, "50%25%0A::error::x") {
+		t.Errorf("reason not escaped as message data:\n%q", got)
+	}
+}
+
 func TestClassTag(t *testing.T) {
 	tests := []struct {
 		class iam.Class
