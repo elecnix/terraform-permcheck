@@ -39,11 +39,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/elecnix/terraform-permcheck/internal/cloud"
+	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
-	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
 // errGapsFound is returned by validateCmd when permission gaps are detected
@@ -113,7 +112,6 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	exclusions := cfg.Exclude
 	// An explicit --strict-resources, true or false, overrides the config.
 	strict := cfg.StrictResources
 	fs.Visit(func(f *flag.Flag) {
@@ -121,6 +119,14 @@ func validateCmd(args []string) error {
 			strict = *strictResources
 		}
 	})
+	opts := check.Options{
+		Filter: check.Filter{
+			NoFilter:        *noFilter,
+			OnlyRequired:    *onlyRequired,
+			StrictResources: strict,
+		},
+		Exclusions: cfg.Exclude,
+	}
 
 	// Build resource-to-file location map when --terraform-root is set.
 	// In plan mode, this provides file= and line= parameters for annotations.
@@ -147,7 +153,7 @@ func validateCmd(args []string) error {
 		if *policyFromPlanOutput != "" || *policyFromStateOutput != "" {
 			return fmt.Errorf("--policy-from-plan/output not applicable in static HCL mode (no plan available)")
 		}
-		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, *noFilter, *onlyRequired, strict, *format, *exitZero, locations, exclusions, *showExcluded)
+		return validateStaticHCL(*terraformRoot, *policyFile, *cloudName, opts, *format, *exitZero, locations, *showExcluded)
 	}
 
 	// Plan mode: read plan from stdin or file.
@@ -228,53 +234,12 @@ func validateCmd(args []string) error {
 		return fmt.Errorf("parse plan: %w", err)
 	}
 
-	if len(changes) == 0 {
-		printSuccess(0, "resource changes", *format)
-		return nil
-	}
-
-	// Parse policy
-	policy, err := iam.ParsePolicy(policyRaw)
-	if err != nil {
-		return fmt.Errorf("parse policy: %w", err)
-	}
-
-	// Resolve schemas
-	resolver := cloud.NewChainProvider(
-		provideraws.NewSourceProvider(),
-		cloud.NewAWSProvider(),
-	)
-
-	// Validate with default filtering (skip data-plane and optional permissions)
-	filter := iam.DefaultFilter()
-	if *noFilter {
-		filter = iam.FilterConfig{} // all zero values = no filtering
-	}
-	if *onlyRequired {
-		filter.ExcludeConditional = true
-	}
-	filter.StrictResources = strict
-	missing, err := iam.Validate(changes, policy, &schemaAdapter{resolver}, filter)
+	res, err := check.Run(check.FromPlan(changes), func() ([]byte, error) { return policyRaw, nil }, opts)
 	if err != nil {
 		return err
 	}
 
-	return report(missing, exclusions, len(changes), "resource changes", *format, *exitZero, *showExcluded, locations)
-}
-
-// schemaResolver maps a terraform resource type to the permissions its cloud
-// schema requires. schemaAdapter implements it over cloud.Provider.
-type schemaResolver interface {
-	Resolve(tfType string) (iam.SchemaLike, error)
-}
-
-// schemaAdapter bridges cloud.Provider to iam.SchemaLike for the validator.
-type schemaAdapter struct {
-	p cloud.Provider
-}
-
-func (a *schemaAdapter) Resolve(tfType string) (iam.SchemaLike, error) {
-	return a.p.Resolve(tfType)
+	return report(res, *format, *exitZero, *showExcluded, locations)
 }
 
 // stdinHasData returns true if stdin is a pipe (not a terminal) and has data
@@ -320,13 +285,12 @@ func loadConfig(configPath string) (*iam.Config, error) {
 	return cfg, nil
 }
 
-// report applies config exclusions to the missing actions, prints the result,
-// and returns errGapsFound when actionable (non-excluded) gaps remain and
-// --exit-zero was not set. Excluded findings never fail the run.
-func report(missing []iam.MissingAction, exclusions []iam.Exclusion, checked int, resourceLabel, format string, exitZero, showExcluded bool, locations map[string]iam.FileLocation) error {
-	kept, excluded := iam.ApplyExclusions(missing, exclusions)
-	printReport(kept, excluded, checked, resourceLabel, format, locations, showExcluded)
-	if len(kept) > 0 && !exitZero {
+// report prints the check result and returns errGapsFound when actionable
+// (non-excluded) gaps remain and --exit-zero was not set. Excluded findings
+// never fail the run.
+func report(res check.Result, format string, exitZero, showExcluded bool, locations map[string]iam.FileLocation) error {
+	printReport(res.Missing, res.Excluded, res.Checked, res.Label, format, locations, showExcluded)
+	if len(res.Missing) > 0 && !exitZero {
 		return errGapsFound
 	}
 	return nil
@@ -381,17 +345,6 @@ func summary(missing []iam.MissingAction, checked int, resourceLabel string) str
 	return line + "."
 }
 
-// printSuccess prints the all-clear message for early-return paths with no
-// resource changes (and thus no exclusions to consider).
-func printSuccess(checked int, resourceLabel, format string) {
-	switch format {
-	case "json":
-		fmt.Print(iam.FormatJSON(nil, nil, checked, resourceLabel, nil))
-	default:
-		fmt.Printf("All required permissions covered (%d %s checked).\n", checked, resourceLabel)
-	}
-}
-
 // unwrapJSONString converts a json.RawMessage to a []byte suitable for
 // policy parsing. If the raw value is a JSON string (e.g. `"..."`), it
 // unquotes and returns the inner string. Otherwise it returns the raw
@@ -409,7 +362,7 @@ func unwrapJSONString(raw json.RawMessage) ([]byte, error) {
 // over-approximates: every resource type referenced in .tf files is included
 // regardless of count, for_each, or whether the resource would actually be
 // created.
-func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, onlyRequired, strictResources bool, format string, exitZero bool, locations map[string]iam.FileLocation, exclusions []iam.Exclusion, showExcluded bool) error {
+func validateStaticHCL(terraformRoot, policyFile, cloudName string, opts check.Options, format string, exitZero bool, locations map[string]iam.FileLocation, showExcluded bool) error {
 	if cloudName == "" {
 		return fmt.Errorf("--cloud is required (supported: aws)")
 	}
@@ -423,131 +376,18 @@ func validateStaticHCL(terraformRoot, policyFile, cloudName string, noFilter, on
 		return fmt.Errorf("parse terraform configurations: %w", err)
 	}
 
-	if len(blocks) == 0 {
-		printSuccess(0, "resource types (static HCL mode)", format)
-		return nil
+	// The policy file is read only when there is something to check.
+	readPolicy := func() ([]byte, error) {
+		raw, err := os.ReadFile(policyFile)
+		if err != nil {
+			return nil, fmt.Errorf("read policy: %w", err)
+		}
+		return raw, nil
 	}
-
-	// Parse policy
-	policyRaw, err := os.ReadFile(policyFile)
-	if err != nil {
-		return fmt.Errorf("read policy: %w", err)
-	}
-	policy, err := iam.ParsePolicy(policyRaw)
-	if err != nil {
-		return fmt.Errorf("parse policy: %w", err)
-	}
-
-	// Resolve schemas, then build the resource changes those schemas ask for
-	adapter := &schemaAdapter{cloud.NewChainProvider(
-		provideraws.NewSourceProvider(),
-		cloud.NewAWSProvider(),
-	)}
-	changes, checked := staticChanges(blocks, adapter)
-
-	// Validate
-	filter := iam.DefaultFilter()
-	if noFilter {
-		filter = iam.FilterConfig{}
-	}
-	if onlyRequired {
-		filter.ExcludeConditional = true
-	}
-	// Static mode has no ARNs, so strict mode checks every scoped grant.
-	filter.StrictResources = strictResources
-	missing, err := iam.Validate(changes, policy, adapter, filter)
+	res, err := check.Run(check.FromHCL(blocks), readPolicy, opts)
 	if err != nil {
 		return err
 	}
 
-	return report(missing, exclusions, checked, "resource types (static HCL mode)", format, exitZero, showExcluded, locations)
-}
-
-// staticMutationOps are the operations static mode checks, in report order.
-var staticMutationOps = []string{"create", "update", "delete"}
-
-// staticChanges turns the parsed HCL blocks into the resource changes worth
-// validating. It deduplicates by resource type, resolves each type's schema
-// once, and emits one entry per operation that adds a permission the create
-// check does not already cover. It returns the changes and the number of
-// distinct resource types checked, which is not len(changes): a single type
-// can carry several entries.
-//
-// A type the resolver cannot map is skipped, since validation has nothing to
-// check it against.
-func staticChanges(blocks []hcl.ResourceBlock, resolver schemaResolver) ([]*plan.ResourceChange, int) {
-	var changes []*plan.ResourceChange
-	checked := 0
-
-	seen := make(map[string]bool)
-	for _, b := range blocks {
-		if seen[b.Type] {
-			continue
-		}
-		seen[b.Type] = true
-
-		schema, err := resolver.Resolve(b.Type)
-		if err != nil {
-			continue
-		}
-		ops := staticOpsFor(schema.GetPermissions())
-		if len(ops) == 0 {
-			continue
-		}
-		checked++
-
-		var attrs map[string]bool
-		if len(b.Attributes) > 0 {
-			attrs = make(map[string]bool, len(b.Attributes))
-			for _, a := range b.Attributes {
-				attrs[a] = true
-			}
-		}
-
-		for _, op := range ops {
-			changes = append(changes, &plan.ResourceChange{
-				Type:       b.Type,
-				Name:       b.Name,
-				Change:     op,
-				Attributes: attrs,
-			})
-		}
-	}
-
-	return changes, checked
-}
-
-// staticOpsFor picks the mutation operations a schema makes worth checking.
-// "create" is always worth it when the schema defines it. Another operation is
-// worth it only when it carries at least one action the create set does not:
-// the validator falls back to create when an operation is absent, and an
-// operation whose actions the create check already reports would repeat that
-// result. Read and list are not mutation operations and are never checked.
-func staticOpsFor(perms map[string][]string) []string {
-	create := make(map[string]bool, len(perms["create"]))
-	for _, a := range perms["create"] {
-		create[a] = true
-	}
-
-	var ops []string
-	for _, op := range staticMutationOps {
-		actions := perms[op]
-		if len(actions) == 0 {
-			continue
-		}
-		if op != "create" {
-			distinct := false
-			for _, a := range actions {
-				if !create[a] {
-					distinct = true
-					break
-				}
-			}
-			if !distinct {
-				continue
-			}
-		}
-		ops = append(ops, op)
-	}
-	return ops
+	return report(res, format, exitZero, showExcluded, locations)
 }
