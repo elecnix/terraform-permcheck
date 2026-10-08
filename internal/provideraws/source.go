@@ -328,14 +328,8 @@ func (r resourceFile) schema() *cloud.Schema {
 		Ops:      make(map[string][]iam.Requirement, len(actions)),
 	}
 
-	for op, eas := range actions {
-		reqs := make([]iam.Requirement, 0, len(eas))
-		for _, ea := range eas {
-			for _, g := range ea.paths() {
-				reqs = append(reqs, iam.Requirement{Action: ea.Action, Gate: g})
-			}
-		}
-		schema.Ops[op] = reqs
+	for op, reqs := range actions {
+		schema.Ops[op] = append([]iam.Requirement(nil), reqs...)
 	}
 
 	schema.Incomplete = incompleteOperations(actions, bound, r.pkg.idx.reachesClient)
@@ -478,7 +472,7 @@ func resourceNameFromFile(f *ast.File) string {
 // must not be taken as the full permission set. An operation bound to a no-op
 // such as schema.NoopContext, or to a function that never touches a client,
 // is not incomplete.
-func incompleteOperations(actions map[string][]ExtractedAction, bound map[string]string, usesClient func(string) bool) map[string]bool {
+func incompleteOperations(actions map[string][]iam.Requirement, bound map[string]string, usesClient func(string) bool) map[string]bool {
 	var out map[string]bool
 	for _, op := range []string{"create", "read", "delete"} {
 		fn, ok := bound[op]
@@ -488,8 +482,8 @@ func incompleteOperations(actions map[string][]ExtractedAction, bound map[string
 		complete := len(actions[op]) > 0
 		if complete && op != "read" {
 			complete = false
-			for _, ea := range actions[op] {
-				if !isReadOnlyAction(ea.Action) {
+			for _, r := range actions[op] {
+				if !isReadOnlyAction(r.Action) {
 					complete = true
 					break
 				}

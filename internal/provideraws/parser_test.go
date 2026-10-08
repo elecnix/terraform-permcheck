@@ -76,19 +76,19 @@ func resourceVaultDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 
 	// Create should find CreateBackupVault and follow the return to resourceVaultRead
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "backup:CreateBackupVault") {
+	if !containsRequirement(createActions, "backup:CreateBackupVault") {
 		t.Errorf("create: expected backup:CreateBackupVault, got %v", createActions)
 	}
 
 	// Delete should find DeleteBackupVault
 	deleteActions := actions["delete"]
-	if !containsExtractedAction(deleteActions, "backup:DeleteBackupVault") {
+	if !containsRequirement(deleteActions, "backup:DeleteBackupVault") {
 		t.Errorf("delete: expected backup:DeleteBackupVault, got %v", deleteActions)
 	}
 
 	// Update should find TagResource
 	updateActions := actions["update"]
-	if !containsExtractedAction(updateActions, "backup:TagResource") {
+	if !containsRequirement(updateActions, "backup:TagResource") {
 		t.Errorf("update: expected backup:TagResource, got %v", updateActions)
 	}
 }
@@ -133,12 +133,12 @@ func resourceTableRead(ctx context.Context, d *schema.ResourceData, meta any) di
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "dynamodb:CreateTable") {
+	if !containsRequirement(createActions, "dynamodb:CreateTable") {
 		t.Errorf("create: expected dynamodb:CreateTable, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsExtractedAction(readActions, "dynamodb:DescribeContinuousBackups") {
+	if !containsRequirement(readActions, "dynamodb:DescribeContinuousBackups") {
 		t.Errorf("read: expected dynamodb:DescribeContinuousBackups, got %v", readActions)
 	}
 }
@@ -186,17 +186,17 @@ func resourceRoleDelete(ctx context.Context, d *schema.ResourceData, meta any) d
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "iam:CreateRole") {
+	if !containsRequirement(createActions, "iam:CreateRole") {
 		t.Errorf("create: expected iam:CreateRole, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsExtractedAction(readActions, "iam:GetRole") {
+	if !containsRequirement(readActions, "iam:GetRole") {
 		t.Errorf("read: expected iam:GetRole, got %v", readActions)
 	}
 
 	deleteActions := actions["delete"]
-	if !containsExtractedAction(deleteActions, "iam:DeleteRole") {
+	if !containsRequirement(deleteActions, "iam:DeleteRole") {
 		t.Errorf("delete: expected iam:DeleteRole, got %v", deleteActions)
 	}
 }
@@ -232,11 +232,11 @@ func resourceBucketCreate(ctx context.Context, d *schema.ResourceData, meta any)
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "s3:CreateBucket") {
+	if !containsRequirement(createActions, "s3:CreateBucket") {
 		t.Errorf("create: expected s3:CreateBucket, got %v", createActions)
 	}
 	// PutBucketVersioning is conditional and should still be found
-	if !containsExtractedAction(createActions, "s3:PutBucketVersioning") {
+	if !containsRequirement(createActions, "s3:PutBucketVersioning") {
 		t.Errorf("create: expected s3:PutBucketVersioning (conditional), got %v", createActions)
 	}
 }
@@ -461,14 +461,21 @@ func containsAction(actions []string, want string) bool {
 	return false
 }
 
-// containsExtractedAction reports whether actions holds an action named want.
-func containsExtractedAction(actions []ExtractedAction, want string) bool {
-	for _, a := range actions {
-		if a.Action == want {
-			return true
+// containsRequirement reports whether reqs reach an action named want.
+func containsRequirement(reqs []iam.Requirement, want string) bool {
+	return gatesOf(reqs, want) != nil
+}
+
+// gatesOf returns the gate of each path on which reqs reach action, in order,
+// or nil when no path does.
+func gatesOf(reqs []iam.Requirement, action string) []iam.Gate {
+	var gates []iam.Gate
+	for _, r := range reqs {
+		if r.Action == action {
+			gates = append(gates, r.Gate)
 		}
 	}
-	return false
+	return gates
 }
 
 func TestResourceTypeFromFile(t *testing.T) {
@@ -560,53 +567,14 @@ func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	createActions := actions["create"]
-
-	// Find unconditional CreateBackupVault
-	var createVault *ExtractedAction
-	var createGrant *ExtractedAction
-	var tagResource *ExtractedAction
-	for i := range createActions {
-		switch createActions[i].Action {
-		case "backup:CreateBackupVault":
-			createVault = &createActions[i]
-		case "kms:CreateGrant":
-			createGrant = &createActions[i]
-		case "backup:TagResource":
-			tagResource = &createActions[i]
-		}
-	}
-
-	// CreateBackupVault: unconditional
-	if createVault == nil {
-		t.Fatal("expected backup:CreateBackupVault in actions")
-	}
-	if createVault.Conditional {
-		t.Errorf("CreateBackupVault should be unconditional, got conditional=%v reason=%q",
-			createVault.Conditional, createVault.Condition)
-	}
-
-	// kms:CreateGrant: conditional on kms_key_arn
-	if createGrant == nil {
-		t.Fatal("expected kms:CreateGrant in actions")
-	}
-	if !createGrant.Conditional {
-		t.Error("kms:CreateGrant should be conditional")
-	}
-	if createGrant.Condition != "kms_key_arn" {
-		t.Errorf("kms:CreateGrant condition = %q, want %q", createGrant.Condition, "kms_key_arn")
-	}
-
-	// TagResource: conditional on tags
-	if tagResource == nil {
-		t.Fatal("expected backup:TagResource in actions")
-	}
-	if !tagResource.Conditional {
-		t.Error("TagResource should be conditional")
-	}
-	if tagResource.Condition != "tags" {
-		t.Errorf("TagResource condition = %q, want %q", tagResource.Condition, "tags")
-	}
+	checkGates(t, withoutErrorHandling(actions), "create", []gateCase{
+		// CreateBackupVault: unconditional
+		{"backup:CreateBackupVault", always},
+		// kms:CreateGrant: conditional on kms_key_arn
+		{"kms:CreateGrant", []iam.Gate{presence("kms_key_arn")}},
+		// TagResource: conditional on tags
+		{"backup:TagResource", []iam.Gate{presence("tags")}},
+	})
 }
 
 func TestParseResourceFileStructured_IfGet(t *testing.T) {
@@ -631,36 +599,11 @@ func resourceVaultDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	deleteActions := actions["delete"]
-
-	var listPoints *ExtractedAction
-	var deleteVault *ExtractedAction
-	for i := range deleteActions {
-		switch deleteActions[i].Action {
-		case "backup:ListRecoveryPointsByBackupVault":
-			listPoints = &deleteActions[i]
-		case "backup:DeleteBackupVault":
-			deleteVault = &deleteActions[i]
-		}
-	}
-
-	if listPoints == nil {
-		t.Fatal("expected ListRecoveryPointsByBackupVault")
-	}
-	if !listPoints.Conditional {
-		t.Error("ListRecoveryPointsByBackupVault should be conditional")
-	}
-	if listPoints.Condition != "force_destroy" {
-		t.Errorf("condition = %q, want force_destroy", listPoints.Condition)
-	}
-
-	// DeleteBackupVault: unconditional (outside the if block)
-	if deleteVault == nil {
-		t.Fatal("expected DeleteBackupVault")
-	}
-	if deleteVault.Conditional {
-		t.Error("DeleteBackupVault should be unconditional")
-	}
+	checkGates(t, withoutErrorHandling(actions), "delete", []gateCase{
+		{"backup:ListRecoveryPointsByBackupVault", []iam.Gate{presence("force_destroy")}},
+		// DeleteBackupVault: unconditional (outside the if block)
+		{"backup:DeleteBackupVault", always},
+	})
 }
 
 func TestParseResourceFile_IAMRole_Helpers(t *testing.T) {
@@ -713,11 +656,11 @@ func findRole(ctx context.Context, conn *iam.Client, id string) (*iam.Role, erro
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "iam:CreateRole") {
+	if !containsRequirement(createActions, "iam:CreateRole") {
 		t.Errorf("create: expected iam:CreateRole (followed through retryCreateRole helper), got %v", createActions)
 	}
 	// Create returns resourceRoleRead → should include GetRole from read chain
-	if !containsExtractedAction(createActions, "iam:GetRole") {
+	if !containsRequirement(createActions, "iam:GetRole") {
 		t.Errorf("create: expected iam:GetRole (followed through findRoleByName → findRole → GetRole chain + return following), got %v", createActions)
 	}
 	t.Logf("IAM role create actions: %v", createActions)
@@ -782,12 +725,12 @@ func deleteCacheCluster(ctx context.Context, conn *elasticache.Client, partition
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "elasticache:CreateCacheCluster") {
+	if !containsRequirement(createActions, "elasticache:CreateCacheCluster") {
 		t.Errorf("create: expected elasticache:CreateCacheCluster (followed through createCacheCluster helper), got %v", createActions)
 	}
 
 	deleteActions := actions["delete"]
-	if !containsExtractedAction(deleteActions, "elasticache:DeleteCacheCluster") {
+	if !containsRequirement(deleteActions, "elasticache:DeleteCacheCluster") {
 		t.Errorf("delete: expected elasticache:DeleteCacheCluster (followed through deleteCacheCluster helper), got %v", deleteActions)
 	}
 
@@ -830,27 +773,10 @@ func removeSecretReplicas(ctx context.Context, conn *secretsmanager.Client, id s
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	createActions := actions["create"]
-
-	var found bool
-	for _, ea := range createActions {
-		if ea.Action == "secretsmanager:RemoveRegionsFromReplication" {
-			found = true
-			if !ea.Conditional {
-				t.Error("RemoveRegionsFromReplication should be conditional (call site inside if d.GetOk(\"replica\"))")
-			}
-			if ea.Condition != "replica" {
-				t.Errorf("RemoveRegionsFromReplication condition = %q, want %q", ea.Condition, "replica")
-			}
-		}
-	}
-	if !found {
-		t.Error("expected secretsmanager:RemoveRegionsFromReplication in create actions")
-		t.Logf("create actions: %+v", createActions)
-	}
-
-	// Also verify that helpers called unconditionally don't get a spurious condition
-	// (the existing IAM Role helper test covers this)
+	// The call site sits inside if d.GetOk("replica").
+	checkGates(t, withoutErrorHandling(actions), "create", []gateCase{
+		{"secretsmanager:RemoveRegionsFromReplication", []iam.Gate{presence("replica")}},
+	})
 }
 
 // traversalCoverageSrc exercises every node type the AST traversal knows how
@@ -987,13 +913,13 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	want := []ExtractedAction{
+	want := []iam.Requirement{
 		{Action: "backup:CreateBackupVault"},
-		{Action: "kms:CreateGrant", Conditional: true, Condition: "kms_key_arn", ConditionKind: ConditionPresence},
+		{Action: "kms:CreateGrant", Gate: presence("kms_key_arn")},
 		{Action: "backup:TagResource"},
-		{Action: "backup:PutBackupVaultAccessPolicy", Conditional: true, Condition: "outer", ConditionKind: ConditionPresence},
-		{Action: "backup:DeleteBackupVaultCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
-		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "secondary", ConditionKind: ConditionPresence},
+		{Action: "backup:PutBackupVaultAccessPolicy", Gate: presence("outer")},
+		{Action: "backup:DeleteBackupVaultCopyPoint", Gate: presence("primary")},
+		{Action: "backup:StartBackupVaultCopyPoint", Gate: presence("secondary")},
 		{Action: "backup:DescribeCopyPoint"},
 		{Action: "backup:DescribeBackupVault"},
 		{Action: "backup:ListTags"},
@@ -1021,22 +947,31 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 // ignoreErrorHandling clears BestEffort. The traversal tests write their calls
 // without error handling, so their calls would read as best-effort;
 // parser_besteffort_test.go covers that.
-func ignoreErrorHandling(actions []ExtractedAction) []ExtractedAction {
-	out := make([]ExtractedAction, len(actions))
-	for i, a := range actions {
-		a.BestEffort = false
-		out[i] = a
+func ignoreErrorHandling(reqs []iam.Requirement) []iam.Requirement {
+	out := make([]iam.Requirement, len(reqs))
+	for i, r := range reqs {
+		r.BestEffort = false
+		out[i] = r
 	}
 	return out
 }
 
-func formatActions(actions []ExtractedAction) string {
+// withoutErrorHandling is ignoreErrorHandling over every operation.
+func withoutErrorHandling(actions map[string][]iam.Requirement) map[string][]iam.Requirement {
+	out := make(map[string][]iam.Requirement, len(actions))
+	for op, reqs := range actions {
+		out[op] = ignoreErrorHandling(reqs)
+	}
+	return out
+}
+
+func formatActions(reqs []iam.Requirement) string {
 	var b strings.Builder
-	for i, ea := range actions {
+	for i, r := range reqs {
 		if i > 0 {
 			b.WriteString("\n     ")
 		}
-		fmt.Fprintf(&b, "%s (conditional=%v reason=%q)", ea.Action, ea.Conditional, ea.Condition)
+		fmt.Fprintf(&b, "%s %+v", r.Action, r.Gate)
 	}
 	return b.String()
 }
@@ -1063,7 +998,7 @@ func resourceVaultCreate(ctx context.Context, d *schema.ResourceData, meta any) 
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	want := []ExtractedAction{{Action: "backup:CreateBackupVault"}}
+	want := []iam.Requirement{{Action: "backup:CreateBackupVault"}}
 	if got := actions["create"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("create actions = %s, want %s", formatActions(got), formatActions(want))
 	}
@@ -1169,10 +1104,10 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 
 	want := []helperCall{
 		{Name: "helperBlock"},
-		{Name: "helperBlock", Cond: []condGuard{{Attribute: "guard", Kind: ConditionPresence}}},
-		{Name: "helperNested", Cond: []condGuard{{Attribute: "guard", Kind: ConditionPresence}}},
+		{Name: "helperBlock", Cond: []condGuard{{Attribute: "guard"}}},
+		{Name: "helperNested", Cond: []condGuard{{Attribute: "guard"}}},
 		{Name: "helperPlain"},
-		{Name: "helperBlock", Cond: []condGuard{{Attribute: "primary", Kind: ConditionPresence}}},
+		{Name: "helperBlock", Cond: []condGuard{{Attribute: "primary"}}},
 		{Name: "helperPrimary"},
 		{Name: "helperLoop"},
 		{Name: "helperRange"},
@@ -1230,7 +1165,7 @@ func TestParseResourceFileStructured_PlainIfRestoresConnScope(t *testing.T) {
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	want := []ExtractedAction{
+	want := []iam.Requirement{
 		// Inside the plain if: kms scope is in effect, and a plain if is not a
 		// conditional gate, so the action is unconditional.
 		{Action: "kms:CreateGrant"},
@@ -1286,12 +1221,12 @@ func resourceRuleRead(ctx context.Context, conn *eventbridge.Client, d *schema.R
 	}
 
 	createActions := actions["create"]
-	if !containsExtractedAction(createActions, "events:PutRule") {
+	if !containsRequirement(createActions, "events:PutRule") {
 		t.Errorf("create: expected events:PutRule, got %v", createActions)
 	}
 
 	readActions := actions["read"]
-	if !containsExtractedAction(readActions, "events:DescribeRule") {
+	if !containsRequirement(readActions, "events:DescribeRule") {
 		t.Errorf("read: expected events:DescribeRule, got %v", readActions)
 	}
 
@@ -1334,29 +1269,13 @@ func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, me
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	var updateStage *ExtractedAction
-	for i := range actions["delete"] {
-		if actions["delete"][i].Action == "secretsmanager:UpdateSecretVersionStage" {
-			updateStage = &actions["delete"][i]
-		}
-	}
-
-	if updateStage == nil {
-		t.Fatal("expected secretsmanager:UpdateSecretVersionStage in delete actions")
-	}
-	if updateStage.Condition != "version_stages" {
-		t.Errorf("Condition = %q, want version_stages", updateStage.Condition)
-	}
-	if !updateStage.ValueGuarded {
-		t.Error("UpdateSecretVersionStage should be flagged as value-guarded: its guard is a comparison on the value")
-	}
-
-	// The plain call outside the guard keeps its unconditional mark.
-	for _, ea := range actions["delete"] {
-		if ea.Action == "secretsmanager:DeleteSecret" && ea.ValueGuarded {
-			t.Error("DeleteSecret should not be value-guarded")
-		}
-	}
+	checkGates(t, withoutErrorHandling(actions), "delete", []gateCase{
+		// The guard is a comparison on the value, so the gate is a value
+		// guard.
+		{"secretsmanager:UpdateSecretVersionStage", []iam.Gate{valued("version_stages")}},
+		// The plain call outside the guard stays unconditional.
+		{"secretsmanager:DeleteSecret", always},
+	})
 }
 
 func TestExtractValueGuardAttribute(t *testing.T) {
@@ -1521,29 +1440,17 @@ func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, me
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]ExtractedAction{}
-	for _, ea := range actions["delete"] {
-		got[ea.Action] = ea
-	}
-
-	// A presence guard nested in a value guard decides on its own attribute:
-	// the outer guard holds by default, so only "other" gates the call.
-	nested := got["secretsmanager:PutSecretValue"]
-	if nested.Condition != "other" || nested.ValueGuarded {
-		t.Errorf("nested presence call = %+v, want Condition other, not value-guarded", nested)
-	}
-
-	// The sibling call under only the value guard stays value-guarded.
-	outer := got["secretsmanager:UpdateSecretVersionStage"]
-	if outer.Condition != "version_stages" || !outer.ValueGuarded {
-		t.Errorf("outer call = %+v, want Condition version_stages, value-guarded", outer)
-	}
-
-	// When one if has both guards, the value-tested attribute names the condition.
-	both := got["secretsmanager:DeleteSecret"]
-	if both.Condition != "b" || !both.ValueGuarded {
-		t.Errorf("combined guard call = %+v, want Condition b, value-guarded", both)
-	}
+	checkGates(t, withoutErrorHandling(actions), "delete", []gateCase{
+		// A presence guard nested in a value guard decides on its own
+		// attribute: the outer guard holds by default, so only "other" gates
+		// the call.
+		{"secretsmanager:PutSecretValue", []iam.Gate{presence("other")}},
+		// The sibling call under only the value guard stays value-guarded.
+		{"secretsmanager:UpdateSecretVersionStage", []iam.Gate{valued("version_stages")}},
+		// When one if has both guards, the value-tested attribute gates the
+		// call.
+		{"secretsmanager:DeleteSecret", []iam.Gate{valued("b")}},
+	})
 }
 
 func TestParseResourceFileStructured_ValueGuardUnderOuterGuard(t *testing.T) {
@@ -1570,49 +1477,39 @@ func resourceSecretVersionDelete(ctx context.Context, d *schema.ResourceData, me
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]ExtractedAction{}
-	for _, ea := range actions["delete"] {
-		got[ea.Action] = ea
-	}
-
-	// An outer presence or change guard keeps its reason and kind, and the
+	// An outer presence or change guard keeps its attribute and kind, and the
 	// inner value guard does not mark the call as satisfied by a default.
-	p := got["secretsmanager:PutSecretValue"]
-	if p.Condition != "a" || p.ConditionKind != ConditionPresence || p.ValueGuarded {
-		t.Errorf("under presence guard = %+v, want presence on a, not value-guarded", p)
-	}
-	c := got["secretsmanager:UpdateSecretVersionStage"]
-	if c.Condition != "c" || c.ConditionKind != ConditionChange || c.ValueGuarded {
-		t.Errorf("under change guard = %+v, want change on c, not value-guarded", c)
-	}
+	checkGates(t, withoutErrorHandling(actions), "delete", []gateCase{
+		{"secretsmanager:PutSecretValue", []iam.Gate{presence("a")}},
+		{"secretsmanager:UpdateSecretVersionStage", []iam.Gate{changed("c")}},
+	})
 }
 
-func TestDedupActions_ValueGuardedNeedsEveryOccurrence(t *testing.T) {
-	guarded := ExtractedAction{Action: "x:A", Conditional: true, Condition: "b", ConditionKind: ConditionPresence, ValueGuarded: true}
+func TestMergeRequirements_ValueGuardedNeedsEveryOccurrence(t *testing.T) {
+	guarded := iam.Requirement{Action: "x:A", Gate: valued("b")}
+	plain := iam.Requirement{Action: "x:A", Gate: presence("c")}
 
 	// An unconditional duplicate makes the action unconditional and unguarded.
-	got := dedupActions([]ExtractedAction{guarded, {Action: "x:A"}})
-	if len(got) != 1 || got[0].Conditional || got[0].ValueGuarded {
-		t.Errorf("unconditional duplicate = %+v, want unconditional and not value-guarded", got)
+	got := mergeRequirements([]iam.Requirement{guarded, {Action: "x:A"}})
+	if want := []iam.Requirement{{Action: "x:A"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("unconditional duplicate = %+v, want %+v", got, want)
 	}
 
 	// A duplicate under a plain presence guard runs on a set default, so the
-	// value guard no longer covers the action.
-	plain := ExtractedAction{Action: "x:A", Conditional: true, Condition: "c", ConditionKind: ConditionPresence}
-	got = dedupActions([]ExtractedAction{guarded, plain})
-	if len(got) != 1 || got[0].ValueGuarded {
-		t.Errorf("presence-guarded duplicate = %+v, want not value-guarded", got)
+	// value guard no longer covers the action: the plain path stays, and the
+	// result does not depend on which occurrence comes first.
+	got = mergeRequirements([]iam.Requirement{guarded, plain})
+	if want := []iam.Requirement{guarded, plain}; !reflect.DeepEqual(got, want) {
+		t.Errorf("presence-guarded duplicate = %+v, want %+v", got, want)
+	}
+	got = mergeRequirements([]iam.Requirement{plain, guarded})
+	if want := []iam.Requirement{plain, guarded}; !reflect.DeepEqual(got, want) {
+		t.Errorf("guarded occurrence last = %+v, want %+v", got, want)
 	}
 
-	// The result does not depend on which occurrence comes first.
-	got = dedupActions([]ExtractedAction{plain, guarded})
-	if len(got) != 1 || got[0].ValueGuarded {
-		t.Errorf("guarded occurrence last = %+v, want not value-guarded", got)
-	}
-
-	// Two value-guarded occurrences stay value-guarded.
-	got = dedupActions([]ExtractedAction{guarded, guarded})
-	if len(got) != 1 || !got[0].ValueGuarded {
-		t.Errorf("both value-guarded = %+v, want value-guarded", got)
+	// Two value-guarded occurrences stay one value-guarded path.
+	got = mergeRequirements([]iam.Requirement{guarded, guarded})
+	if want := []iam.Requirement{guarded}; !reflect.DeepEqual(got, want) {
+		t.Errorf("both value-guarded = %+v, want %+v", got, want)
 	}
 }

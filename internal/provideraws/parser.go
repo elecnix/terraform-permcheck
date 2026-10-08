@@ -17,84 +17,36 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
-// ConditionKind says what a gated SDK call needs from its gating attribute.
-// The two kinds are evaluated from different data: presence from the planned
-// state, change from the difference between prior and planned state.
-type ConditionKind string
-
-const (
-	// ConditionPresence gates on the attribute being set, from a d.GetOk or
-	// d.Get guard.
-	ConditionPresence ConditionKind = "presence"
-	// ConditionChange gates on the attribute having changed, from a d.HasChange
-	// guard.
-	ConditionChange ConditionKind = "change"
-)
-
-// ExtractedAction represents an AWS IAM action extracted from a provider
-// source file, with metadata about whether it is conditionally called.
-type ExtractedAction struct {
-	Action        string        // e.g., "backup:CreateBackupVault"
-	Conditional   bool          // true if this SDK call is inside a conditional block
-	Condition     string        // attribute name guarding the call, e.g. "kms_key_arn"
-	ConditionKind ConditionKind // what the guard requires of that attribute; empty if unconditional
-
-	// ValueGuarded is true when the guard compares the attribute's value
-	// rather than its presence — a set that must be non-empty, say. The
-	// attribute then carries a default, so a non-zero value in the planned
-	// state says nothing about the configuration and the call only happens
-	// when the author set the attribute. Scalar comparisons are not flagged:
-	// a defaulted scalar is usually non-zero, which would make the call
-	// required, so presence stays the gate there.
-	ValueGuarded bool
-
-	// BestEffort is true when the provider ignores the call's failure: it
-	// discards the error, or makes the call only on the path that handles an
-	// earlier failure. A denied best-effort call does not fail the apply.
-	BestEffort bool
-
-	// Gates lists every path when the action is reached on more than one with
-	// different gates. The action is needed when any gate holds. The fields
-	// above then describe no single path: Conditional is true and the rest
-	// are zero.
-	Gates []iam.Gate
-}
-
-// paths returns the gate of each path that reaches the action.
-func (ea ExtractedAction) paths() []iam.Gate {
-	if len(ea.Gates) > 0 {
-		return ea.Gates
-	}
-	g := iam.Gate{BestEffort: ea.BestEffort}
-	if ea.Conditional && ea.Condition != "" {
-		if ea.ConditionKind == ConditionChange {
-			g.Changed = ea.Condition
-		} else {
-			g.Attribute = ea.Condition
-			g.ValueGuarded = ea.ValueGuarded
+// mergeRequirements groups the requirements by action, in the order each
+// action first appears. An action reached on several paths is needed when any
+// of them runs, so it keeps the gate of each path, without the paths another
+// one subsumes (see essentialGates).
+func mergeRequirements(reqs []iam.Requirement) []iam.Requirement {
+	var actions []string
+	gates := make(map[string][]iam.Gate)
+	for _, r := range reqs {
+		if _, seen := gates[r.Action]; !seen {
+			actions = append(actions, r.Action)
 		}
+		gates[r.Action] = append(gates[r.Action], r.Gate)
 	}
-	return []iam.Gate{g}
+	out := make([]iam.Requirement, 0, len(reqs))
+	for _, action := range actions {
+		out = append(out, requirements(action, gates[action])...)
+	}
+	return out
 }
 
-// withPaths returns the action reached on the given paths. A path with no
-// gate whose failure counts makes the action required whatever the others
-// say. One distinct path sets the single-path fields, and several set Gates.
-func withPaths(action string, paths []iam.Gate) ExtractedAction {
+// requirements returns one requirement per essential path to action. A path
+// with no gate whose failure counts makes the action required whatever the
+// others say.
+func requirements(action string, paths []iam.Gate) []iam.Requirement {
 	distinct := essentialGates(paths)
-	if len(distinct) > 1 {
-		return ExtractedAction{Action: action, Conditional: true, Gates: distinct}
+	out := make([]iam.Requirement, len(distinct))
+	for i, g := range distinct {
+		out[i] = iam.Requirement{Action: action, Gate: g}
 	}
-	g := distinct[0]
-	ea := ExtractedAction{Action: action, BestEffort: g.BestEffort}
-	switch {
-	case g.Attribute != "":
-		ea.Conditional, ea.Condition, ea.ConditionKind = true, g.Attribute, ConditionPresence
-		ea.ValueGuarded = g.ValueGuarded
-	case g.Changed != "":
-		ea.Conditional, ea.Condition, ea.ConditionKind = true, g.Changed, ConditionChange
-	}
-	return ea
+	return out
 }
 
 // essentialGates drops the repeated paths and the paths another one
@@ -155,8 +107,8 @@ type helperCall struct {
 }
 
 // ParseResourceFileStructured parses a Go source file from the
-// terraform-provider-aws and extracts the IAM actions each CRUD function
-// requires, with conditional metadata. ParsePackage does the same across all
+// terraform-provider-aws and extracts the requirements of each CRUD function,
+// one per path that reaches an action. ParsePackage does the same across all
 // the files of a service package.
 //
 // It handles:
@@ -169,7 +121,7 @@ type helperCall struct {
 // - Calls whose failure the provider ignores, marked BestEffort: a discarded
 // or swallowed error, or a cleanup in the branch that returns an earlier
 // failure
-func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]ExtractedAction, error) {
+func ParseResourceFileStructured(src string, tfType string, resourceName string) (map[string][]iam.Requirement, error) {
 	name := tfType + ".go"
 	pkg, err := ParsePackage(map[string]string{name: src})
 	if err != nil {
@@ -224,7 +176,7 @@ func newPackage(files map[string]*ast.File) *Package {
 // The bindings come from the schema.Resource literal (CreateWithoutTimeout:
 // resourceBucketCreate). A file without one falls back to the naming
 // convention resource<Name><Op>.
-func (p *Package) ResourceActions(fileName, resourceName string) (map[string][]ExtractedAction, map[string]string) {
+func (p *Package) ResourceActions(fileName, resourceName string) (map[string][]iam.Requirement, map[string]string) {
 	funcs := p.resourceFuncs(fileName, resourceName)
 	if funcs == nil {
 		return nil, nil
@@ -253,17 +205,17 @@ func (p *Package) resourceFuncs(fileName, resourceName string) map[string][]stri
 }
 
 // actionsFor resolves the actions of each operation's functions.
-func (p *Package) actionsFor(funcs map[string][]string) map[string][]ExtractedAction {
-	actions := make(map[string][]ExtractedAction)
+func (p *Package) actionsFor(funcs map[string][]string) map[string][]iam.Requirement {
+	actions := make(map[string][]iam.Requirement)
 	for op, fns := range funcs {
-		var acts []ExtractedAction
+		var reqs []iam.Requirement
 		for _, fn := range fns {
 			if fn != "" {
-				acts = append(acts, p.idx.resolve(fn)...)
+				reqs = append(reqs, p.idx.resolve(fn)...)
 			}
 		}
-		if len(acts) > 0 {
-			actions[op] = dedupActions(acts)
+		if len(reqs) > 0 {
+			actions[op] = mergeRequirements(reqs)
 		}
 	}
 	return actions
@@ -392,9 +344,9 @@ const servicePackagePrefix = "github.com/hashicorp/terraform-provider-aws/intern
 type pkgIndex struct {
 	funcs      map[string]bool // every function and method, by name
 	plain      map[string]bool // the functions without a receiver
-	direct     map[string][]ExtractedAction
+	direct     map[string][]iam.Requirement
 	calls      map[string][]helperCall
-	memo       map[string][]ExtractedAction
+	memo       map[string][]iam.Requirement
 	inProgress map[string]bool
 
 	// errResult names the functions whose last result is an error, so a
@@ -429,9 +381,9 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 	idx := &pkgIndex{
 		funcs:      make(map[string]bool),
 		plain:      make(map[string]bool),
-		direct:     make(map[string][]ExtractedAction),
+		direct:     make(map[string][]iam.Requirement),
 		calls:      make(map[string][]helperCall),
-		memo:       make(map[string][]ExtractedAction),
+		memo:       make(map[string][]iam.Requirement),
 		inProgress: make(map[string]bool),
 		errResult:  make(map[string]bool),
 		clients:    make(map[string]bool),
@@ -609,7 +561,7 @@ func (idx *pkgIndex) hasPlain(name string) bool {
 // d.GetOk("attr")), the call-site condition is given to the callee's actions,
 // unless an action already carries a more specific condition of its own. A
 // recursive call contributes nothing beyond what the cycle already resolved.
-func (idx *pkgIndex) resolve(name string) []ExtractedAction {
+func (idx *pkgIndex) resolve(name string) []iam.Requirement {
 	if r, ok := idx.memo[name]; ok {
 		return r
 	}
@@ -619,7 +571,7 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 	idx.inProgress[name] = true
 	defer delete(idx.inProgress, name)
 
-	resolved := append([]ExtractedAction(nil), idx.direct[name]...)
+	resolved := append([]iam.Requirement(nil), idx.direct[name]...)
 	for _, hc := range idx.calls[name] {
 		target := idx
 		if hc.Pkg != "" {
@@ -631,24 +583,20 @@ func (idx *pkgIndex) resolve(name string) []ExtractedAction {
 		// through it best-effort.
 		bestEffort := hc.BestEffort || hc.Discard == discardAlways ||
 			(hc.Discard == discardIfError && target.errResult[hc.Name])
-		for _, ea := range target.resolve(hc.Name) {
-			var paths []iam.Gate
-			for _, p := range ea.paths() {
-				if bestEffort {
-					p.BestEffort = true
-				}
-				if len(hc.Cond) == 0 || !p.Ungated() {
-					paths = append(paths, p)
-					continue
-				}
-				for _, g := range hc.Cond {
-					paths = append(paths, g.gate(p.BestEffort))
-				}
+		for _, r := range target.resolve(hc.Name) {
+			if bestEffort {
+				r.BestEffort = true
 			}
-			resolved = append(resolved, withPaths(ea.Action, paths))
+			if len(hc.Cond) == 0 || !r.Ungated() {
+				resolved = append(resolved, r)
+				continue
+			}
+			for _, g := range hc.Cond {
+				resolved = append(resolved, iam.Requirement{Action: r.Action, Gate: g.gate(r.BestEffort)})
+			}
 		}
 	}
-	resolved = dedupActions(resolved)
+	resolved = mergeRequirements(resolved)
 	idx.memo[name] = resolved
 	return resolved
 }
@@ -738,7 +686,7 @@ type funcRefObserver interface {
 // sdkCallObserver collects the AWS SDK calls the traversal reaches, each tagged
 // with the conditional context it was reached under.
 type sdkCallObserver struct {
-	actions []ExtractedAction
+	reqs []iam.Requirement
 }
 
 func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
@@ -750,7 +698,7 @@ func (o *sdkCallObserver) onCall(call *ast.CallExpr, ctx *walkContext) bool {
 	// An SDK client method always returns an error last, so a statement
 	// that drops the last result drops the error.
 	discarded := ctx.discardOf(call) != discardNone && isClientMethodCall(call, ctx.conns)
-	o.actions = append(o.actions, withPaths(action, ctx.gates(ctx.bestEffort || discarded)))
+	o.reqs = append(o.reqs, requirements(action, ctx.gates(ctx.bestEffort || discarded))...)
 	return true
 }
 
@@ -1321,7 +1269,9 @@ func isClientMethodCall(call *ast.CallExpr, conns map[string]string) bool {
 // gate the provider applies to it.
 type condGuard struct {
 	Attribute string
-	Kind      ConditionKind
+	// Change is true for a change guard (d.HasChange), false for a presence
+	// guard (d.GetOk or d.Get).
+	Change bool
 	// Value is true for a presence guard that also tests the value is not
 	// empty, so the provider's default does not satisfy it.
 	Value bool
@@ -1329,7 +1279,7 @@ type condGuard struct {
 
 // gate returns the gate of a path that runs under the guard.
 func (g condGuard) gate(bestEffort bool) iam.Gate {
-	if g.Kind == ConditionChange {
+	if g.Change {
 		return iam.Gate{Changed: g.Attribute, BestEffort: bestEffort}
 	}
 	return iam.Gate{Attribute: g.Attribute, ValueGuarded: g.Value, BestEffort: bestEffort}
@@ -1386,7 +1336,7 @@ func (r guardReader) implied(expr ast.Expr, truth bool) []condGuard {
 		// A collection that is not empty was set by the author.
 		if truth && isEmptinessTest(e) {
 			if attr := attributeUnderLengthCall(e, r.values); attr != "" {
-				return []condGuard{{Attribute: attr, Kind: ConditionPresence, Value: true}}
+				return []condGuard{{Attribute: attr, Value: true}}
 			}
 		}
 		return nil
@@ -1521,17 +1471,16 @@ func resourceDataGuards(expr ast.Expr) []condGuard {
 	if id, ok := sel.X.(*ast.Ident); !ok || id.Name != "d" {
 		return nil
 	}
-	var kind ConditionKind
+	var change bool
 	args := call.Args
 	switch sel.Sel.Name {
 	case "GetOk", "Get":
-		kind = ConditionPresence
 		args = args[:min(len(args), 1)]
 	case "HasChange":
-		kind = ConditionChange
+		change = true
 		args = args[:min(len(args), 1)]
 	case "HasChanges":
-		kind = ConditionChange
+		change = true
 	default:
 		return nil
 	}
@@ -1541,7 +1490,7 @@ func resourceDataGuards(expr ast.Expr) []condGuard {
 		if attr == "" {
 			return nil
 		}
-		guards = append(guards, condGuard{Attribute: attr, Kind: kind})
+		guards = append(guards, condGuard{Attribute: attr, Change: change})
 	}
 	return guards
 }
@@ -1904,44 +1853,24 @@ func dedup(s []string) []string {
 	return out
 }
 
-// dedupActions removes duplicate ExtractedActions (by Action string) while
-// preserving order. An action reached on several paths is needed when any of
-// them runs, so the merged entry keeps the gate of each path (see withPaths).
-func dedupActions(actions []ExtractedAction) []ExtractedAction {
-	index := make(map[string]int)
-	var out []ExtractedAction
-	for _, ea := range actions {
-		i, seen := index[ea.Action]
-		if !seen {
-			index[ea.Action] = len(out)
-			out = append(out, ea)
-			continue
-		}
-		// The action is needed when any path that reaches it runs, so the
-		// paths' gates add up.
-		out[i] = withPaths(ea.Action, append(append([]iam.Gate(nil), out[i].paths()...), ea.paths()...))
-	}
-	return out
-}
-
 // extractSDKCallsWithConnInfo walks the body of a function and extracts all AWS
 // SDK API calls. Clients come from client assignments
 // (conn := meta.(*conns.AWSClient).XxxClient(ctx)), from typed parameters
 // (func helper(ctx, conn *iam.Client)), and from inline accessor calls.
-func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) []ExtractedAction {
+func extractSDKCallsWithConnInfo(fd *ast.FuncDecl) []iam.Requirement {
 	return extractSDKCalls(fd, nil)
 }
 
 // extractSDKCalls is extractSDKCallsWithConnInfo with the package's model
 // types, so the guards of framework resources gate the calls they guard.
-func extractSDKCalls(fd *ast.FuncDecl, models modelTable) []ExtractedAction {
+func extractSDKCalls(fd *ast.FuncDecl, models modelTable) []iam.Requirement {
 	if fd.Body == nil {
 		return nil
 	}
 	ctx := newWalkContext(fd, models)
 	obs := &sdkCallObserver{}
 	walkBody(fd.Body, ctx, obs)
-	return dedupActions(obs.actions)
+	return mergeRequirements(obs.reqs)
 }
 
 // newWalkContext is the context a traversal of fd's body starts in, with its

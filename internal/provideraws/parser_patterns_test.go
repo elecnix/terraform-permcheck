@@ -5,25 +5,24 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
 
-// actionNames returns the sorted action names of one operation.
-func actionNames(actions map[string][]ExtractedAction, op string) []string {
+// actionNames returns the sorted distinct action names of one operation.
+func actionNames(actions map[string][]iam.Requirement, op string) []string {
 	var out []string
-	for _, ea := range actions[op] {
-		out = append(out, ea.Action)
+	for _, r := range actions[op] {
+		if !containsString(out, r.Action) {
+			out = append(out, r.Action)
+		}
 	}
 	sort.Strings(out)
 	return out
 }
 
-func hasAction(actions map[string][]ExtractedAction, op, action string) bool {
-	for _, ea := range actions[op] {
-		if ea.Action == action {
-			return true
-		}
-	}
-	return false
+func hasAction(actions map[string][]iam.Requirement, op, action string) bool {
+	return gatesOf(actions[op], action) != nil
 }
 
 // bucketCreateSrc is trimmed from resourceBucketCreate in
@@ -237,9 +236,9 @@ func findLogGroups(ctx context.Context, conn *cloudwatchlogs.Client, input *clou
 			}
 		}
 	}
-	for _, ea := range actions["create"] {
-		if ea.Action == "logs:PutRetentionPolicy" && ea.Condition != "retention_in_days" {
-			t.Errorf("PutRetentionPolicy should stay gated on retention_in_days, got %+v", ea)
+	for _, g := range gatesOf(actions["create"], "logs:PutRetentionPolicy") {
+		if g.Attribute != "retention_in_days" {
+			t.Errorf("PutRetentionPolicy should stay gated on retention_in_days, got %+v", g)
 		}
 	}
 }

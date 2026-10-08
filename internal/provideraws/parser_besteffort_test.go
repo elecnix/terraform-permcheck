@@ -10,14 +10,18 @@ import (
 )
 
 // bestEffortOf returns whether the parse found action in op and, if so,
-// whether it marked the action best-effort.
-func bestEffortOf(actions map[string][]ExtractedAction, op, action string) (found, bestEffort bool) {
-	for _, ea := range actions[op] {
-		if ea.Action == action {
-			return true, ea.BestEffort
+// whether every path that reaches it is best-effort.
+func bestEffortOf(actions map[string][]iam.Requirement, op, action string) (found, bestEffort bool) {
+	gates := gatesOf(actions[op], action)
+	if gates == nil {
+		return false, false
+	}
+	for _, g := range gates {
+		if !g.BestEffort {
+			return true, false
 		}
 	}
-	return false, false
+	return true, true
 }
 
 // discardedErrorsSrc holds one function per way the provider drops the error
@@ -287,17 +291,14 @@ func resourceWidgetCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, ea := range actions["create"] {
-		if ea.Action != "widget:PutWidgetNote" {
-			continue
-		}
-		want := []iam.Gate{{BestEffort: true}, {Attribute: "note"}}
-		if !reflect.DeepEqual(ea.Gates, want) {
-			t.Errorf("PutWidgetNote = %+v, want gates %+v", ea, want)
-		}
-		return
+	gates := gatesOf(actions["create"], "widget:PutWidgetNote")
+	if gates == nil {
+		t.Fatalf("PutWidgetNote not found in %v", actionNames(actions, "create"))
 	}
-	t.Fatalf("PutWidgetNote not found in %v", actionNames(actions, "create"))
+	want := []iam.Gate{{BestEffort: true}, {Attribute: "note"}}
+	if !reflect.DeepEqual(gates, want) {
+		t.Errorf("PutWidgetNote gates = %+v, want %+v", gates, want)
+	}
 }
 
 // TestSourceProvider_DynamoDBDefaultKeyLookupIsBestEffort is trimmed from
