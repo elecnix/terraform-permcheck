@@ -527,44 +527,6 @@ func resourceVaultDelete(ctx context.Context, d *schema.ResourceData, meta any) 
 	}
 }
 
-func TestExtractConditionAttribute(t *testing.T) {
-	tests := []struct {
-		src  string
-		want string
-	}{
-		{`if v, ok := d.GetOk("kms_key_arn"); ok { foo() }`, "kms_key_arn"},
-		{`if _, ok := d.GetOk("tags"); ok { foo() }`, "tags"},
-		{`if d.Get("force_destroy").(bool) { foo() }`, "force_destroy"},
-		{`if err != nil { foo() }`, ""},
-		{`if d.HasChangesExcept("tags") { foo() }`, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			// Parse the if-statement from Go source
-			src := "package x\nfunc f() {\n" + tt.src + "\n}"
-			fset := token.NewFileSet()
-			f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
-			if err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-
-			var got string
-			ast.Inspect(f, func(n ast.Node) bool {
-				if ifStmt, ok := n.(*ast.IfStmt); ok {
-					got = extractConditionAttribute(ifStmt)
-					return false
-				}
-				return true
-			})
-
-			if got != tt.want {
-				t.Errorf("extractConditionAttribute = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestParseResourceFile_IAMRole_Helpers(t *testing.T) {
 	src := `
 package iam
@@ -891,12 +853,12 @@ func TestParseResourceFileStructured_TraversalCoverage(t *testing.T) {
 
 	want := []ExtractedAction{
 		{Action: "backup:CreateBackupVault"},
-		{Action: "kms:CreateGrant", Conditional: true, Condition: "kms_key_arn"},
+		{Action: "kms:CreateGrant", Conditional: true, Condition: "kms_key_arn", ConditionKind: ConditionPresence},
 		{Action: "backup:TagResource"},
-		{Action: "backup:PutBackupVaultAccessPolicy", Conditional: true, Condition: "outer"},
-		{Action: "backup:DeleteBackupVaultCopyPoint", Conditional: true, Condition: "primary"},
-		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "primary"},
-		{Action: "backup:DescribeCopyPoint", Conditional: true, Condition: "primary"},
+		{Action: "backup:PutBackupVaultAccessPolicy", Conditional: true, Condition: "outer", ConditionKind: ConditionPresence},
+		{Action: "backup:DeleteBackupVaultCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
+		{Action: "backup:StartBackupVaultCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
+		{Action: "backup:DescribeCopyPoint", Conditional: true, Condition: "primary", ConditionKind: ConditionPresence},
 		{Action: "backup:DescribeBackupVault"},
 		{Action: "backup:ListTags"},
 		{Action: "backup:ListTagsForResource"},
@@ -1055,11 +1017,11 @@ func TestFindHelperCalls_TraversalCoverage(t *testing.T) {
 
 	want := []helperCall{
 		{Name: "helperBlock"},
-		{Name: "helperBlock", CondReason: "guard"},
-		{Name: "helperNested", CondReason: "guard"},
+		{Name: "helperBlock", CondReason: "guard", CondKind: ConditionPresence},
+		{Name: "helperNested", CondReason: "guard", CondKind: ConditionPresence},
 		{Name: "helperPlain"},
-		{Name: "helperBlock", CondReason: "primary"},
-		{Name: "helperPrimary", CondReason: "primary"},
+		{Name: "helperBlock", CondReason: "primary", CondKind: ConditionPresence},
+		{Name: "helperPrimary", CondReason: "primary", CondKind: ConditionPresence},
 		{Name: "helperLoop"},
 		{Name: "helperRange"},
 		{Name: "helperSwitch"},

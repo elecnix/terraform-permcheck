@@ -4,6 +4,7 @@ package plan
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -21,6 +22,16 @@ type ResourceChange struct {
 	// is nil when the plan carries neither state, meaning presence is unknown.
 	// Used to gate conditional permissions on attribute presence.
 	Attributes map[string]bool
+
+	// ChangedAttributes records which top-level attributes differ between the
+	// prior "before" state and the planned "after" state, following terraform's
+	// d.HasChange semantics. An attribute computed at apply time counts as
+	// changed, since terraform still applies a diff for it. A create or a
+	// replace measures against empty prior state, because the provider's Create
+	// starts from nothing. It is nil when the
+	// plan carries no planned state (a pure delete), meaning change is unknown.
+	// Used to gate permissions on whether an attribute changed.
+	ChangedAttributes map[string]bool
 
 	// AttributeValues records the concrete string values of top-level
 	// attributes — from "after" for create/update/replace, from "before" for a
@@ -141,12 +152,13 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			attrSource, afterUnknown = rc.Change.Before, nil // before-values are never "unknown"
 		}
 		changes = append(changes, &ResourceChange{
-			Type:            rc.Type,
-			Name:            rc.Name,
-			Change:          action,
-			Attributes:      attributePresence(attrSource, afterUnknown),
-			AttributeValues: attributeStringValues(attrSource),
-			References:      resourceReferences(plan.Configuration, rc.Type, rc.Name),
+			Type:              rc.Type,
+			Name:              rc.Name,
+			Change:            action,
+			Attributes:        attributePresence(attrSource, afterUnknown),
+			ChangedAttributes: changedAttributes(changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
+			AttributeValues:   attributeStringValues(attrSource),
+			References:        resourceReferences(plan.Configuration, rc.Type, rc.Name),
 		})
 	}
 	return changes, nil
@@ -200,11 +212,8 @@ func referencesInModule(m *tfModule, resType, resName string) map[string][]strin
 // (always nil when state is "before", since prior state is never unknown).
 // Returns nil when state is absent or null (presence unknown).
 func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
-	if len(state) == 0 || string(state) == "null" {
-		return nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(state, &fields); err != nil {
+	fields, ok := stateFields(state)
+	if !ok {
 		return nil
 	}
 	present := make(map[string]bool, len(fields))
@@ -234,15 +243,103 @@ func attributePresence(state, afterUnknown json.RawMessage) map[string]bool {
 	return present
 }
 
+// changeBaseline returns the prior state a change is measured against. A
+// replace destroys the old object and creates the new one from empty state, so
+// the provider's Create reads d.HasChange as true for every attribute it sets,
+// even one equal to the old value. The baseline for a replace is therefore
+// empty, the same as for a create; any other change measures against before.
+func changeBaseline(actions []string, before json.RawMessage) json.RawMessage {
+	var creates, deletes bool
+	for _, a := range actions {
+		creates = creates || a == "create"
+		deletes = deletes || a == "delete"
+	}
+	if creates && deletes {
+		return nil
+	}
+	return before
+}
+
+// changedAttributes reports which top-level attributes differ between the
+// prior "before" state and the planned "after" state. An attribute marked
+// computed at apply time in after_unknown counts as changed, because terraform
+// applies a diff for it either way. Values are compared structurally, so a
+// re-ordered but identical object counts as unchanged. before is null on a
+// create, so every attribute planned with a value counts as a change; an
+// attribute planned as null counts as unchanged, matching the absent diff entry
+// the provider sees. Returns nil when there is no planned state, meaning change
+// is unknown.
+func changedAttributes(before, after, afterUnknown json.RawMessage) map[string]bool {
+	afterFields, ok := stateFields(after)
+	if !ok {
+		return nil
+	}
+	beforeFields, _ := stateFields(before) // absent or null prior state reads as empty
+
+	changed := make(map[string]bool, len(afterFields))
+	for attr, afterValue := range afterFields {
+		if unknownAttrSet(afterUnknown, attr) {
+			changed[attr] = true
+			continue
+		}
+		changed[attr] = !sameJSONValue(beforeFields[attr], afterValue)
+	}
+
+	// An attribute the prior state carried that the planned state does not is a
+	// removal, and the provider's d.HasChange reports true for it — that is how
+	// a guard like d.HasChange("permissions_boundary") fires the delete-path
+	// call. A plan that omits the key rather than setting it to null would
+	// otherwise read as unchanged here, and the permission would be dropped.
+	// Erring toward "changed" keeps the permission, which is the safe side.
+	for attr := range beforeFields {
+		if _, present := afterFields[attr]; !present {
+			changed[attr] = true
+		}
+	}
+	return changed
+}
+
+// stateFields decodes a resource change state object into its top-level
+// fields. It reports false when the state is absent, null, or not an object.
+func stateFields(state json.RawMessage) (map[string]json.RawMessage, bool) {
+	if len(state) == 0 || string(state) == "null" {
+		return nil, false
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(state, &fields); err != nil {
+		return nil, false
+	}
+	return fields, true
+}
+
+// sameJSONValue reports whether two raw JSON values are equal in structure.
+// A missing value (empty raw message) is treated as JSON null.
+func sameJSONValue(a, b json.RawMessage) bool {
+	var av, bv any
+	if err := json.Unmarshal(nonEmptyOrNull(a), &av); err != nil {
+		return string(a) != string(b)
+	}
+	if err := json.Unmarshal(nonEmptyOrNull(b), &bv); err != nil {
+		return string(a) != string(b)
+	}
+	return reflect.DeepEqual(av, bv)
+}
+
+// nonEmptyOrNull replaces an absent raw message with the JSON literal null,
+// so it decodes to the same nil value a null attribute carries.
+func nonEmptyOrNull(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	return raw
+}
+
 // unknownAttrSet reports whether a top-level attribute is marked fully
 // computed-at-apply in a change's "after_unknown" object (i.e. the attribute
 // maps to the JSON literal true).
 func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
-	if len(afterUnknown) == 0 {
-		return false
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(afterUnknown, &fields); err != nil {
+	fields, ok := stateFields(afterUnknown)
+	if !ok {
 		return false
 	}
 	var unknown bool
@@ -259,11 +356,8 @@ func unknownAttrSet(afterUnknown json.RawMessage, attr string) bool {
 // values computed at apply time) are omitted. Returns nil when state is
 // absent or null.
 func attributeStringValues(state json.RawMessage) map[string]string {
-	if len(state) == 0 || string(state) == "null" {
-		return nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(state, &fields); err != nil {
+	fields, ok := stateFields(state)
+	if !ok {
 		return nil
 	}
 	values := make(map[string]string)

@@ -45,6 +45,20 @@ present, so you neither miss them (when tags are set) nor get false positives
 (when they aren't). A `tags` value computed at apply time (known after apply)
 still counts as set — the tags get applied, so the permission is still required.
 
+### Permissions gated on a change
+
+Other permissions are only needed when an attribute **changes**. The provider
+calls `iam:PutRolePermissionsBoundary` for an `aws_iam_role` only when
+`permissions_boundary` changes, and calls `iam:DeleteRolePermissionsBoundary`
+only when a set boundary is removed. A plan that updates `assume_role_policy`
+alone needs neither call.
+
+In plan mode PermCheck compares the prior value of the attribute with the
+planned value and requires the permission only when the two differ. An
+attribute computed at apply time counts as changed, because the provider
+applies a diff for it. Static HCL mode has no prior state, so it reports those
+permissions; `--only-required` suppresses them.
+
 ### Cross-service callback permissions
 
 Some AWS APIs require an IAM action from a *different* service than the one the

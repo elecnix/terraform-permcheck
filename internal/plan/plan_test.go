@@ -600,3 +600,228 @@ func TestParseStateOutputNoOutputs(t *testing.T) {
 		t.Fatal("expected error for state JSON without outputs")
 	}
 }
+
+func TestParseChangedAttributes(t *testing.T) {
+	// The provider's d.HasChange reports whether an attribute differs between
+	// prior and planned state. ChangedAttributes must record that per attribute
+	// so the tool can suppress update-path calls gated on d.HasChange when the
+	// attribute did not change.
+	tests := []struct {
+		name string
+		raw  string
+		want map[string]bool // nil means "unknown" (map must be nil)
+	}{
+		{
+			name: "update with one attribute changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["update"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "assume_role_policy": "v1"},
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "assume_role_policy": "v2"}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": false, "assume_role_policy": true},
+		},
+		{
+			name: "object attributes compared structurally, not textually",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["update"],
+							"before": {"inline_policy": {"a": "1", "b": "2"}},
+							"after": {"inline_policy": {"b": "2", "a": "1"}}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"inline_policy": false},
+		},
+		{
+			name: "attribute computed at apply counts as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["update"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"},
+							"after": {"permissions_boundary": null},
+							"after_unknown": {"permissions_boundary": true}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true},
+		},
+		{
+			name: "create counts every planned attribute as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["create"],
+							"before": null,
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true},
+		},
+		{
+			// Terraform writes no diff for an attribute that is null on a
+			// create, so the provider's d.HasChange reads false for it.
+			name: "create counts an attribute planned as null as unchanged",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["create"],
+							"before": null,
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "description": null}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true, "description": false},
+		},
+		{
+			// A replace destroys the old object and creates a new one from empty
+			// state, so the provider's Create sees d.HasChange true for every
+			// attribute it sets, even one equal to the old value.
+			name: "replace counts every attribute planned with a value as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["delete", "create"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "old"},
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "new", "description": null}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true, "name": true, "description": false},
+		},
+		{
+			// Terraform lists a replace as [delete, create] or [create, delete]
+			// depending on create_before_destroy; both measure from empty state.
+			name: "replace listed create-first counts an unchanged attribute as changed",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["create", "delete"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"},
+							"after": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"}
+						}
+					}
+				]
+			}`,
+			want: map[string]bool{"permissions_boundary": true},
+		},
+		{
+			name: "delete has no planned state, so the change is unknown",
+			raw: `{
+				"resource_changes": [
+					{
+						"type": "aws_iam_role",
+						"name": "example",
+						"change": {
+							"actions": ["delete"],
+							"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary"},
+							"after": null
+						}
+					}
+				]
+			}`,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changes, err := Parse([]byte(tt.raw), "aws_")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(changes) != 1 {
+				t.Fatalf("expected 1 change, got %d", len(changes))
+			}
+
+			got := changes[0].ChangedAttributes
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("expected nil ChangedAttributes, got %v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("expected ChangedAttributes %v, got nil", tt.want)
+			}
+			for attr, want := range tt.want {
+				if got[attr] != want {
+					t.Errorf("ChangedAttributes[%q] = %v, want %v", attr, got[attr], want)
+				}
+			}
+			if len(got) != len(tt.want) {
+				t.Errorf("ChangedAttributes has %d keys, want %d: %v", len(got), len(tt.want), got)
+			}
+		})
+	}
+}
+
+// TestParseChangedAttributes_RemovalIsAChange pins the removal case. An
+// attribute the prior state carried that the planned state does not is a change,
+// and the provider's d.HasChange fires the delete-path call for it — that is how
+// removing permissions_boundary requires iam:DeleteRolePermissionsBoundary. A
+// plan that omits the key would otherwise read as unchanged and drop it.
+func TestParseChangedAttributes_RemovalIsAChange(t *testing.T) {
+	raw := []byte(`{
+		"resource_changes": [
+			{
+				"type": "aws_iam_role",
+				"name": "example",
+				"change": {
+					"actions": ["update"],
+					"before": {"permissions_boundary": "arn:aws:iam::aws:policy/boundary", "name": "example"},
+					"after": {"name": "example"}
+				}
+			}
+		]
+	}`)
+
+	changes, err := Parse(raw, "aws_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !changes[0].ChangedAttributes["permissions_boundary"] {
+		t.Errorf("removing permissions_boundary must count as changed, got %v",
+			changes[0].ChangedAttributes)
+	}
+	if changes[0].ChangedAttributes["name"] {
+		t.Errorf("an attribute present and unchanged in both states must not count as changed, got %v",
+			changes[0].ChangedAttributes)
+	}
+}

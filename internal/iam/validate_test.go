@@ -141,12 +141,14 @@ func TestS3SubresourceAbsorbed(t *testing.T) {
 
 // fakeSchema is a test SchemaLike with conditional metadata.
 type fakeSchema struct {
-	perms map[string][]string
-	cond  map[string]map[string]string
+	perms       map[string][]string
+	cond        map[string]map[string]string
+	changeGated map[string]map[string]string
 }
 
 func (f fakeSchema) GetPermissions() map[string][]string          { return f.perms }
 func (f fakeSchema) GetConditional() map[string]map[string]string { return f.cond }
+func (f fakeSchema) GetChangeGated() map[string]map[string]string { return f.changeGated }
 
 type fakeResolver struct{ s SchemaLike }
 
@@ -638,5 +640,192 @@ func TestFormatMissing_StripIndexForLookup(t *testing.T) {
 
 	if !strings.Contains(got, "    → aws_s3_bucket.cloudtrail[0] (create) [main.tf:10]\n") {
 		t.Errorf("expected stripped index lookup with file location, got:\n%s", got)
+	}
+}
+
+// TestValidate_ChangeGatedOnAttribute covers update-path permissions gated on
+// d.HasChange: the plan shows whether the attribute changed, so the permission
+// is reported only when it did.
+func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{
+			"update": {"iam:UpdateRole", "iam:PutRolePermissionsBoundary", "iam:DeleteRolePermissionsBoundary"},
+		},
+		changeGated: map[string]map[string]string{
+			"update": {
+				"iam:PutRolePermissionsBoundary":    "permissions_boundary",
+				"iam:DeleteRolePermissionsBoundary": "permissions_boundary",
+			},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Case 1: the attribute changed → both gated actions are required.
+	changed := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"permissions_boundary": true, "assume_role_policy": true},
+			ChangedAttributes: map[string]bool{"permissions_boundary": true, "assume_role_policy": true},
+		},
+	}
+	missing, err := Validate(changed, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"iam:PutRolePermissionsBoundary", "iam:DeleteRolePermissionsBoundary"} {
+		if !hasAction(missing, action) {
+			t.Errorf("expected %s to be required when the attribute changed", action)
+		}
+	}
+
+	// Case 2: only another attribute changed → both gated actions are dropped.
+	unchanged := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"permissions_boundary": true},
+			ChangedAttributes: map[string]bool{"permissions_boundary": false, "assume_role_policy": true},
+		},
+	}
+	missing, err = Validate(unchanged, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"iam:PutRolePermissionsBoundary", "iam:DeleteRolePermissionsBoundary"} {
+		if hasAction(missing, action) {
+			t.Errorf("expected %s to be gated out when the attribute did not change", action)
+		}
+	}
+	if !hasAction(missing, "iam:UpdateRole") {
+		t.Error("expected the unconditional iam:UpdateRole to remain required")
+	}
+
+	// Case 3: no change data (static HCL mode) → kept, presence unknown.
+	unknown := []*plan.ResourceChange{
+		{Type: "aws_iam_role", Name: "example", Change: "update"},
+	}
+	missing, err = Validate(unknown, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "iam:PutRolePermissionsBoundary") {
+		t.Error("expected change-gated permission to be kept when change data is unknown")
+	}
+
+	// Case 4: --only-required drops change-gated permissions too.
+	missing, err = Validate(changed, denyAll{}, resolver, FilterConfig{ExcludeConditional: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "iam:PutRolePermissionsBoundary") {
+		t.Error("expected change-gated permission to be excluded by ExcludeConditional")
+	}
+	if !hasAction(missing, "iam:UpdateRole") {
+		t.Error("expected the unconditional iam:UpdateRole to survive ExcludeConditional")
+	}
+}
+
+// TestValidate_ChangeGatedKeepsPresenceGates checks the two gate kinds do not
+// interfere: a change-gated action is not dropped by attribute presence.
+func TestValidate_ChangeGatedKeepsPresenceGates(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{"create": {"kms:TagResource"}},
+		changeGated: map[string]map[string]string{
+			"create": {"kms:TagResource": "permissions_boundary"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// The attribute is unset and unchanged, but this action is gated on the
+	// change, not on presence — presence must not suppress it.
+	changes := []*plan.ResourceChange{
+		{
+			Type:              "aws_kms_key",
+			Name:              "k",
+			Change:            "create",
+			Attributes:        map[string]bool{"description": true},
+			ChangedAttributes: map[string]bool{"permissions_boundary": true},
+		},
+	}
+	missing, err := Validate(changes, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasAction(missing, "kms:TagResource") {
+		t.Error("expected kms:TagResource to remain: its gate is a change, not presence")
+	}
+}
+
+// TestValidate_BothGatesOnOneAction covers an action that carries both a
+// presence gate and a change gate. Both must hold, and the report must name
+// both attributes, since either one can suppress the action.
+func TestValidate_BothGatesOnOneAction(t *testing.T) {
+	schema := fakeSchema{
+		perms: map[string][]string{"update": {"iam:UpdateRolePolicy"}},
+		cond:  map[string]map[string]string{"update": {"iam:UpdateRolePolicy": "tags"}},
+		changeGated: map[string]map[string]string{
+			"update": {"iam:UpdateRolePolicy": "policy"},
+		},
+	}
+	resolver := fakeResolver{schema}
+
+	// Both gates hold → reported, naming both attributes.
+	bothHold := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": true, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": true},
+		},
+	}
+	missing, err := Validate(bothHold, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 1 || missing[0].Action != "iam:UpdateRolePolicy" {
+		t.Fatalf("expected exactly iam:UpdateRolePolicy when both gates hold, got %v", missing)
+	}
+	if got := missing[0].ConditionAttribute; got != "tags+policy" {
+		t.Errorf("ConditionAttribute = %q, want %q naming both gating attributes", got, "tags+policy")
+	}
+
+	// The presence gate fails → dropped, even though the change gate holds.
+	presenceFails := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": false, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": true},
+		},
+	}
+	missing, err = Validate(presenceFails, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "iam:UpdateRolePolicy") {
+		t.Error("expected the action to be dropped when the presence gate fails")
+	}
+
+	// The change gate fails → dropped, even though the presence gate holds.
+	changeFails := []*plan.ResourceChange{
+		{
+			Type:              "aws_iam_role",
+			Name:              "example",
+			Change:            "update",
+			Attributes:        map[string]bool{"tags": true, "policy": true},
+			ChangedAttributes: map[string]bool{"policy": false},
+		},
+	}
+	missing, err = Validate(changeFails, denyAll{}, resolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasAction(missing, "iam:UpdateRolePolicy") {
+		t.Error("expected the action to be dropped when the change gate fails")
 	}
 }

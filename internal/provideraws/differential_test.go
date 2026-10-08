@@ -176,9 +176,26 @@ func TestParseResourceFileStructured_MatchesPreRefactorWalker(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseResourceFileStructured failed: %v", err)
 			}
-			if !reflect.DeepEqual(got, want[name]) {
+			// legacyGoldens holds the pre-refactor output exactly as captured
+			// from main, so it carries only the fields that walker produced.
+			// ConditionKind is this branch's addition and is asserted separately
+			// below rather than written into the golden: editing the golden to
+			// include a field the old walker never emitted would make the test
+			// assert itself instead of the old behaviour.
+			gotLegacy, wantLegacy := legacyShape(got), legacyShape(want[name])
+			if !reflect.DeepEqual(gotLegacy, wantLegacy) {
 				t.Errorf("merged traversal diverges from the pre-refactor walker\n got: %s\nwant: %s",
-					formatActionMap(got), formatActionMap(want[name]))
+					formatActionMap(gotLegacy), formatActionMap(wantLegacy))
+			}
+
+			// Every fixture here gates on d.GetOk or d.Get, so each gated call
+			// must carry the presence kind.
+			for _, actions := range got {
+				for _, a := range actions {
+					if a.Conditional && a.ConditionKind != ConditionPresence {
+						t.Errorf("%s: ConditionKind = %q, want %q", a.Action, a.ConditionKind, ConditionPresence)
+					}
+				}
 			}
 		})
 	}
@@ -192,4 +209,19 @@ func formatActionMap(m map[string][]ExtractedAction) string {
 		}
 	}
 	return b.String()
+}
+
+// legacyShape clears the fields this branch added, so the pre-refactor golden
+// can stay byte-for-byte as it was captured from main.
+func legacyShape(m map[string][]ExtractedAction) map[string][]ExtractedAction {
+	out := make(map[string][]ExtractedAction, len(m))
+	for op, actions := range m {
+		stripped := make([]ExtractedAction, 0, len(actions))
+		for _, a := range actions {
+			a.ConditionKind = ""
+			stripped = append(stripped, a)
+		}
+		out[op] = stripped
+	}
+	return out
 }

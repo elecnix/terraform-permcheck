@@ -142,14 +142,17 @@ func classifyPermission(action string) PermissionClass {
 
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
-	ResourceType       string // terraform resource type, e.g. "aws_backup_vault"
-	ResourceName       string // terraform resource name, e.g. "this"
-	Change             string // "create", "update", or "delete"
-	Action             string // required IAM action, e.g. "kms:CreateGrant"
-	Service            string // extracted service prefix, e.g. "kms"
-	Filtered           bool   // true if this was filtered out (data-plane / optional)
-	Class              string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
-	ConditionAttribute string // attribute name gating this action (empty if unconditional), e.g. "kms_key_arn"
+	ResourceType string // terraform resource type, e.g. "aws_backup_vault"
+	ResourceName string // terraform resource name, e.g. "this"
+	Change       string // "create", "update", or "delete"
+	Action       string // required IAM action, e.g. "kms:CreateGrant"
+	Service      string // extracted service prefix, e.g. "kms"
+	Filtered     bool   // true if this was filtered out (data-plane / optional)
+	Class        string // classification tag: "[required]", "[optional]", "[data-plane]", "[service-role]", or ""
+	// ConditionAttribute is the attribute gating this action, e.g.
+	// "kms_key_arn": set in the planned resource (d.GetOk) or changed between
+	// prior and planned state (d.HasChange). Empty for an unconditional action.
+	ConditionAttribute string
 }
 
 // AllowedProvider is something that can check whether an action is covered.
@@ -163,8 +166,12 @@ type SchemaLike interface {
 	GetPermissions() map[string][]string
 	// GetConditional maps op → action → gating attribute name. An action with a
 	// non-empty gating attribute is only required when that attribute is set in
-	// the planned resource.
+	// the planned resource (a d.GetOk or d.Get guard).
 	GetConditional() map[string]map[string]string
+	// GetChangeGated maps op → action → the attribute whose change gates the
+	// action (a d.HasChange guard). Such an action is only required when that
+	// attribute differs between the prior and the planned resource.
+	GetChangeGated() map[string]map[string]string
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -176,7 +183,8 @@ type FilterConfig struct {
 	// ExcludeServiceRole excludes permissions only AWS service roles need (backup-storage, etc.)
 	ExcludeServiceRole bool
 	// ExcludeConditional excludes permissions gated on a schema attribute
-	// (d.GetOk guard). When true, only unconditional [required] actions are kept.
+	// (d.GetOk or d.HasChange guard). When true, only unconditional [required]
+	// actions are kept.
 	ExcludeConditional bool
 }
 
@@ -214,9 +222,15 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			continue
 		}
 		conditional := schema.GetConditional()[op]
+		changeGated := schema.GetChangeGated()[op]
 
 		for _, action := range required {
 			condAttr := conditional[action]
+			changeAttr := changeGated[action]
+			// An action is reported only when every gate it carries holds, so a
+			// failing presence gate or a failing change gate each drops it. The
+			// tag names both gating attributes, since either can be the reason.
+			gateAttr := gateAttribute(condAttr, changeAttr)
 			service := strings.Split(action, ":")[0]
 
 			// Conditional (attribute-gated) permissions: when the plan carries
@@ -224,6 +238,15 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			// skip the permission. When Attributes is nil (e.g. static HCL
 			// mode), presence is unknown and the permission is kept.
 			if condAttr != "" && rc.Attributes != nil && !rc.Attributes[condAttr] {
+				continue
+			}
+
+			// Change-gated permissions: the provider makes these calls only
+			// when the attribute changed, so drop the permission when the plan
+			// shows no change. When ChangedAttributes is nil (static HCL mode,
+			// or a delete with no planned state), the change is unknown and the
+			// permission is kept.
+			if changeAttr != "" && rc.ChangedAttributes != nil && !rc.ChangedAttributes[changeAttr] {
 				continue
 			}
 
@@ -244,7 +267,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 			if filter.ExcludeServiceRole && class == ClassServiceRole {
 				continue
 			}
-			if filter.ExcludeConditional && condAttr != "" {
+			if filter.ExcludeConditional && gateAttr != "" {
 				continue
 			}
 
@@ -255,7 +278,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 				Action:             action,
 				Service:            service,
 				Class:              classTag(class),
-				ConditionAttribute: condAttr,
+				ConditionAttribute: gateAttr,
 			})
 		}
 	}
@@ -277,6 +300,21 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver i
 	missing = filterS3Subresources(missing, changes)
 
 	return missing, nil
+}
+
+// gateAttribute names the attributes gating an action, for the
+// [conditional: <attr>] tag. An action can carry a presence gate, a change
+// gate, or both, so both names appear when both apply. Empty when neither
+// gate applies.
+func gateAttribute(presenceAttr, changeAttr string) string {
+	switch {
+	case presenceAttr == "":
+		return changeAttr
+	case changeAttr == "" || changeAttr == presenceAttr:
+		return presenceAttr
+	default:
+		return presenceAttr + "+" + changeAttr
+	}
 }
 
 // missingGroupKey is a grouping key for deduplicating missing actions.
