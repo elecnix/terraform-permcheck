@@ -131,23 +131,3 @@ func instanceOf(c *plan.ResourceChange) (name, key string) {
 	name = stripResourceIndex(instance)
 	return name, instance[len(name):]
 }
-
-// worstVerdict checks action against each target and returns the worst
-// verdict. Each target is the list of ARN forms of one resource the change
-// acts on, and every one of them must be covered. With no targets, the
-// action alone decides.
-func (d *PolicyDocument) worstVerdict(action string, targets [][]string, strict bool) Verdict {
-	if len(targets) == 0 {
-		return d.Coverage(action, nil, strict)
-	}
-	worst := Covered
-	for _, forms := range targets {
-		switch d.Coverage(action, forms, strict) {
-		case Missing:
-			return Missing
-		case Unverified:
-			worst = Unverified
-		}
-	}
-	return worst
-}

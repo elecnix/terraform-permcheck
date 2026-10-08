@@ -3,6 +3,8 @@ package iam
 import (
 	"fmt"
 	"strings"
+
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // Need is a permission a principal needs that no terraform resource implies,
@@ -99,18 +101,18 @@ func SelectNeeds(needs []Need, principal string) ([]Need, error) {
 // unless a definite Deny overrides it, and strict mode reports a grant
 // limited to some resources as unverified. A need on "*" needs a grant on
 // every resource. Every case goes through Coverage.
-func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingAction {
+func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction {
 	var missing []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
-			add := func(resource string, verdict Verdict) {
+			add := func(resource string, verdict policy.Verdict) {
 				m := newFinding(action, classManagement, verdict)
 				m.Need = n.Sid
 				m.NeedResource = resource
 				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {
-				if v := policy.Coverage(action, nil, strict); v != Covered {
+				if v := doc.Coverage(action, nil, strict); v != policy.Covered {
 					add("", v)
 				}
 				continue
@@ -120,12 +122,12 @@ func CheckNeeds(needs []Need, policy *PolicyDocument, strict bool) []MissingActi
 				// limited to some resources falls short of it: the strict
 				// verdict decides it.
 				if r == "*" {
-					if policy.Coverage(action, nil, true) != Covered {
-						add(r, Missing)
+					if doc.Coverage(action, nil, true) != policy.Covered {
+						add(r, policy.Missing)
 					}
 					continue
 				}
-				if v := policy.Coverage(action, []string{r}, strict); v != Covered {
+				if v := doc.Coverage(action, []string{r}, strict); v != policy.Covered {
 					add(r, v)
 				}
 			}

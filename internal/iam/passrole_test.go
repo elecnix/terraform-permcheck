@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
-func mustPolicy(t *testing.T, doc string) *PolicyDocument {
+func mustPolicy(t *testing.T, doc string) *policy.Document {
 	t.Helper()
-	p, err := ParsePolicy([]byte(doc))
+	p, err := policy.Parse([]byte(doc))
 	if err != nil {
 		t.Fatal(err)
 	}

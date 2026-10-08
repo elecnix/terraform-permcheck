@@ -12,7 +12,7 @@ import (
 // and a resource part. The plan rarely knows them all, so these functions
 // build ARN patterns from what it does know: a wildcard stands for each part
 // the plan does not show. Coverage then compares the patterns with the
-// Resource patterns of the policy (see arnIntersect).
+// Resource patterns of the policy (see policy.Document.CoversTarget).
 
 // isARN reports whether the string is a well-formed AWS ARN.
 func isARN(s string) bool {

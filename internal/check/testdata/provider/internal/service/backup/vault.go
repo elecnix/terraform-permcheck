@@ -4,6 +4,8 @@
 package backup
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go-v2/service/backup"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/hashicorp/terraform-provider-aws/internal/errs/sdkdiag"

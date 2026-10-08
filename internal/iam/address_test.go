@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // TestApplyExclusions_ModuleAddress verifies that a resource pattern is
@@ -62,7 +63,7 @@ func TestValidate_NoOpIsContextOnly(t *testing.T) {
 			References: map[string][]string{"secret_id": {"aws_secretsmanager_secret.b.id"}},
 		},
 	}
-	policy, err := ParsePolicy([]byte(`{
+	policy, err := policy.Parse([]byte(`{
 		"Version": "2012-10-17",
 		"Statement": [{
 			"Effect": "Allow",
@@ -94,7 +95,7 @@ func TestValidate_CarriesModuleAddress(t *testing.T) {
 		"aws_sqs_queue": actionsSchema(map[string][]string{"delete": {"sqs:DeleteQueue"}}),
 	}
 	changes := []*plan.ResourceChange{{ModuleAddress: "module.prod", Type: "aws_sqs_queue", Name: "q", Change: "delete"}}
-	policy, err := ParsePolicy([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
+	policy, err := policy.Parse([]byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:ListBucket","Resource":"*"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}

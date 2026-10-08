@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // bucketMissing validates an aws_s3_bucket that needs actions, in a plan that
@@ -129,12 +130,12 @@ type fakeResolver struct{ s fakeSchema }
 func (r fakeResolver) Resolve(string) (*Schema, error) { return r.s.schema(), nil }
 
 // grantNothing returns a policy with no statements, which grants no action.
-func grantNothing() *PolicyDocument { return &PolicyDocument{} }
+func grantNothing() *policy.Document { return &policy.Document{} }
 
 // grantActions returns a policy that allows the action patterns on every
 // resource.
-func grantActions(actions ...string) *PolicyDocument {
-	return &PolicyDocument{Statements: []Statement{{Effect: "Allow", Action: actions, Resource: []string{"*"}}}}
+func grantActions(actions ...string) *policy.Document {
+	return &policy.Document{Statements: []policy.Statement{{Effect: "Allow", Action: actions, Resource: []string{"*"}}}}
 }
 
 // TestValidate_BestEffortIsOptional checks that an action whose failure the

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 func TestArnService(t *testing.T) {
@@ -280,8 +281,8 @@ func TestValidate_CrossServiceReferencedALBScope(t *testing.T) {
 			References:      map[string][]string{"resource_arn": {"aws_lb.web.arn", "aws_lb.web"}},
 		},
 	}
-	grant := func(resource string) *PolicyDocument {
-		return &PolicyDocument{Statements: []Statement{
+	grant := func(resource string) *policy.Document {
+		return &policy.Document{Statements: []policy.Statement{
 			{Effect: "Allow", Action: []string{"wafv2:*"}, Resource: []string{"*"}},
 			{Effect: "Allow", Action: []string{"elasticloadbalancing:SetWebACL"}, Resource: []string{resource}},
 		}}

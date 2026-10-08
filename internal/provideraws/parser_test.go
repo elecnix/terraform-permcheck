@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 func TestParseResourceFile_BackupVault(t *testing.T) {
@@ -364,7 +365,7 @@ func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
 		t.Fatalf("ParseResourceFileStructured failed: %v", err)
 	}
 
-	policy, err := iam.ParsePolicy([]byte(`{
+	doc, err := policy.Parse([]byte(`{
 	  "Version": "2012-10-17",
 	  "Statement": [{
 	    "Effect": "Allow",
@@ -391,7 +392,7 @@ func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
 			continue
 		}
 		for _, action := range changeActions {
-			if !policy.Covers(action.Action) {
+			if !doc.Covers(action.Action) {
 				t.Errorf("%s: policy does not cover %s", change, action.Action)
 			}
 		}

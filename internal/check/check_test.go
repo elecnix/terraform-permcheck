@@ -53,8 +53,8 @@ func addresses(findings []iam.MissingAction) []string {
 	return out
 }
 
-// policy returns a policy loader for a policy that allows exactly actions.
-func policy(actions ...string) func() ([]byte, error) {
+// allowing returns a policy loader for a policy that allows exactly actions.
+func allowing(actions ...string) func() ([]byte, error) {
 	quoted := make([]string, len(actions))
 	for i, a := range actions {
 		quoted[i] = `"` + a + `"`
@@ -101,7 +101,7 @@ func TestRun_PlanReportsMissingActions(t *testing.T) {
 		{Type: "aws_unknown_thing", Name: "b", Change: "create"},
 	})
 
-	res, err := Run(in, policy("kms:CreateKey"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
+	res, err := Run(in, allowing("kms:CreateKey"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestRun_StaticChecksEachTypeOnce(t *testing.T) {
 		{Type: "aws_unknown_thing", Name: "c"},
 	})
 
-	res, err := Run(in, policy("kms:CreateKey", "kms:TagResource"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
+	res, err := Run(in, allowing("kms:CreateKey", "kms:TagResource"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestRun_FilterFlags(t *testing.T) {
 		{"only-required", Filter{OnlyRequired: true}, []string{}},
 		{"both", Filter{NoFilter: true, OnlyRequired: true}, []string{"aws_kms_key.create:kms:Decrypt"}},
 	} {
-		res, err := Run(in, policy("kms:CreateKey"), Options{Filter: tc.filter, Resolver: resolver})
+		res, err := Run(in, allowing("kms:CreateKey"), Options{Filter: tc.filter, Resolver: resolver})
 		if err != nil {
 			t.Fatalf("%s: Run: %v", tc.name, err)
 		}
@@ -251,7 +251,7 @@ func TestRun_Exclusions(t *testing.T) {
 		Resolver:   fakeResolver{"aws_kms_key": kmsKey},
 	}
 
-	res, err := Run(in, policy("kms:CreateKey"), opts)
+	res, err := Run(in, allowing("kms:CreateKey"), opts)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestRun_Exclusions(t *testing.T) {
 // presence gates, transparent tagging) without the provider clone.
 func TestRun_ProviderSourceOutput(t *testing.T) {
 	resolver := cloud.NewChainProvider(provideraws.NewSourceProviderWithPath("testdata/provider"))
-	allowed := policy("backup:CreateBackupVault", "backup:DescribeBackupVault", "backup:DeleteBackupVault")
+	allowed := allowing("backup:CreateBackupVault", "backup:DescribeBackupVault", "backup:DeleteBackupVault")
 
 	for _, tc := range []struct {
 		name  string
@@ -346,7 +346,7 @@ func TestRun_UnresolvedTypes(t *testing.T) {
 		{Type: "aws_new_thing", Name: "y", Change: "update"},
 	}
 	resolver := fakeResolver{"aws_kms_key": kmsKey}
-	all := policy("kms:*")
+	all := allowing("kms:*")
 
 	t.Run("fail by default", func(t *testing.T) {
 		res, err := Run(FromPlan(changes), all, Options{Resolver: resolver})
@@ -404,7 +404,7 @@ func TestRun_LookupFailure(t *testing.T) {
 		FromPlan([]*plan.ResourceChange{{Type: "aws_kms_key", Name: "a", Change: "create"}}),
 		FromHCL([]hcl.ResourceBlock{{Type: "aws_kms_key", Name: "a"}}),
 	} {
-		_, err := Run(in, policy("kms:*"), Options{Resolver: failingResolver{}})
+		_, err := Run(in, allowing("kms:*"), Options{Resolver: failingResolver{}})
 		if !errors.Is(err, iam.ErrLookupFailed) {
 			t.Errorf("Run(%s) err = %v, want ErrLookupFailed", in.label(), err)
 		}
@@ -424,7 +424,7 @@ func TestRun_PlanCountsResources(t *testing.T) {
 		{Address: "aws_kms_key.b", Type: "aws_kms_key", Name: "b", Change: plan.NoOp},
 		{Address: "module.m.aws_kms_key.a", ModuleAddress: "module.m", Type: "aws_kms_key", Name: "a", Change: "create"},
 	})
-	res, err := Run(in, policy("kms:*"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
+	res, err := Run(in, allowing("kms:*"), Options{Resolver: fakeResolver{"aws_kms_key": kmsKey}})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

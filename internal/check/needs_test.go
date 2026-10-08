@@ -29,7 +29,7 @@ func needActions(missing []iam.MissingAction) []string {
 func TestRun_NeedsAddFindings(t *testing.T) {
 	in := FromPlan([]*plan.ResourceChange{{Type: "aws_kms_key", Name: "a", Change: "delete"}})
 
-	res, err := Run(in, policy("ecr:DescribeImages"), Options{
+	res, err := Run(in, allowing("ecr:DescribeImages"), Options{
 		Resolver:  fakeResolver{"aws_kms_key": kmsKey},
 		Needs:     testNeeds,
 		Principal: "deploy",
@@ -49,7 +49,7 @@ func TestRun_NeedsAddFindings(t *testing.T) {
 // TestRun_NeedsWithEmptyInput verifies needs are checked even when the plan
 // has no resource changes, so the policy is loaded.
 func TestRun_NeedsWithEmptyInput(t *testing.T) {
-	res, err := Run(FromPlan(nil), policy(), Options{Resolver: fakeResolver{}, Needs: testNeeds})
+	res, err := Run(FromPlan(nil), allowing(), Options{Resolver: fakeResolver{}, Needs: testNeeds})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestRun_NeedsWithEmptyInput(t *testing.T) {
 
 // TestRun_NeedsExcluded verifies config exclusions apply to need findings.
 func TestRun_NeedsExcluded(t *testing.T) {
-	res, err := Run(FromPlan(nil), policy(), Options{
+	res, err := Run(FromPlan(nil), allowing(), Options{
 		Resolver:   fakeResolver{},
 		Needs:      testNeeds,
 		Principal:  "task",
