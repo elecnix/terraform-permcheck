@@ -9,7 +9,9 @@ import (
 
 // bucketMissing validates an aws_s3_bucket that needs actions, in a plan that
 // also changes the types in others, against an empty policy with no filter.
-// It returns the actions reported on the bucket and on other resources.
+// It returns the actions reported on the bucket and on other resources. The
+// resolver knows only the bucket and the vault, so the sub-resources come back
+// unresolved; the helper leaves those findings out.
 func bucketMissing(t *testing.T, actions []string, others ...string) (bucket, rest []string) {
 	t.Helper()
 	resolver := typeKeyedResolver{
@@ -25,6 +27,9 @@ func bucketMissing(t *testing.T, actions []string, others ...string) (bucket, re
 		t.Fatal(err)
 	}
 	for _, m := range missing {
+		if m.Unresolved {
+			continue
+		}
 		if m.ResourceType == "aws_s3_bucket" {
 			bucket = append(bucket, m.Action)
 		} else {

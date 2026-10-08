@@ -137,3 +137,47 @@ func TestParseFormat(t *testing.T) {
 		t.Errorf("ParseFormat(sarif) error = %v", err)
 	}
 }
+
+// TestReport_UnresolvedNeverAllClear checks that no format prints the
+// all-clear line or an ok-without-count json result when a resource type
+// was not resolved, whether the run fails on it, allows it or excludes it.
+func TestReport_UnresolvedNeverAllClear(t *testing.T) {
+	u := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: "a", Change: "create", Unresolved: true}
+	cases := []struct {
+		name      string
+		res       check.Result
+		wantGaps  bool
+		wantInSum string
+	}{
+		{"failing", check.Result{Unresolved: []iam.MissingAction{u}}, true, "1 resource type unresolved."},
+		{"allowed", check.Result{Unresolved: []iam.MissingAction{u}, UnresolvedAllowed: true}, false, "1 resource type unresolved (allowed)."},
+		{"excluded", check.Result{Excluded: []iam.ExcludedAction{{MissingAction: u}}}, false, "1 resource type unresolved (allowed)."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.res.Checked, tc.res.Label = 1, "resource changes"
+			r := New(tc.res, nil, false)
+			for _, f := range []Format{Text, GitHubAnnotations} {
+				var out, errOut strings.Builder
+				r.Write(f, &out, &errOut)
+				all := out.String() + errOut.String()
+				if strings.Contains(all, "All required permissions covered") {
+					t.Errorf("%s: all-clear printed:\n%s", f, all)
+				}
+				if !strings.Contains(all, tc.wantInSum) {
+					t.Errorf("%s: summary lacks %q:\n%s", f, tc.wantInSum, all)
+				}
+			}
+			var res JSONResult
+			if err := json.Unmarshal([]byte(r.json()), &res); err != nil {
+				t.Fatal(err)
+			}
+			if got := res.Status == "gaps_found"; got != tc.wantGaps {
+				t.Errorf("json status = %q, want gaps %v", res.Status, tc.wantGaps)
+			}
+			if !tc.wantGaps && res.UnresolvedAllowed != 1 {
+				t.Errorf("json unresolved_allowed = %d, want 1", res.UnresolvedAllowed)
+			}
+		})
+	}
+}

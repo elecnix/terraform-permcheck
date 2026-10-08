@@ -1,0 +1,4 @@
+--- stdout ---
+2 resource changes checked, 0 distinct missing permissions found, 1 resource type unresolved (allowed).
+::notice title=Excluded IAM permission::aws_new_thing [unresolved: no permission data] excluded (per config): checked by hand for: aws_new_thing.a (create), aws_new_thing.b["k"] (update)
+--- stderr ---

@@ -7,8 +7,8 @@ import (
 
 // text renders the findings for a person. Each group is one action line
 // followed by the resources that need it. Unverified groups get a section of
-// their own after the missing ones. A resource with a known location gets its
-// file and line.
+// their own after the missing ones, and unresolved resource types one after
+// that. A resource with a known location gets its file and line.
 func (r *Report) text() string {
 	var b strings.Builder
 	if len(r.missing) > 0 {
@@ -16,11 +16,25 @@ func (r *Report) text() string {
 		writeGroups(&b, r.missing)
 	}
 	if len(r.unverified) > 0 {
-		if len(r.missing) > 0 {
+		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
 		fmt.Fprintf(&b, "Unverified IAM permissions (%d), granted only on resources whose ARN the plan does not show:\n", len(r.unverified))
 		writeGroups(&b, r.unverified)
+	}
+	if len(r.unresolved) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		allowed := ""
+		if r.unresolvedAllowed {
+			allowed = " (allowed)"
+		}
+		fmt.Fprintf(&b, "Unresolved resource types (%d), no permission data%s:\n", len(r.unresolved), allowed)
+		for _, g := range r.unresolved {
+			fmt.Fprintf(&b, "  %s\n", g.key)
+			writeSources(&b, g.items)
+		}
 	}
 	return b.String()
 }
@@ -39,13 +53,19 @@ func writeGroups(b *strings.Builder, groups []group[findingKey, finding]) {
 			line += " " + unverifiedTag
 		}
 		fmt.Fprintf(b, "  %s\n", line)
-		for _, f := range g.items {
-			resourceLine := "    → " + source(f.MissingAction)
-			if f.loc != nil {
-				resourceLine += fmt.Sprintf(" [%s:%d]", f.loc.Path, f.loc.Line)
-			}
-			b.WriteString(resourceLine + "\n")
+		writeSources(b, g.items)
+	}
+}
+
+// writeSources writes one line per finding naming what needs it, with its
+// file and line when known.
+func writeSources(b *strings.Builder, findings []finding) {
+	for _, f := range findings {
+		resourceLine := "    → " + source(f.MissingAction)
+		if f.loc != nil {
+			resourceLine += fmt.Sprintf(" [%s:%d]", f.loc.Path, f.loc.Line)
 		}
+		b.WriteString(resourceLine + "\n")
 	}
 }
 

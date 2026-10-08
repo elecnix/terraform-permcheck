@@ -1,6 +1,8 @@
 package iam
 
 import (
+	"errors"
+
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 )
 
@@ -39,6 +41,10 @@ type MissingAction struct {
 	// NeedResource is the resource of the need that the policy does not
 	// cover. Empty when the need lists no resources.
 	NeedResource string
+	// Unresolved marks a resource change whose type no schema source knows.
+	// The tool has no permission data for it, so Action is empty and the
+	// change was not checked.
+	Unresolved bool
 }
 
 // FilterConfig controls which permission classes are filtered out of validation.
@@ -71,6 +77,9 @@ func DefaultFilter() FilterConfig {
 
 // Validate checks all resource changes against the policy and the resolver.
 // The filter controls which permission classes are excluded from validation.
+// A change whose type the resolver does not know becomes an Unresolved
+// finding. A lookup that fails with ErrLookupFailed stops validation with
+// that error, since the tool cannot say whether the type is covered.
 func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
@@ -81,7 +90,16 @@ func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver R
 
 	for _, rc := range changes {
 		schema, err := resolver.Resolve(rc.Type)
+		if errors.Is(err, ErrLookupFailed) {
+			return nil, err
+		}
 		if err != nil {
+			missing = append(missing, MissingAction{
+				ResourceType: rc.Type,
+				ResourceName: rc.Name,
+				Change:       rc.Change,
+				Unresolved:   true,
+			})
 			continue
 		}
 

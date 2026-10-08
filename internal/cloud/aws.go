@@ -2,9 +2,11 @@ package cloud
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 )
@@ -37,10 +39,14 @@ type AWSProvider struct {
 	baseURL string // e.g. "https://schema.cloudformation.us-east-1.amazonaws.com"
 }
 
+// registryTimeout bounds one registry request, so a stalled registry fails
+// the lookup instead of hanging the run.
+const registryTimeout = 30 * time.Second
+
 // NewAWSProvider creates a new AWSProvider.
 func NewAWSProvider() *AWSProvider {
 	return &AWSProvider{
-		client:  http.DefaultClient,
+		client:  &http.Client{Timeout: registryTimeout},
 		baseURL: "https://schema.cloudformation.us-east-1.amazonaws.com",
 	}
 }
@@ -49,19 +55,28 @@ func NewAWSProvider() *AWSProvider {
 func (p *AWSProvider) Name() string { return "aws" }
 
 // Resolve maps a terraform resource type to its CloudFormation schema and
-// returns the required IAM permissions.
+// returns the required IAM permissions. The error is marked
+// iam.ErrUnknownType when the registry holds none of the candidate keys, and
+// iam.ErrLookupFailed when any request failed for another reason, since that
+// key may exist.
 func (p *AWSProvider) Resolve(tfType string) (*Schema, error) {
 	keys := cfnKeys(tfType)
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("%q: cannot derive CFN registry key", tfType)
+		return nil, fmt.Errorf("%q: cannot derive CFN registry key: %w", tfType, iam.ErrUnknownType)
 	}
-	var lastErr error
+	var lastErr, failed error
 	for _, key := range keys {
 		schema, err := p.fetch(key)
 		if err == nil {
 			return toSchema(schema), nil
 		}
 		lastErr = err
+		if errors.Is(err, iam.ErrLookupFailed) {
+			failed = err
+		}
+	}
+	if failed != nil {
+		lastErr = failed
 	}
 	return nil, fmt.Errorf("resolve %s (tried %v): %w", tfType, keys, lastErr)
 }
@@ -204,20 +219,27 @@ var cfnTypeOverrides = map[string]string{
 	"aws_vpc_peering_connection":  "aws-ec2-vpcpeeringconnection",
 }
 
-// fetch downloads the CloudFormation schema for a registry key.
+// fetch downloads the CloudFormation schema for a registry key. The registry
+// is served from S3, which answers 403 rather than 404 for a key it does not
+// hold, so both mark iam.ErrUnknownType. A network error, a timeout, any
+// other status and a body that does not parse mark iam.ErrLookupFailed.
 func (p *AWSProvider) fetch(key string) (*cfnSchema, error) {
 	url := p.baseURL + "/" + key + ".json"
 	resp, err := p.client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", url, err)
+		return nil, fmt.Errorf("fetch %s: %w: %w", url, iam.ErrLookupFailed, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch %s: HTTP %d", url, resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusForbidden, http.StatusNotFound:
+		return nil, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrUnknownType)
+	default:
+		return nil, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrLookupFailed)
 	}
 	var s cfnSchema
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", url, err)
+		return nil, fmt.Errorf("parse %s: %w: %w", url, iam.ErrLookupFailed, err)
 	}
 	return &s, nil
 }

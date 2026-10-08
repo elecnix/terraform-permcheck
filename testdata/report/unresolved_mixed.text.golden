@@ -1,0 +1,19 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (1):
+  s3:PutBucketTagging [required]
+    → aws_s3_bucket.a[0] (create) [s3.tf:3]
+
+Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+  sqs:CreateQueue [required] [unverified: resource scope]
+    → aws_sqs_queue.r["k"] (create) [sqs.tf:7]
+
+Unresolved resource types (2), no permission data:
+  aws_new_thing
+    → aws_new_thing.a (create)
+    → aws_new_thing.b["k"] (update) [new.tf:9]
+  aws_other_new
+    → aws_other_new.x (delete)
+
+
+5 resource changes checked, 1 distinct missing permissions found, 1 unverified (resource scope), 2 resource types unresolved.

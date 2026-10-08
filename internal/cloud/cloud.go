@@ -3,6 +3,8 @@
 package cloud
 
 import (
+	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
@@ -97,16 +99,37 @@ func (c *ChainProvider) Name() string {
 // that knows the type adds its actions for those operations, so a parse that
 // missed a call cannot report it as not needed. A ChainProvider is an
 // iam.Resolver.
+//
+// When no provider resolves the type, the error is marked
+// iam.ErrLookupFailed if any provider's lookup failed, since that provider
+// may know the type, and iam.ErrUnknownType otherwise. A provider error that
+// carries neither mark counts as not found.
 func (c *ChainProvider) Resolve(tfType string) (iam.Schema, error) {
-	var lastErr error
+	var lastErr, failed error
 	for i, p := range c.providers {
 		schema, err := p.Resolve(tfType)
 		if err == nil {
-			return c.completeFrom(schema, tfType, c.providers[i+1:]), nil
+			complete, err := c.completeFrom(schema, tfType, c.providers[i+1:])
+			if err != nil {
+				return nil, err
+			}
+			return complete, nil
 		}
 		lastErr = err
+		if errors.Is(err, iam.ErrLookupFailed) && failed == nil {
+			failed = err
+		}
 	}
-	return nil, lastErr
+	if failed != nil {
+		return nil, failed
+	}
+	if lastErr == nil {
+		return nil, fmt.Errorf("%s: no schema providers: %w", tfType, iam.ErrUnknownType)
+	}
+	if errors.Is(lastErr, iam.ErrUnknownType) {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("%w: %w", iam.ErrUnknownType, lastErr)
 }
 
 // completeFrom fills the incomplete operations of schema from the first later
@@ -116,7 +139,10 @@ func (c *ChainProvider) Resolve(tfType string) (iam.Schema, error) {
 // The copy is made once, on the first operation any provider fills: the first
 // provider may have cached the schema it returned, so merging has to write to
 // a copy, and one copy serves every later provider.
-func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provider) *Schema {
+//
+// A later provider whose lookup fails (iam.ErrLookupFailed) fails the whole
+// resolution, since the operation it would fill is left incomplete.
+func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provider) (*Schema, error) {
 	merged := schema
 	copied := false
 	for _, p := range rest {
@@ -125,6 +151,9 @@ func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provi
 			break
 		}
 		fallback, err := p.Resolve(tfType)
+		if errors.Is(err, iam.ErrLookupFailed) {
+			return nil, err
+		}
 		if err != nil {
 			continue
 		}
@@ -139,7 +168,7 @@ func (c *ChainProvider) completeFrom(schema *Schema, tfType string, rest []Provi
 			merged.mergeOperation(op, fallback)
 		}
 	}
-	return merged
+	return merged, nil
 }
 
 // incompleteOps lists the operations a schema still needs filling for, as a

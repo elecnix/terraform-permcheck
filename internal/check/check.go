@@ -165,6 +165,10 @@ type Options struct {
 	Needs []iam.Need
 	// Principal selects the needs declared for one principal (--principal).
 	Principal string
+	// AllowUnresolvedTypes keeps unresolved resource types from failing the
+	// run (--allow-unresolved-types or the allow_unresolved_types config
+	// key). They are still reported.
+	AllowUnresolvedTypes bool
 }
 
 // Result is the outcome of a check, ready for the report layer.
@@ -174,24 +178,37 @@ type Result struct {
 	// Excluded are the gaps a config exclusion matched.
 	Excluded []iam.ExcludedAction
 	// Checked counts resource changes in plan mode and distinct resource
-	// types in static mode.
+	// types in static mode. Neither count includes an unresolved type.
 	Checked int
 	// Label names what Checked counts.
 	Label string
 	// Needs counts the declared needs checked.
 	Needs int
+	// Unresolved are the resource changes whose type no schema source
+	// knows, after exclusions. The tool has no permission data for them.
+	Unresolved []iam.MissingAction
+	// UnresolvedAllowed reports that unresolved types do not fail the run.
+	UnresolvedAllowed bool
+}
+
+// HasGaps reports whether the result should fail the run: a missing or
+// unverified permission remains, or a resource type is unresolved and not
+// allowed.
+func (r Result) HasGaps() bool {
+	return len(r.Missing) > 0 || (len(r.Unresolved) > 0 && !r.UnresolvedAllowed)
 }
 
 // Run checks the input and the selected needs against the policy that
 // loadPolicy returns. When there is nothing to check, Run returns an empty
 // Result without loading the policy. Run returns loadPolicy's error unchanged
-// and wraps a parse error.
+// and wraps a parse error. A schema lookup that fails (iam.ErrLookupFailed)
+// is an error too, since the result would not say what was checked.
 func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, error) {
 	needs, err := iam.SelectNeeds(opts.Needs, opts.Principal)
 	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Label: in.label(), Needs: len(needs)}
+	res := Result{Label: in.label(), Needs: len(needs), UnresolvedAllowed: opts.AllowUnresolvedTypes}
 	if in.empty() && len(needs) == 0 {
 		return res, nil
 	}
@@ -209,18 +226,67 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	if resolver == nil {
 		resolver = DefaultResolver()
 	}
+	resolver = newMemoResolver(resolver)
 
 	changes := in.changes
 	res.Checked = len(changes)
 	if in.static {
-		changes, res.Checked = staticChanges(in.blocks, resolver)
+		changes, res.Checked, err = staticChanges(in.blocks, resolver)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 
 	missing, err := iam.Validate(changes, policy, resolver, opts.Filter.Config())
 	if err != nil {
 		return Result{}, err
 	}
+	if !in.static {
+		// Validate reports each change whose type no source knows as one
+		// unresolved finding. Such a change is not checked, as in static
+		// mode, whether or not an exclusion hides it.
+		for _, m := range missing {
+			if m.Unresolved {
+				res.Checked--
+			}
+		}
+	}
 	missing = append(missing, iam.CheckNeeds(needs, policy, opts.Filter.StrictResources)...)
-	res.Missing, res.Excluded = iam.ApplyExclusions(missing, opts.Exclusions)
+	kept, excluded := iam.ApplyExclusions(missing, opts.Exclusions)
+	res.Excluded = excluded
+	for _, m := range kept {
+		if m.Unresolved {
+			res.Unresolved = append(res.Unresolved, m)
+		} else {
+			res.Missing = append(res.Missing, m)
+		}
+	}
 	return res, nil
+}
+
+// memoResolver remembers each lookup of a run, error included, so a type
+// that many changes share is fetched once. Static mode resolves each type
+// before validation and validation resolves it again, so an unknown type
+// would otherwise query the CloudFormation registry twice.
+type memoResolver struct {
+	next  iam.Resolver
+	cache map[string]memoEntry
+}
+
+type memoEntry struct {
+	schema iam.Schema
+	err    error
+}
+
+func newMemoResolver(next iam.Resolver) *memoResolver {
+	return &memoResolver{next: next, cache: make(map[string]memoEntry)}
+}
+
+func (m *memoResolver) Resolve(tfType string) (iam.Schema, error) {
+	if e, ok := m.cache[tfType]; ok {
+		return e.schema, e.err
+	}
+	s, err := m.next.Resolve(tfType)
+	m.cache[tfType] = memoEntry{s, err}
+	return s, err
 }

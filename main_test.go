@@ -1057,3 +1057,97 @@ func TestGeneratePermissions_EmptyDir(t *testing.T) {
 		t.Error("an output file was written despite the error")
 	}
 }
+
+// unresolvedArgs validates a plan holding aws_permcheckwidget, a type no
+// schema source knows. Its name has no service part, so the registry
+// adapter derives no key and makes no request: the test needs no network.
+func unresolvedArgs(extra ...string) []string {
+	return append([]string{"validate",
+		"--plan-file", "testdata/plan_unresolved.json",
+		"--policy-file", "testdata/policy_full.json",
+		"--cloud", "aws",
+	}, extra...)
+}
+
+// TestValidate_UnresolvedTypeFails verifies that a resource type the tool
+// cannot resolve fails the run and is named in the report, instead of the
+// run printing the all-clear line.
+func TestValidate_UnresolvedTypeFails(t *testing.T) {
+	var runErr error
+	stdout, stderr := captureStreams(t, func() { runErr = run(unresolvedArgs("--config", writeConfig(t, t.TempDir(), `{}`))) })
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound, got %v", runErr)
+	}
+	if strings.Contains(stdout, "All required permissions covered") {
+		t.Errorf("all-clear printed with an unresolved type:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "Unresolved resource types (1)") || !strings.Contains(stderr, "aws_permcheckwidget.w (create)") {
+		t.Errorf("stderr does not name the unresolved type:\n%s", stderr)
+	}
+}
+
+// TestValidate_AllowUnresolvedTypes verifies the flag and the config key let
+// the run pass, that the flag overrides the config, and that the report
+// still says the type was not checked.
+func TestValidate_AllowUnresolvedTypes(t *testing.T) {
+	allowCfg := writeConfig(t, t.TempDir(), `{"allow_unresolved_types": true}`)
+	emptyCfg := writeConfig(t, t.TempDir(), `{}`)
+	excludeCfg := writeConfig(t, t.TempDir(), `{"exclude":[{"permission":"*","resource":"aws_permcheckwidget","reason":"reviewed by hand"}]}`)
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{"flag", []string{"--config", emptyCfg, "--allow-unresolved-types"}, false},
+		{"config", []string{"--config", allowCfg}, false},
+		{"flag overrides config", []string{"--config", allowCfg, "--allow-unresolved-types=false"}, true},
+		{"exclusion", []string{"--config", excludeCfg}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var runErr error
+			stdout, stderr := captureStreams(t, func() { runErr = run(unresolvedArgs(tc.args...)) })
+			if got := errors.Is(runErr, errGapsFound); got != tc.wantErr || (runErr != nil && !got) {
+				t.Fatalf("run err = %v, want gaps %v", runErr, tc.wantErr)
+			}
+			if strings.Contains(stdout, "All required permissions covered") {
+				t.Errorf("all-clear printed with an unresolved type:\n%s", stdout)
+			}
+			if !tc.wantErr && !strings.Contains(stderr, "1 resource type unresolved (allowed)") {
+				t.Errorf("summary does not count the allowed type:\n%s", stderr)
+			}
+		})
+	}
+}
+
+// TestStaticHCL_UnresolvedTypeFails verifies static HCL mode reports a type
+// it cannot resolve instead of skipping it.
+func TestStaticHCL_UnresolvedTypeFails(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte("resource \"aws_permcheckwidget\" \"w\" {\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var runErr error
+	stdout := captureStdout(t, func() {
+		runErr = run([]string{"validate",
+			"--terraform-root", root,
+			"--policy-file", "testdata/policy_full.json",
+			"--cloud", "aws",
+			"--config", writeConfig(t, t.TempDir(), `{}`),
+			"--format", "json",
+		})
+	})
+	if !errors.Is(runErr, errGapsFound) {
+		t.Fatalf("expected errGapsFound, got %v", runErr)
+	}
+	var result report.JSONResult
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if result.Status != "gaps_found" || len(result.UnresolvedTypes) != 1 || result.UnresolvedTypes[0].ResourceType != "aws_permcheckwidget" {
+		t.Errorf("result = %+v, want aws_permcheckwidget unresolved", result)
+	}
+	if r := result.UnresolvedTypes[0].Resources; len(r) != 1 || r[0].File != "main.tf" || r[0].Line != 1 {
+		t.Errorf("resources = %+v, want main.tf:1", r)
+	}
+}

@@ -46,6 +46,10 @@ type Config struct {
 	// Needs declares permissions a principal needs beyond what the terraform
 	// resources imply. They are checked against the same policy.
 	Needs []Need `json:"needs,omitempty"`
+	// AllowUnresolvedTypes turns on --allow-unresolved-types: a resource
+	// type no schema source knows is reported but does not fail the run.
+	// The flag, when given, overrides it.
+	AllowUnresolvedTypes bool `json:"allow_unresolved_types,omitempty"`
 }
 
 // ExcludedAction is a MissingAction that a config exclusion suppressed, tagged
@@ -111,7 +115,9 @@ func ApplyExclusions(missing []MissingAction, exclusions []Exclusion) (kept []Mi
 	return kept, excluded
 }
 
-// matchExclusion returns the first exclusion that suppresses m, if any.
+// matchExclusion returns the first exclusion that suppresses m, if any. An
+// unresolved finding has no action, and only a permission pattern that
+// matches every action, such as "*", matches its empty one.
 func matchExclusion(m MissingAction, exclusions []Exclusion) (Exclusion, bool) {
 	for _, e := range exclusions {
 		if ok, _ := path.Match(e.Permission, m.Action); !ok {

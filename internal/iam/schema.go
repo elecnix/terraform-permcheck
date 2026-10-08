@@ -1,5 +1,7 @@
 package iam
 
+import "errors"
+
 // Requirement is one path on which an operation on a resource reaches an
 // action: the action, and the gate that decides whether the provider makes the
 // call on that path. A requirement whose gate sets no test is always needed.
@@ -39,10 +41,22 @@ type Schema interface {
 	Requirements(op string) ([]Requirement, bool)
 }
 
-// Resolver maps a terraform resource type to its Schema.
+// Resolver maps a terraform resource type to its Schema. A resolver that
+// fails marks its error with ErrUnknownType or ErrLookupFailed, so Validate
+// can tell a type no source knows from a lookup that did not finish. An
+// unmarked error counts as ErrUnknownType.
 type Resolver interface {
 	Resolve(tfType string) (Schema, error)
 }
+
+// ErrUnknownType marks a resolver error that says no source has permission
+// data for the type. Validate reports the type as unresolved.
+var ErrUnknownType = errors.New("resource type unknown to every schema source")
+
+// ErrLookupFailed marks a resolver error that says a lookup did not finish,
+// such as a network failure, an HTTP 5xx or a timeout. The type may exist,
+// so Validate stops with the error rather than report it as unknown.
+var ErrLookupFailed = errors.New("schema lookup failed")
 
 // actionPaths is an action with the gates of every path that reaches it.
 type actionPaths struct {

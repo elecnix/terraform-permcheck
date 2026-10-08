@@ -1,0 +1,8 @@
+--- stdout ---
+--- stderr ---
+2 resource changes checked, 0 distinct missing permissions found, 1 resource type unresolved (allowed).
+Excluded (per config) (1):
+  aws_new_thing [unresolved: no permission data]
+    reason: checked by hand
+    → aws_new_thing.a (create)
+    → aws_new_thing.b["k"] (update)

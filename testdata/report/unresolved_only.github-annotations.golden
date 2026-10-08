@@ -1,0 +1,5 @@
+--- stdout ---
+::warning file=new.tf,line=9,title=Unresolved resource type::aws_new_thing has no permission data, so its permissions were not checked. Resources: aws_new_thing.a (create), aws_new_thing.b["k"] (update)
+
+2 resource changes checked, 0 distinct missing permissions found, 1 resource type unresolved.
+--- stderr ---

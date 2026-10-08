@@ -1,0 +1,26 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 2,
+  "label": "resource changes",
+  "missing": [],
+  "unresolved_types": [
+    {
+      "resource_type": "aws_new_thing",
+      "allowed": false,
+      "resources": [
+        {
+          "resource_name": "a",
+          "change": "create"
+        },
+        {
+          "resource_name": "b[\"k\"]",
+          "change": "update",
+          "file": "new.tf",
+          "line": 9
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

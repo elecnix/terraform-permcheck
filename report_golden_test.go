@@ -40,11 +40,16 @@ func goldenCases() []goldenCase {
 	needAny := iam.MissingAction{Need: "Logs", Action: "logs:CreateLogGroup", Class: "[required]"}
 	needUnverified := iam.MissingAction{Need: "Logs", Action: "logs:PutLogEvents", Class: "[required]", ResourceScopeUnverified: true}
 
+	newA := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: "a", Change: "create", Unresolved: true}
+	newB := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: `b["k"]`, Change: "update", Unresolved: true}
+	otherNew := iam.MissingAction{ResourceType: "aws_other_new", ResourceName: "x", Change: "delete", Unresolved: true}
+
 	locations := iam.Locations{
 		"aws_s3_bucket.a":    {Path: "s3.tf", Line: 3},
 		"aws_s3_bucket.b":    {Path: "s3.tf", Line: 12},
 		"aws_backup_vault.v": {Path: "modules/backup/main.tf", Line: 40},
 		"aws_sqs_queue.r":    {Path: "sqs.tf", Line: 7},
+		"aws_new_thing.b":    {Path: "new.tf", Line: 9},
 	}
 
 	excluded := []iam.ExcludedAction{
@@ -128,6 +133,50 @@ func goldenCases() []goldenCase {
 			},
 			locations:    locations,
 			showExcluded: true,
+		},
+		{
+			name: "unresolved_mixed",
+			res: check.Result{
+				Missing:    []iam.MissingAction{bucketA, unverified2},
+				Unresolved: []iam.MissingAction{newA, otherNew, newB},
+				Checked:    5, Label: planLabel,
+			},
+			locations: locations,
+		},
+		{
+			name: "unresolved_only",
+			res: check.Result{
+				Unresolved: []iam.MissingAction{newA, newB},
+				Checked:    2, Label: planLabel,
+			},
+			locations: locations,
+		},
+		{
+			name: "unresolved_allowed",
+			res: check.Result{
+				Unresolved:        []iam.MissingAction{newA, newB, otherNew},
+				UnresolvedAllowed: true,
+				Checked:           3, Label: planLabel,
+			},
+			locations: locations,
+		},
+		{
+			name: "unresolved_excluded",
+			res: check.Result{
+				Excluded: []iam.ExcludedAction{
+					{MissingAction: newA, Reason: "checked by hand"},
+					{MissingAction: newB, Reason: "checked by hand"},
+				},
+				Checked: 2, Label: planLabel,
+			},
+			showExcluded: true,
+		},
+		{
+			name: "unresolved_excluded_hidden",
+			res: check.Result{
+				Excluded: []iam.ExcludedAction{{MissingAction: newA, Reason: "checked by hand"}},
+				Checked:  1, Label: planLabel,
+			},
 		},
 		{
 			name: "excluded_shown_all_clear",
