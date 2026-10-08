@@ -14,7 +14,6 @@ import (
 	"sort"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
-	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
 // formatVersion is the version of the table format. Bump it when the format
@@ -57,21 +56,12 @@ type requirement struct {
 	BestEffort   bool   `json:"best_effort,omitempty"`
 }
 
-// Generate parses the provider source of src and encodes every resource type
-// it finds as a table for provideraws.DefaultProviderRef.
-func Generate(src *provideraws.SourceProvider) ([]byte, error) {
-	schemas, err := src.Schemas()
-	if err != nil {
-		return nil, err
-	}
-	return encode(provideraws.DefaultProviderRef, schemas)
-}
-
-// encode writes the schemas as a table for the provider ref. The output is
-// deterministic: types, operations and incomplete operations are sorted, and
-// requirements keep the order the parser emitted them in. Each requirement
-// sits on its own line, so a regenerated table diffs line by line.
-func encode(ref string, schemas map[string]*iam.Schema) ([]byte, error) {
+// Generate encodes the schema of each resource type as a table for the
+// provider ref. The output is deterministic: types, operations and
+// incomplete operations are sorted, and requirements keep the order the
+// parser emitted them in. Each requirement sits on its own line, so a
+// regenerated table diffs line by line.
+func Generate(schemas map[string]*iam.Schema, ref string) ([]byte, error) {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "{\n  \"format\": %d,\n  \"provider\": %s,\n  \"ref\": %s,\n  \"resources\": {", formatVersion, quote(providerName), quote(ref))
 	for i, tfType := range sortedKeys(schemas) {
