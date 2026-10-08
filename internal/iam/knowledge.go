@@ -234,6 +234,41 @@ var rules = []rule{
 	{action: "s3:PutBucketAcl", class: ClassManagement, ownedBy: s3ACL},
 }
 
+// hiddenGates lists, per resource type and action, the attributes whose
+// presence makes the provider call an action that the producers show as
+// ungated. The parser sees the call through a helper that hides its guard,
+// and the CloudFormation schema has no gates at all. aws_s3_bucket tags a
+// bucket only when it has tags, from tags or from the provider's default
+// tags, which the plan shows in tags_all.
+var hiddenGates = map[string]map[string][]Gate{
+	"aws_s3_bucket": {
+		"s3:PutBucketTagging": {{Attribute: "tags"}, {Attribute: "tags_all"}},
+	},
+}
+
+// withHiddenGates returns the gates of action on tfType, with the gates of
+// hiddenGates in place of the producer's when every producer path is
+// ungated. A best-effort producer path stays best-effort.
+func withHiddenGates(tfType, action string, gates []Gate) []Gate {
+	hidden, ok := hiddenGates[tfType][action]
+	if !ok {
+		return gates
+	}
+	bestEffort := len(gates) > 0
+	for _, g := range gates {
+		if !g.Ungated() {
+			return gates
+		}
+		bestEffort = bestEffort && g.BestEffort
+	}
+	out := make([]Gate, len(hidden))
+	for i, g := range hidden {
+		g.BestEffort = bestEffort
+		out[i] = g
+	}
+	return out
+}
+
 // ruleIndex looks up a rule by action name.
 var ruleIndex = func() map[string]rule {
 	m := make(map[string]rule, len(rules))

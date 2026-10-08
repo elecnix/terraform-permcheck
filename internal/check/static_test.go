@@ -113,7 +113,7 @@ func TestStaticChanges_KeepsUnresolvableTypes(t *testing.T) {
 
 	want := "aws_s3_bucket.create,aws_s3_bucket.create,aws_unknown_service_thing.create,aws_unknown_service_thing.create"
 	if got := staticOpChanges(changes); strings.Join(got, ",") != want {
-		t.Errorf("changes = %v, want [%s]", got, want)
+		t.Fatalf("changes = %v, want [%s]", got, want)
 	}
 	if changes[2].Name != "c" || changes[3].Name != "d" {
 		t.Errorf("unresolved names = %s, %s; want c, d", changes[2].Name, changes[3].Name)

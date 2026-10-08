@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -111,6 +112,21 @@ func TestParsePolicyInvalidJSON(t *testing.T) {
 	_, err := Parse([]byte("not json"))
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// A malformed Statement reports the error of the form it was written in, so a
+// single object does not fail with the array form's type error.
+func TestParse_StatementErrorMatchesItsForm(t *testing.T) {
+	for _, raw := range []string{
+		`{"Statement":{"Effect":1,"Action":"s3:GetObject","Resource":"*"}}`,
+		`{"Statement":[{"Effect":1,"Action":"s3:GetObject","Resource":"*"}]}`,
+		`{"Statement": {"Effect":1,"Action":"s3:GetObject","Resource":"*"}}`,
+	} {
+		_, err := Parse([]byte(raw))
+		if err == nil || !strings.Contains(err.Error(), "Effect") {
+			t.Errorf("Parse(%s) = %v, want an error about Effect", raw, err)
+		}
 	}
 }
 

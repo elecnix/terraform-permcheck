@@ -50,13 +50,26 @@ func (r *Report) annotations() string {
 	return b.String()
 }
 
+// escapeData escapes the message of a workflow command the way the Actions
+// toolkit does, so a newline in it cannot end the command and start another.
+func escapeData(s string) string {
+	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(s)
+}
+
+// escapeProperty escapes a property value of a workflow command the way the
+// Actions toolkit does. A property also ends at a comma, and its name at a
+// colon, so those are escaped too.
+func escapeProperty(s string) string {
+	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C").Replace(s)
+}
+
 // writeWarning writes one ::warning:: command, with file= and line= when the
 // location is known.
 func writeWarning(b *strings.Builder, loc *hcl.Location, title, msg string) {
 	if loc != nil {
-		fmt.Fprintf(b, "::warning file=%s,line=%d,title=%s::%s\n", loc.Path, loc.Line, title, msg)
+		fmt.Fprintf(b, "::warning file=%s,line=%d,title=%s::%s\n", escapeProperty(loc.Path), loc.Line, escapeProperty(title), escapeData(msg))
 	} else {
-		fmt.Fprintf(b, "::warning title=%s::%s\n", title, msg)
+		fmt.Fprintf(b, "::warning title=%s::%s\n", escapeProperty(title), escapeData(msg))
 	}
 }
 
@@ -84,7 +97,7 @@ func (r *Report) excludedAnnotations() string {
 			msg += fmt.Sprintf(": %s", g.key.reason)
 		}
 		msg += " for: " + strings.Join(sources, ", ")
-		fmt.Fprintf(&b, "::notice title=Excluded IAM permission::%s\n", msg)
+		fmt.Fprintf(&b, "::notice title=Excluded IAM permission::%s\n", escapeData(msg))
 	}
 	return b.String()
 }

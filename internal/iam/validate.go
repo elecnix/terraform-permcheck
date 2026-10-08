@@ -176,7 +176,8 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		// both pass. When the plan does not show presence (static HCL
 		// mode) or change (static mode, or a delete with no planned
 		// state), that test passes, so the permission is kept.
-		needed, gateAttr, bestEffort := evaluateGates(paths.gates(), rc)
+		gates := withHiddenGates(rc.Type, action, paths.gates())
+		needed, gateAttr, bestEffort := evaluateGates(gates, rc)
 		if !needed {
 			continue
 		}
@@ -185,6 +186,10 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		d := decide(rc.Type, action, bestEffort, dedicated, inPlan)
 		if d.absorbedBy != "" {
 			continue
+		}
+		// An optional feature the plan sets is required for this apply.
+		if d.class == ClassOptional && !bestEffort && featureUsed(action, gates, rc) {
+			d.class = ClassManagement
 		}
 
 		// Action coverage, resource-scoped when the target ARN is derivable
