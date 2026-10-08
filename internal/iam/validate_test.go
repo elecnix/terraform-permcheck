@@ -14,7 +14,7 @@ func TestFilterS3Subresources(t *testing.T) {
 	}
 	missing := []MissingAction{
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketEncryption", Service: "s3"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketVersioning", Service: "s3"},
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:DeleteBucket", Service: "s3"},
 	}
@@ -29,9 +29,9 @@ func TestFilterS3Subresources(t *testing.T) {
 	if !hasAction(result, "s3:CreateBucket") {
 		t.Error("expected s3:CreateBucket to remain")
 	}
-	// s3:PutBucketEncryption should be absorbed by the SSE config sub-resource
-	if hasAction(result, "s3:PutBucketEncryption") {
-		t.Error("expected s3:PutBucketEncryption to be filtered (absorbed by sub-resource)")
+	// s3:PutEncryptionConfiguration should be absorbed by the SSE config sub-resource
+	if hasAction(result, "s3:PutEncryptionConfiguration") {
+		t.Error("expected s3:PutEncryptionConfiguration to be filtered (absorbed by sub-resource)")
 	}
 	// s3:PutBucketVersioning should remain (no versioning sub-resource present)
 	if !hasAction(result, "s3:PutBucketVersioning") {
@@ -50,7 +50,7 @@ func TestFilterS3Subresources_NoSubs(t *testing.T) {
 		{Type: "aws_dynamodb_table", Name: "data", Change: "create"},
 	}
 	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketEncryption", Service: "s3"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
 	}
 
@@ -71,7 +71,7 @@ func TestFilterS3Subresources_MultipleSubs(t *testing.T) {
 	}
 	missing := []MissingAction{
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketEncryption", Service: "s3"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketVersioning", Service: "s3"},
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketLogging", Service: "s3"},
 	}
@@ -93,7 +93,7 @@ func TestFilterS3Subresources_OnlyParent(t *testing.T) {
 	}
 	missing := []MissingAction{
 		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:CreateBucket", Service: "s3"},
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketEncryption", Service: "s3"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
 	}
 
 	result := filterS3Subresources(missing, changes)
@@ -111,7 +111,7 @@ func TestFilterS3Subresources_NonS3Unaffected(t *testing.T) {
 		{Type: "aws_backup_vault", Name: "main", Change: "create"},
 	}
 	missing := []MissingAction{
-		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutBucketEncryption", Service: "s3"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "logs", Change: "create", Action: "s3:PutEncryptionConfiguration", Service: "s3"},
 		{ResourceType: "aws_backup_vault", ResourceName: "main", Change: "create", Action: "backup:CreateBackupVault", Service: "backup"},
 	}
 
@@ -126,10 +126,10 @@ func TestFilterS3Subresources_NonS3Unaffected(t *testing.T) {
 }
 
 func TestS3SubresourceAbsorbed(t *testing.T) {
-	// SSE config absorbs PutBucketEncryption
+	// SSE config absorbs PutEncryptionConfiguration
 	absorbed := s3SubresourceAbsorbed("aws_s3_bucket_server_side_encryption_configuration")
-	if len(absorbed) != 1 || !absorbed["s3:PutBucketEncryption"] {
-		t.Errorf("expected {s3:PutBucketEncryption}, got %v", absorbed)
+	if len(absorbed) != 1 || !absorbed["s3:PutEncryptionConfiguration"] {
+		t.Errorf("expected {s3:PutEncryptionConfiguration}, got %v", absorbed)
 	}
 
 	// Unknown type returns nil
