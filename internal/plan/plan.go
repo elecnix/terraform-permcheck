@@ -14,6 +14,13 @@ type ResourceChange struct {
 	Name   string // terraform resource name, e.g. "this"
 	Change string // "create", "update", or "delete"
 
+	// Address is the full instance address, e.g.
+	// `module.a["x"].aws_iam_role.r[0]`. Empty when the source has none.
+	Address string
+	// ModuleAddress is the address of the module instance the resource
+	// lives in, e.g. `module.a["x"]`. Empty for the root module.
+	ModuleAddress string
+
 	// Attributes records which top-level attributes are meaningfully set,
 	// following terraform's GetOk semantics: a key maps to true only when its
 	// value is non-null and non-zero. For create/update/replace it reflects the
@@ -59,6 +66,10 @@ type ResourceChange struct {
 	// nil when the plan carries no configuration section, meaning the set of
 	// configured attributes is unknown.
 	Configured map[string]bool
+
+	// paths keeps the decoded states for gates on nested attribute paths.
+	// Nil for a change built without plan state.
+	paths *pathState
 }
 
 // tfPlanJSON mirrors the subset of `terraform show -json plan.tfplan` we need.
@@ -104,6 +115,7 @@ type tfModuleCall struct {
 }
 
 type tfResourceChange struct {
+	Address       string `json:"address"`
 	ModuleAddress string `json:"module_address"`
 	Type          string `json:"type"`
 	Name          string `json:"name"`
@@ -165,25 +177,34 @@ func Parse(raw []byte, prefix string) ([]*ResourceChange, error) {
 			Type:              rc.Type,
 			Name:              rc.Name,
 			Change:            action,
+			Address:           rc.Address,
+			ModuleAddress:     rc.ModuleAddress,
 			Attributes:        attributePresence(attrSource, afterUnknown),
 			ChangedAttributes: changedAttributes(changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
 			AttributeValues:   attributeStringValues(attrSource),
-			References:        resourceReferences(plan.Configuration, rc.Type, rc.Name),
+			References:        resourceReferences(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
 			Configured:        configuredAttributes(plan.Configuration, rc.ModuleAddress, rc.Type, rc.Name),
+			paths:             newPathState(attrSource, afterUnknown, changeBaseline(rc.Change.Actions, rc.Change.Before), rc.Change.After, rc.Change.AfterUnknown),
 		})
 	}
 	return changes, nil
 }
 
-// resourceReferences walks the plan's configuration section (root module and
-// nested modules) for a resource of the given type and name and returns, per
-// attribute, the list of addresses the attribute references. Returns nil when
-// the plan carries no configuration section or the resource isn't found.
-func resourceReferences(cfg *tfConfiguration, resType, resName string) map[string][]string {
+// resourceReferences returns, per attribute, the addresses the attribute
+// references in the configuration of a resource. The module address picks
+// the module the resource lives in, so a resource never reads the expressions
+// of a same-named resource in another module. The addresses are relative to
+// that module. Returns nil when the plan carries no configuration section or
+// the resource isn't found.
+func resourceReferences(cfg *tfConfiguration, moduleAddr, resType, resName string) map[string][]string {
 	if cfg == nil || cfg.RootModule == nil {
 		return nil
 	}
-	refs := referencesInModule(cfg.RootModule, resType, resName)
+	m := moduleForAddress(cfg.RootModule, moduleAddr)
+	if m == nil {
+		return nil
+	}
+	refs := referencesInModule(m, resType, resName)
 	if len(refs) == 0 {
 		return nil
 	}
@@ -295,8 +316,8 @@ func moduleCallNames(addr string) ([]string, bool) {
 	return names, true
 }
 
-// referencesInModule searches a config module (recursively) for the resource
-// and returns its per-attribute reference lists.
+// referencesInModule finds the resource in one config module and returns
+// its per-attribute reference lists.
 func referencesInModule(m *tfModule, resType, resName string) map[string][]string {
 	for _, r := range m.Resources {
 		if r.Mode != "" && r.Mode != "managed" {
@@ -312,11 +333,6 @@ func referencesInModule(m *tfModule, resType, resName string) map[string][]strin
 			}
 		}
 		return refs
-	}
-	for _, mc := range m.ModuleCalls {
-		if refs := referencesInModule(&mc.Module, resType, resName); refs != nil {
-			return refs
-		}
 	}
 	return nil
 }

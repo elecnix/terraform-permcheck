@@ -31,8 +31,8 @@ func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, all []*pla
 	}
 	const action = "iam:PassRole"
 	for _, attr := range passRoleAttributes[rc.Type] {
-		targets := roleTargetARNs(rc, attr, all)
-		verdict := policy.Coverage(action, targets, strict)
+		targets := roleTargets(rc, attr, all)
+		verdict := policy.worstVerdict(action, targets, strict)
 		if verdict == Covered {
 			continue
 		}
@@ -62,31 +62,37 @@ func passesRole(rc *plan.ResourceChange, attr string) bool {
 	return rc.Attributes == nil || rc.Attributes[attr] || len(rc.References[attr]) > 0
 }
 
-// roleTargetARNs derives the role ARN pattern(s) held by attr: a literal ARN,
-// or a reference to a managed aws_iam_role whose name is known.
-func roleTargetARNs(rc *plan.ResourceChange, attr string, all []*plan.ResourceChange) []string {
+// roleTargets derives the roles held by attr: a literal ARN, or a
+// reference to managed aws_iam_role instances whose names are known. Each
+// role is one target.
+func roleTargets(rc *plan.ResourceChange, attr string, all []*plan.ResourceChange) [][]string {
 	if v := rc.AttributeValues[attr]; v != "" {
 		if isARN(v) {
-			return []string{v}
+			return [][]string{{v}}
 		}
 		return nil
 	}
-	var patterns []string
-	for _, ref := range rc.References[attr] {
-		resType, resName := targetFromReference(ref)
-		if resType != "aws_iam_role" {
-			continue
-		}
-		resName = stripResourceIndex(resName)
-		for _, c := range all {
-			if c.Type != resType || stripResourceIndex(c.Name) != resName {
-				continue
-			}
-			// The leading * lets the pattern match a role under a path.
-			if name := c.AttributeValues["name"]; name != "" {
-				patterns = append(patterns, "arn:*:iam::*:role/*"+name)
-			}
+	var targets [][]string
+	for _, c := range referencedChanges(rc, all, attr, "aws_iam_role") {
+		if forms := roleARNPatterns(c); forms != nil {
+			targets = append(targets, forms)
 		}
 	}
-	return patterns
+	return targets
+}
+
+// roleARNPatterns builds the ARN patterns of a planned role from its path and
+// name: role/<path><name>, where the path starts and ends with a slash. When
+// the path is unknown, the role may sit at the root or under any path. It
+// returns nil when the name is unknown.
+func roleARNPatterns(role *plan.ResourceChange) []string {
+	name := role.AttributeValues["name"]
+	if name == "" {
+		return nil
+	}
+	const prefix = "arn:*:iam::*:role"
+	if path := role.AttributeValues["path"]; path != "" {
+		return []string{prefix + path + name}
+	}
+	return []string{prefix + "/" + name, prefix + "/*/" + name}
 }

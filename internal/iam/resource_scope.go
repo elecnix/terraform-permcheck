@@ -16,11 +16,12 @@ import (
 // file cross-checks action coverage against the statements' Resource patterns
 // and reports the action missing when the grant is provably scoped elsewhere.
 
-// targetRule describes how to derive the ARN patterns a terraform resource
-// change acts on. Rules are keyed by resource type; a type with no rule never
-// participates in resource-scoped coverage and falls back to action-only
-// matching.
-var targetRules = map[string]func(rc *plan.ResourceChange, all []*plan.ResourceChange) []string{
+// targetRules describe how to derive the resources a terraform resource
+// change acts on. A rule returns one target per resource, each the list of ARN
+// patterns that resource can take, and every target must be covered. Rules
+// are keyed by resource type; a type with no rule never participates in
+// resource-scoped coverage and falls back to action-only matching.
+var targetRules = map[string]func(rc *plan.ResourceChange, all []*plan.ResourceChange) [][]string{
 	// aws_secretsmanager_secret_version acts on the referenced secret named in
 	// secret_id (aws_secretsmanager_secret.b). The secret's name is a literal
 	// in the plan, so the version's ARN pattern is derivable even though the
@@ -39,11 +40,12 @@ var targetRules = map[string]func(rc *plan.ResourceChange, all []*plan.ResourceC
 	"aws_cloudwatch_log_stream": logStreamTargetARNs,
 }
 
-// resourceTargetARNs returns the ARN patterns a resource change acts on,
-// derivable from plan-time values. It returns nil when the target cannot be
-// determined (unknown values, static HCL mode, unlisted resource types), in
-// which case coverage falls back to action-only matching.
-func resourceTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) []string {
+// resourceTargets returns the targets a resource change acts on, derivable
+// from plan-time values: one list of ARN patterns per resource. It returns nil
+// when the target cannot be determined (unknown values, static HCL mode,
+// unlisted resource types), in which case coverage falls back to action-only
+// matching.
+func resourceTargets(rc *plan.ResourceChange, all []*plan.ResourceChange) [][]string {
 	rule, ok := targetRules[rc.Type]
 	if !ok {
 		return nil
@@ -53,53 +55,38 @@ func resourceTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) []s
 
 // secretTargetARNs derives the ARN pattern of a secretsmanager secret from its
 // configured name.
-func secretTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []string {
+func secretTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) [][]string {
 	name := rc.AttributeValues["name"]
 	if name == "" {
 		return nil
 	}
-	return []string{secretARPattern(name)}
+	return [][]string{{secretARPattern(name)}}
 }
 
-// secretVersionTargetARNs derives the ARN pattern(s) a secret version applies
-// to from its secret_id: either a literal ARN known at plan time, or a
-// reference to a managed secret whose configured name is known.
-func secretVersionTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) []string {
+// secretVersionTargetARNs derives the secrets a secret version applies to
+// from its secret_id: either a literal ARN known at plan time, or a reference
+// to managed secrets whose configured names are known.
+func secretVersionTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) [][]string {
 	// A literal secret_id value (referencing an imported/external secret).
 	if arn := rc.AttributeValues["secret_id"]; arn != "" && isARN(arn) {
-		return []string{arn}
+		return [][]string{{arn}}
 	}
 
-	var patterns []string
-	for _, name := range referencedNames(rc, all, "secret_id") {
-		patterns = append(patterns, secretARPattern(name))
+	var targets [][]string
+	for _, name := range referencedNames(rc, all, "secret_id", "aws_secretsmanager_secret") {
+		targets = append(targets, []string{secretARPattern(name)})
 	}
-	return patterns
+	return targets
 }
 
-// referencedNames returns the configured name of each managed resource that
-// attribute attr of rc references, for those whose name is known in the plan.
-func referencedNames(rc *plan.ResourceChange, all []*plan.ResourceChange, attr string) []string {
+// referencedNames returns the configured name of each managed resource of
+// type resType that attribute attr of rc references, for those whose name is
+// known in the plan.
+func referencedNames(rc *plan.ResourceChange, all []*plan.ResourceChange, attr, resType string) []string {
 	var names []string
-	for _, ref := range rc.References[attr] {
-		resType, resName := targetFromReference(ref)
-		if resType == "" {
-			continue
-		}
-		// Reference addresses use the bare local name (aws_secretsmanager_secret.b)
-		// or an indexed one (aws_secretsmanager_secret.b[0]); plan change names
-		// carry the same index, so strip it from both before comparing.
-		resName = stripResourceIndex(resName)
-		for _, c := range all {
-			if c.Type != resType {
-				continue
-			}
-			if stripResourceIndex(c.Name) != resName {
-				continue
-			}
-			if name := c.AttributeValues["name"]; name != "" {
-				names = append(names, name)
-			}
+	for _, c := range referencedChanges(rc, all, attr, resType) {
+		if name := c.AttributeValues["name"]; name != "" {
+			names = append(names, name)
 		}
 	}
 	return names
@@ -107,40 +94,41 @@ func referencedNames(rc *plan.ResourceChange, all []*plan.ResourceChange, attr s
 
 // sqsQueueTargetARNs derives the ARN pattern of an SQS queue from its
 // configured name.
-func sqsQueueTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []string {
+func sqsQueueTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) [][]string {
 	name := rc.AttributeValues["name"]
 	if name == "" {
 		return nil
 	}
-	return []string{"arn:*:sqs:*:*:" + name}
+	return [][]string{{"arn:*:sqs:*:*:" + name}}
 }
 
 // logGroupTargetARNs derives the ARN patterns of a CloudWatch Logs group from
 // its configured name.
-func logGroupTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) []string {
+func logGroupTargetARNs(rc *plan.ResourceChange, _ []*plan.ResourceChange) [][]string {
 	name := rc.AttributeValues["name"]
 	if name == "" {
 		return nil
 	}
-	return logGroupARNPatterns(name)
+	return [][]string{logGroupARNPatterns(name)}
 }
 
 // logStreamTargetARNs derives the ARN patterns a CloudWatch Logs stream acts
 // on: its group, in both log-group forms, and the stream itself.
-func logStreamTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) []string {
+func logStreamTargetARNs(rc *plan.ResourceChange, all []*plan.ResourceChange) [][]string {
 	stream := rc.AttributeValues["name"]
-	groups := referencedNames(rc, all, "log_group_name")
+	groups := referencedNames(rc, all, "log_group_name", "aws_cloudwatch_log_group")
 	if group := rc.AttributeValues["log_group_name"]; group != "" {
 		groups = []string{group}
 	}
-	var patterns []string
+	var targets [][]string
 	for _, group := range groups {
-		patterns = append(patterns, logGroupARNPatterns(group)...)
+		forms := logGroupARNPatterns(group)
 		if stream != "" {
-			patterns = append(patterns, "arn:*:logs:*:*:log-group:"+group+":log-stream:"+stream)
+			forms = append(forms, "arn:*:logs:*:*:log-group:"+group+":log-stream:"+stream)
 		}
+		targets = append(targets, forms)
 	}
-	return patterns
+	return targets
 }
 
 // logGroupARNPatterns builds the two ARN forms of a log group named name.
@@ -152,28 +140,12 @@ func logGroupARNPatterns(name string) []string {
 }
 
 // secretARPattern builds the ARN pattern for a secretsmanager secret named
-// name. AWS appends a randomized 6-character suffix after the name, so the
-// pattern matches `name-*`.
+// name. AWS appends a hyphen and six random characters to the name, so the
+// pattern matches `name-??????`. A pattern of `name-*` would also match the
+// secrets named name-<anything>, so a grant on app-production-* would count
+// for the secret app.
 func secretARPattern(name string) string {
-	return "arn:*:secretsmanager:*:*:secret:" + name + "-*"
-}
-
-// targetFromReference extracts the terraform resource type and name from a
-// plan reference address such as "aws_secretsmanager_secret.b.id" or
-// "module.secrets.aws_secretsmanager_secret.b". Returns ("","") when the
-// address doesn't identify a managed resource.
-func targetFromReference(ref string) (string, string) {
-	parts := strings.Split(ref, ".")
-	for i, p := range parts {
-		if !strings.HasPrefix(p, "aws_") {
-			continue
-		}
-		if i+1 >= len(parts) {
-			return "", ""
-		}
-		return p, parts[i+1]
-	}
-	return "", ""
+	return "arn:*:secretsmanager:*:*:secret:" + name + "-??????"
 }
 
 // isARN reports whether the string is a well-formed AWS ARN.

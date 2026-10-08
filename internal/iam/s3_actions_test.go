@@ -162,7 +162,7 @@ func TestS3SubresourceActions_AreRequiredOnTheSubresource(t *testing.T) {
 			if tfType == "aws_s3_bucket_object" {
 				continue
 			}
-			got := decide(tfType, a, false, nil).class
+			got := decide(tfType, a, false, false, nil).class
 			if got != classManagement {
 				t.Errorf("decide(%q, %q).class = %s, want classManagement",
 					tfType, a, classTag(got))

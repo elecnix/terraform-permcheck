@@ -1,0 +1,10 @@
+{"resource_changes":[
+{"address":"aws_iam_role.r[0]","mode":"managed","type":"aws_iam_role","name":"r","index":0,"change":{"actions":["create"],"before":null,"after":{"name":"lambda-basic","path":"/"},"after_unknown":{"arn":true}}},
+{"address":"aws_iam_role.r[1]","mode":"managed","type":"aws_iam_role","name":"r","index":1,"change":{"actions":["create"],"before":null,"after":{"name":"secret-admin","path":"/"},"after_unknown":{"arn":true}}},
+{"address":"aws_lambda_function.basic","mode":"managed","type":"aws_lambda_function","name":"basic","change":{"actions":["create"],"before":null,"after":{"function_name":"basic","role":null,"tags":null},"after_unknown":{"role":true,"arn":true}}},
+{"address":"aws_lambda_function.admin","mode":"managed","type":"aws_lambda_function","name":"admin","change":{"actions":["create"],"before":null,"after":{"function_name":"admin","role":null,"tags":null},"after_unknown":{"role":true,"arn":true}}}
+],
+"configuration":{"root_module":{"resources":[
+{"address":"aws_lambda_function.basic","mode":"managed","type":"aws_lambda_function","name":"basic","expressions":{"function_name":{"constant_value":"basic"},"role":{"references":["aws_iam_role.r[0].arn","aws_iam_role.r[0]","aws_iam_role.r"]}}},
+{"address":"aws_lambda_function.admin","mode":"managed","type":"aws_lambda_function","name":"admin","expressions":{"function_name":{"constant_value":"admin"},"role":{"references":["aws_iam_role.r[1].arn","aws_iam_role.r[1]","aws_iam_role.r"]}}}
+]}}}

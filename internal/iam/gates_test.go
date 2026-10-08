@@ -139,3 +139,70 @@ func TestValidate_AnyGateChangeAndBestEffort(t *testing.T) {
 		t.Errorf("expected no finding, got %+v", missing)
 	}
 }
+
+// TestValidate_NestedGatePaths covers gates on a nested attribute path such
+// as ttl.0.enabled. The plan's nested value decides them, not the top-level
+// attribute name, which never matches the path.
+func TestValidate_NestedGatePaths(t *testing.T) {
+	schema := fakeSchema{
+		"create": {
+			{Action: "dynamodb:CreateTable"},
+			{Action: "dynamodb:UpdateTimeToLive", Gate: Gate{Attribute: "ttl.0.enabled"}},
+			{Action: "dynamodb:UpdateContinuousBackups", Gate: Gate{Attribute: "point_in_time_recovery.0.enabled"}},
+		},
+		"update": {
+			{Action: "kinesis:UpdateStreamMode", Gate: Gate{Changed: "stream_mode_details.0.stream_mode"}},
+			{Action: "kinesis:IncreaseStreamRetentionPeriod", Gate: Gate{Changed: "retention_period"}},
+		},
+	}
+	changes, err := plan.Parse([]byte(`{"resource_changes":[
+{"type":"aws_dynamodb_table","name":"t","change":{"actions":["create"],"before":null,
+ "after":{"ttl":[{"enabled":true,"attribute_name":"exp"}],"point_in_time_recovery":[{"enabled":false}]},"after_unknown":{}}},
+{"type":"aws_kinesis_stream","name":"s","change":{"actions":["update"],
+ "before":{"stream_mode_details":[{"stream_mode":"PROVISIONED"}],"retention_period":24},
+ "after":{"stream_mode_details":[{"stream_mode":"ON_DEMAND"}],"retention_period":24},"after_unknown":{}}}
+]}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing, err := Validate(changes, grantActions("dynamodb:CreateTable"), fakeResolver{schema}, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, m := range missing {
+		got[m.Action] = m.ConditionAttribute
+	}
+	if got["dynamodb:UpdateTimeToLive"] != "ttl.0.enabled" {
+		t.Errorf("UpdateTimeToLive not reported gated on ttl.0.enabled: %+v", missing)
+	}
+	if _, ok := got["dynamodb:UpdateContinuousBackups"]; ok {
+		t.Errorf("UpdateContinuousBackups reported with recovery disabled: %+v", missing)
+	}
+	if got["kinesis:UpdateStreamMode"] != "stream_mode_details.0.stream_mode" {
+		t.Errorf("UpdateStreamMode not reported for a mode change: %+v", missing)
+	}
+	if _, ok := got["kinesis:IncreaseStreamRetentionPeriod"]; ok {
+		t.Errorf("retention call reported with retention unchanged: %+v", missing)
+	}
+}
+
+// TestValidate_NestedGateWithoutState covers a resource change that carries
+// only top-level maps, as tests and static HCL build them. The first segment
+// of the path decides.
+func TestValidate_NestedGateWithoutState(t *testing.T) {
+	schema := fakeSchema{"create": {{Action: "dynamodb:UpdateTimeToLive", Gate: Gate{Attribute: "ttl.0.enabled"}}}}
+	for _, c := range []struct {
+		attrs map[string]bool
+		want  int
+	}{{map[string]bool{"ttl": true}, 1}, {map[string]bool{"ttl": false}, 0}, {nil, 1}} {
+		changes := []*plan.ResourceChange{{Type: "aws_dynamodb_table", Name: "t", Change: "create", Attributes: c.attrs}}
+		missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(missing) != c.want {
+			t.Errorf("attrs %v: got %d findings, want %d", c.attrs, len(missing), c.want)
+		}
+	}
+}

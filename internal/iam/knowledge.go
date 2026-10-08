@@ -264,9 +264,11 @@ type decision struct {
 }
 
 // decide classifies action on a resource of type tfType. bestEffort marks a
-// call whose failure the provider ignores. inPlan holds the resource types the
-// plan changes, so a sub-resource can take an action over from aws_s3_bucket.
-func decide(tfType, action string, bestEffort bool, inPlan map[string]bool) decision {
+// call whose failure the provider ignores. dedicated marks a type that exists
+// to make calls classed data-plane or optional (see isDedicated). inPlan holds
+// the resource types the plan changes, so a sub-resource can take an action
+// over from aws_s3_bucket.
+func decide(tfType, action string, bestEffort, dedicated bool, inPlan map[string]bool) decision {
 	r := ruleIndex[action]
 	if tfType == "aws_s3_bucket" && r.ownedBy != "" && inPlan[r.ownedBy] {
 		return decision{class: r.class, absorbedBy: r.ownedBy}
@@ -277,12 +279,64 @@ func decide(tfType, action string, bestEffort bool, inPlan map[string]bool) deci
 	if class == classOptional && strings.HasPrefix(tfType, "aws_s3_bucket_") && actionService(action) == "s3" {
 		class = classManagement
 	}
+	// The data-plane and optional classes describe a call a resource makes
+	// beside its own work. On a type whose own work is such a call, the call
+	// is the work, so it is required.
+	if dedicated {
+		class = classManagement
+	}
 	// A call whose failure the provider ignores cannot fail the apply, so it
 	// is optional whatever its action.
 	if bestEffort && class == classManagement {
 		class = classOptional
 	}
 	return decision{class: class}
+}
+
+// isDedicated reports whether a resource type exists to make calls that the
+// rules class as data-plane or optional, such as aws_s3_object for
+// s3:PutObject or aws_iam_user_policy for iam:PutUserPolicy.
+//
+// The classes describe a call relative to a parent: s3:PutObject is data
+// access for a bucket, and iam:PutUserPolicy is a side feature of a user. A
+// parent always makes a management write of its own on create, such as
+// s3:CreateBucket. A type is dedicated when its create makes no such write:
+// every write its create always makes is classed data-plane or optional. The
+// reads (Get, Describe, List, Head) do not count, since a sub-resource often
+// reads its parent, as aws_backup_vault_lock_configuration calls
+// backup:DescribeBackupVault. A type whose create makes no write at all, such
+// as aws_s3_object_copy with only s3:GetObject, is dedicated too.
+//
+// The rule needs no list of types, so it holds for every producer and every
+// new resource. A type with no create operation is not dedicated.
+func isDedicated(s Schema) bool {
+	if s == nil {
+		return false
+	}
+	reqs, ok := s.Requirements("create")
+	if !ok || len(reqs) == 0 {
+		return false
+	}
+	for _, r := range reqs {
+		if !r.Ungated() || r.BestEffort || isRead(r.Action) {
+			continue
+		}
+		if actionClass(r.Action) == classManagement {
+			return false
+		}
+	}
+	return true
+}
+
+// isRead reports whether action only reads, by the verb AWS names it with.
+func isRead(action string) bool {
+	_, verb, _ := strings.Cut(action, ":")
+	for _, p := range []string{"Get", "Describe", "List", "Head"} {
+		if strings.HasPrefix(verb, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // actionService returns the service prefix of an action, e.g. "s3".

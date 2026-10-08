@@ -1,0 +1,5 @@
+{"resource_changes":[
+{"address":"aws_iam_role.r","mode":"managed","type":"aws_iam_role","name":"r","change":{"actions":["create"],"before":null,"after":{"name":"app","path":"/"},"after_unknown":{}}},
+{"address":"aws_lambda_function.f","mode":"managed","type":"aws_lambda_function","name":"f","change":{"actions":["create"],"before":null,"after":{"function_name":"f","role":null,"tags":null},"after_unknown":{"role":true,"arn":true}}}
+],
+"configuration":{"root_module":{"resources":[{"address":"aws_lambda_function.f","mode":"managed","type":"aws_lambda_function","name":"f","expressions":{"function_name":{"constant_value":"f"},"role":{"references":["aws_iam_role.r.arn","aws_iam_role.r"]}}}]}}}
