@@ -25,20 +25,20 @@ var passRoleAttributes = map[string][]string{
 // is skipped, so only provable non-coverage is reported. With strict set, such
 // a role is reported unverified instead when the policy grants PassRole only
 // on some roles.
-func passRoleMissing(rc *plan.ResourceChange, policy AllowedProvider, all []*plan.ResourceChange, strict bool) []MissingAction {
+func passRoleMissing(rc *plan.ResourceChange, policy *PolicyDocument, all []*plan.ResourceChange, strict bool) []MissingAction {
 	if rc.Change == "delete" {
 		return nil
 	}
 	const action = "iam:PassRole"
 	for _, attr := range passRoleAttributes[rc.Type] {
 		targets := roleTargetARNs(rc, attr, all)
-		unverified := false
-		if len(targets) == 0 {
-			if !strict || !passesRole(rc, attr) || !coversAction(policy, action) || !resourceScopeUnverified(policy, action) {
-				continue
-			}
-			unverified = true
-		} else if coversActionOnTargets(policy, action, targets) {
+		verdict := policy.Coverage(action, targets, strict)
+		if verdict == Covered {
+			continue
+		}
+		// With the role unknown, the resource may pass none, so only an
+		// unverified grant on a role it may pass is reported.
+		if len(targets) == 0 && (verdict != Unverified || !passesRole(rc, attr)) {
 			continue
 		}
 		// One finding per resource, even when it passes two roles.
@@ -49,7 +49,7 @@ func passRoleMissing(rc *plan.ResourceChange, policy AllowedProvider, all []*pla
 			Action:                  action,
 			Service:                 "iam",
 			Class:                   classTag(ClassManagement),
-			ResourceScopeUnverified: unverified,
+			ResourceScopeUnverified: verdict == Unverified,
 		}}
 	}
 	return nil
@@ -89,18 +89,4 @@ func roleTargetARNs(rc *plan.ResourceChange, attr string, all []*plan.ResourceCh
 		}
 	}
 	return patterns
-}
-
-// coversActionOnTargets reports whether the policy grants action on a
-// resource matching any target pattern. With no targets, or a policy that is
-// not a *PolicyDocument, it checks the action alone.
-func coversActionOnTargets(policy AllowedProvider, action string, targets []string) bool {
-	if !coversAction(policy, action) {
-		return false
-	}
-	doc, ok := policy.(*PolicyDocument)
-	if !ok || len(targets) == 0 {
-		return true
-	}
-	return doc.CoversTarget(action, targets)
 }

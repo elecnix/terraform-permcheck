@@ -80,7 +80,7 @@ func TestPassRoleMissing_Covered(t *testing.T) {
 
 func TestPassRoleMissing_NoGrantAtAll(t *testing.T) {
 	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
-	if m := passRoleMissing(rc, denyAll{}, nil, false); len(m) != 1 {
+	if m := passRoleMissing(rc, grantNothing(), nil, false); len(m) != 1 {
 		t.Errorf("expected PassRole missing without any grant, got %+v", m)
 	}
 }
@@ -109,7 +109,7 @@ func TestPassRoleMissing_ManagedRoleReference(t *testing.T) {
 
 func TestPassRoleMissing_UnknownRoleIsSilent(t *testing.T) {
 	rc := &plan.ResourceChange{Type: "aws_lambda_function", Name: "fn", Change: "create", AttributeValues: map[string]string{}}
-	if m := passRoleMissing(rc, denyAll{}, nil, false); len(m) != 0 {
+	if m := passRoleMissing(rc, grantNothing(), nil, false); len(m) != 0 {
 		t.Errorf("unknown role must not be reported, got %+v", m)
 	}
 }
@@ -117,7 +117,7 @@ func TestPassRoleMissing_UnknownRoleIsSilent(t *testing.T) {
 func TestPassRoleMissing_DeleteNeedsNoPassRole(t *testing.T) {
 	rc := lambdaChange("arn:aws:iam::111122223333:role/example-fn-role")
 	rc.Change = "delete"
-	if m := passRoleMissing(rc, denyAll{}, nil, false); len(m) != 0 {
+	if m := passRoleMissing(rc, grantNothing(), nil, false); len(m) != 0 {
 		t.Errorf("delete must not require PassRole, got %+v", m)
 	}
 }

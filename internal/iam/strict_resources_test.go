@@ -175,19 +175,38 @@ func TestPassRoleMissing_StrictUnknownRole(t *testing.T) {
 }
 
 func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
-	rc := &plan.ResourceChange{
-		Type: "aws_wafv2_web_acl_association", Name: "a", Change: "create",
-		AttributeValues: map[string]string{"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/web/1"},
-	}
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"elasticloadbalancing:SetWebACL","Resource":"arn:aws:elasticloadbalancing:*:*:loadbalancer/app/other/*"}]}`)
 
-	if m := crossServiceMissing(rc, policy, false); len(m) != 0 {
-		t.Errorf("without strict mode the callback is covered, got %+v", m)
+	// The target is unknown, so the scoped grant may apply.
+	unknown := &plan.ResourceChange{Type: "aws_wafv2_web_acl_association", Name: "a", Change: "create"}
+	if hasAction(crossServiceMissing(unknown, policy, false), "elasticloadbalancing:SetWebACL") {
+		t.Error("without strict mode the scoped grant covers a callback on an unknown target")
 	}
-	m := crossServiceMissing(rc, policy, true)
-	if len(m) != 1 || !m[0].ResourceScopeUnverified {
-		t.Errorf("strict mode must report the scoped callback unverified, got %+v", m)
+	var found bool
+	for _, m := range crossServiceMissing(unknown, policy, true) {
+		if m.Action == "elasticloadbalancing:SetWebACL" {
+			found = true
+			if !m.ResourceScopeUnverified {
+				t.Errorf("strict mode must report the scoped callback unverified, got %+v", m)
+			}
+		}
+	}
+	if !found {
+		t.Error("strict mode must report the scoped callback on an unknown target")
+	}
+
+	// The target is known and the grant names another load balancer, so the
+	// callback is missing in both modes.
+	known := &plan.ResourceChange{
+		Type: "aws_wafv2_web_acl_association", Name: "a", Change: "create",
+		AttributeValues: map[string]string{"resource_arn": "arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/web/1"},
+	}
+	for _, strict := range []bool{false, true} {
+		m := crossServiceMissing(known, policy, strict)
+		if len(m) != 1 || m[0].ResourceScopeUnverified {
+			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
+		}
 	}
 }
 

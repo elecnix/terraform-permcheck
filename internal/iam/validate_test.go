@@ -166,10 +166,14 @@ type fakeResolver struct{ s Schema }
 
 func (r fakeResolver) Resolve(string) (Schema, error) { return r.s, nil }
 
-// denyAll covers no actions.
-type denyAll struct{}
+// grantNothing returns a policy with no statements, which grants no action.
+func grantNothing() *PolicyDocument { return &PolicyDocument{} }
 
-func (denyAll) Covers(string) bool { return false }
+// grantActions returns a policy that allows the action patterns on every
+// resource.
+func grantActions(actions ...string) *PolicyDocument {
+	return &PolicyDocument{Statements: []Statement{{Effect: "Allow", Action: actions, Resource: []string{"*"}}}}
+}
 
 // TestValidate_BestEffortIsOptional checks that an action whose failure the
 // provider ignores is never reported as required. The default filter drops
@@ -181,7 +185,7 @@ func TestValidate_BestEffortIsOptional(t *testing.T) {
 	}}
 	changes := []*plan.ResourceChange{{Type: "aws_dynamodb_table", Name: "t", Change: "read"}}
 
-	missing, err := Validate(changes, denyAll{}, fakeResolver{schema}, DefaultFilter())
+	missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, DefaultFilter())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +196,7 @@ func TestValidate_BestEffortIsOptional(t *testing.T) {
 		t.Error("dynamodb:DescribeTable missing from the report")
 	}
 
-	missing, err = Validate(changes, denyAll{}, fakeResolver{schema}, FilterConfig{})
+	missing, err = Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +220,7 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	withTags := []*plan.ResourceChange{
 		{Type: "aws_kms_key", Name: "k", Change: "create", Attributes: map[string]bool{"tags": true}},
 	}
-	missing, err := Validate(withTags, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(withTags, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +235,7 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	noTags := []*plan.ResourceChange{
 		{Type: "aws_kms_key", Name: "k", Change: "create", Attributes: map[string]bool{"description": true}},
 	}
-	missing, err = Validate(noTags, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(noTags, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +250,7 @@ func TestValidate_ConditionalGatedOnAttribute(t *testing.T) {
 	unknown := []*plan.ResourceChange{
 		{Type: "aws_kms_key", Name: "k", Change: "create"},
 	}
-	missing, err = Validate(unknown, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(unknown, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +272,7 @@ func TestValidate_ConditionalGatedOnAttribute_Delete(t *testing.T) {
 	withStages := []*plan.ResourceChange{
 		{Type: "aws_secretsmanager_secret_version", Name: "v", Change: "delete", Attributes: map[string]bool{"version_stages": true}},
 	}
-	missing, err := Validate(withStages, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(withStages, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +284,7 @@ func TestValidate_ConditionalGatedOnAttribute_Delete(t *testing.T) {
 	withoutStages := []*plan.ResourceChange{
 		{Type: "aws_secretsmanager_secret_version", Name: "v", Change: "delete", Attributes: map[string]bool{"secret_id": true}},
 	}
-	missing, err = Validate(withoutStages, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(withoutStages, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +520,7 @@ func TestValidate_ExcludeConditional(t *testing.T) {
 
 	// With ExcludeConditional: kms:CreateGrant should be filtered out
 	filter := FilterConfig{ExcludeConditional: true}
-	missing, err := Validate(changes, denyAll{}, resolver, filter)
+	missing, err := Validate(changes, grantNothing(), resolver, filter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -709,7 +713,7 @@ func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
 			ChangedAttributes: map[string]bool{"permissions_boundary": true, "assume_role_policy": true},
 		},
 	}
-	missing, err := Validate(changed, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(changed, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +733,7 @@ func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
 			ChangedAttributes: map[string]bool{"permissions_boundary": false, "assume_role_policy": true},
 		},
 	}
-	missing, err = Validate(unchanged, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(unchanged, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +750,7 @@ func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
 	unknown := []*plan.ResourceChange{
 		{Type: "aws_iam_role", Name: "example", Change: "update"},
 	}
-	missing, err = Validate(unknown, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(unknown, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -755,7 +759,7 @@ func TestValidate_ChangeGatedOnAttribute(t *testing.T) {
 	}
 
 	// Case 4: --only-required drops change-gated permissions too.
-	missing, err = Validate(changed, denyAll{}, resolver, FilterConfig{ExcludeConditional: true})
+	missing, err = Validate(changed, grantNothing(), resolver, FilterConfig{ExcludeConditional: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,7 +790,7 @@ func TestValidate_ChangeGatedKeepsPresenceGates(t *testing.T) {
 			ChangedAttributes: map[string]bool{"permissions_boundary": true},
 		},
 	}
-	missing, err := Validate(changes, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(changes, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +818,7 @@ func TestValidate_BothGatesOnOneAction(t *testing.T) {
 			ChangedAttributes: map[string]bool{"policy": true},
 		},
 	}
-	missing, err := Validate(bothHold, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(bothHold, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,7 +839,7 @@ func TestValidate_BothGatesOnOneAction(t *testing.T) {
 			ChangedAttributes: map[string]bool{"policy": true},
 		},
 	}
-	missing, err = Validate(presenceFails, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(presenceFails, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,7 +857,7 @@ func TestValidate_BothGatesOnOneAction(t *testing.T) {
 			ChangedAttributes: map[string]bool{"policy": false},
 		},
 	}
-	missing, err = Validate(changeFails, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(changeFails, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -882,7 +886,7 @@ func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
 		AttributeValues: map[string]string{"id": "sv-1"},
 		Configured:      map[string]bool{"secret_string": true},
 	}}
-	missing, err := Validate(defaulted, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(defaulted, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,7 +906,7 @@ func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
 		AttributeValues: map[string]string{"id": "sv-1"},
 		Configured:      map[string]bool{"secret_string": true, "version_stages": true},
 	}}
-	missing, err = Validate(configured, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(configured, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -918,7 +922,7 @@ func TestValidate_ValueGuardNeedsConfiguredAttribute(t *testing.T) {
 		Change:     "delete",
 		Attributes: map[string]bool{"version_stages": true},
 	}}
-	missing, err = Validate(noConfig, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(noConfig, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -937,7 +941,7 @@ func TestValidate_KnownEmptyOperationDoesNotFallBack(t *testing.T) {
 	resolver := fakeResolver{schema}
 
 	update := []*plan.ResourceChange{{Type: "aws_kms_key", Name: "k", Change: "update"}}
-	missing, err := Validate(update, denyAll{}, resolver, FilterConfig{})
+	missing, err := Validate(update, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -946,7 +950,7 @@ func TestValidate_KnownEmptyOperationDoesNotFallBack(t *testing.T) {
 	}
 
 	del := []*plan.ResourceChange{{Type: "aws_kms_key", Name: "k", Change: "delete"}}
-	missing, err = Validate(del, denyAll{}, resolver, FilterConfig{})
+	missing, err = Validate(del, grantNothing(), resolver, FilterConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

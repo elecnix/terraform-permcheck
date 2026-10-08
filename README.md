@@ -150,6 +150,9 @@ rather than only the action name:
   `aws_apigatewayv2_integration`). The role comes from a literal ARN in the
   `role` or `role_arn` attribute, or from a reference to an `aws_iam_role`
   with a known `name`.
+- PermCheck checks cross-service callbacks, such as
+  `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
+  `aws_wafv2_web_acl_association` when that value is a literal ARN.
 
 A grant whose `Resource` provably cannot apply to the target is reported
 missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).
@@ -176,8 +179,7 @@ With it, PermCheck reports an action as unverified when both hold:
 
 A grant on `"*"` still covers the action. So does a grant checked against a
 derived ARN. The same rule applies to `iam:PassRole` when the role ARN is
-unknown, and to cross-service callbacks, which PermCheck checks by action
-name only.
+unknown, and to cross-service callbacks when `resource_arn` is unknown.
 
 Unverified findings count as gaps: they fail the run unless you pass
 `--exit-zero`, and config exclusions apply to them. Each output format tags

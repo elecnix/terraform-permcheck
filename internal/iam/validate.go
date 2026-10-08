@@ -205,11 +205,6 @@ type MissingAction struct {
 	ConditionAttribute string
 }
 
-// AllowedProvider is something that can check whether an action is covered.
-type AllowedProvider interface {
-	Covers(action string) bool
-}
-
 // FilterConfig controls which permission classes are filtered out of validation.
 type FilterConfig struct {
 	// ExcludeDataPlane excludes data-plane permissions (dynamodb:PutItem, s3:GetObject, etc.)
@@ -240,7 +235,7 @@ func DefaultFilter() FilterConfig {
 
 // Validate checks all resource changes against the policy and the resolver.
 // The filter controls which permission classes are excluded from validation.
-func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
+func Validate(changes []*plan.ResourceChange, policy *PolicyDocument, resolver Resolver, filter FilterConfig) ([]MissingAction, error) {
 	var missing []MissingAction
 
 	for _, rc := range changes {
@@ -271,16 +266,10 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver R
 			}
 
 			// Action coverage, resource-scoped when the target ARN is derivable
-			// from the plan and the policy declares per-resource grants. In
-			// strict mode, a grant limited to some resources does not count
-			// when the target is unknown.
-			targets := resourceTargetARNs(rc, changes)
-			unverified := false
-			if coversActionOnTargets(policy, action, targets) {
-				if !filter.StrictResources || len(targets) > 0 || !resourceScopeUnverified(policy, action) {
-					continue
-				}
-				unverified = true
+			// from the plan.
+			verdict := policy.Coverage(action, resourceTargetARNs(rc, changes), filter.StrictResources)
+			if verdict == Covered {
+				continue
 			}
 
 			// Classify and optionally filter
@@ -312,7 +301,7 @@ func Validate(changes []*plan.ResourceChange, policy AllowedProvider, resolver R
 				Class:              classTag(class),
 				ConditionAttribute: gateAttr,
 
-				ResourceScopeUnverified: unverified,
+				ResourceScopeUnverified: verdict == Unverified,
 			})
 		}
 	}
