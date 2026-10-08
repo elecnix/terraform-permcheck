@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,11 +40,26 @@ type cfnSchema struct {
 type AWSProvider struct {
 	client  *http.Client
 	baseURL string // e.g. "https://schema.cloudformation.us-east-1.amazonaws.com"
+
+	// sleep waits between attempts; nil means time.Sleep. Tests replace it.
+	sleep func(time.Duration)
 }
 
 // registryTimeout bounds one registry request, so a stalled registry fails
 // the lookup instead of hanging the run.
 const registryTimeout = 30 * time.Second
+
+// The registry gets registryAttempts tries per key when it answers 5xx or
+// 429, or drops the connection. The wait before retry n (from 0) is a random
+// time between half and all of retryBackoff<<n. A 429 waits as long as its
+// Retry-After header asks instead, up to maxRetryAfter. A request that hits
+// registryTimeout is not retried, so a stalled registry costs one timeout
+// per key, not three.
+const (
+	registryAttempts = 3
+	retryBackoff     = time.Second
+	maxRetryAfter    = 30 * time.Second
+)
 
 // NewAWSProvider creates a new AWSProvider.
 func NewAWSProvider() *AWSProvider {
@@ -220,25 +238,76 @@ var cfnTypeOverrides = map[string]string{
 // is served from S3, which answers 403 rather than 404 for a key it does not
 // hold, so both mark iam.ErrUnknownType. A network error, a timeout, any
 // other status and a body that does not parse mark iam.ErrLookupFailed.
+// Transient failures are retried, as registryAttempts describes.
 func (p *AWSProvider) fetch(key string) (*cfnSchema, error) {
 	url := p.baseURL + "/" + key + ".json"
+	for attempt := 0; ; attempt++ {
+		s, retryAfter, err := p.fetchOnce(url)
+		if retryAfter < 0 || attempt+1 >= registryAttempts {
+			return s, err
+		}
+		if retryAfter == 0 {
+			step := retryBackoff << attempt
+			retryAfter = step/2 + rand.N(step/2+1)
+		}
+		p.wait(retryAfter)
+	}
+}
+
+// fetchOnce makes one request for url. retryAfter is negative when the
+// result is final, zero when the request may be retried after the usual
+// backoff, and positive when the registry asked for that wait.
+func (p *AWSProvider) fetchOnce(url string) (s *cfnSchema, retryAfter time.Duration, err error) {
 	resp, err := p.client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w: %w", url, iam.ErrLookupFailed, err)
+		var nerr net.Error
+		if errors.As(err, &nerr) && nerr.Timeout() {
+			retryAfter = -1
+		}
+		return nil, retryAfter, fmt.Errorf("fetch %s: %w: %w", url, iam.ErrLookupFailed, err)
 	}
 	defer resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusForbidden, http.StatusNotFound:
-		return nil, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrUnknownType)
+	switch {
+	case resp.StatusCode == http.StatusOK:
+	case resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusNotFound:
+		return nil, -1, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrUnknownType)
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return nil, parseRetryAfter(resp.Header.Get("Retry-After")), fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrLookupFailed)
+	case resp.StatusCode >= 500:
+		return nil, 0, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrLookupFailed)
 	default:
-		return nil, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrLookupFailed)
+		return nil, -1, fmt.Errorf("fetch %s: HTTP %d: %w", url, resp.StatusCode, iam.ErrLookupFailed)
 	}
-	var s cfnSchema
-	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
-		return nil, fmt.Errorf("parse %s: %w: %w", url, iam.ErrLookupFailed, err)
+	var cfn cfnSchema
+	if err := json.NewDecoder(resp.Body).Decode(&cfn); err != nil {
+		return nil, -1, fmt.Errorf("parse %s: %w: %w", url, iam.ErrLookupFailed, err)
 	}
-	return &s, nil
+	return &cfn, -1, nil
+}
+
+// parseRetryAfter reads a Retry-After header, in seconds or as an HTTP date,
+// and caps it at maxRetryAfter. It returns zero, the usual backoff, for a
+// missing or unreadable header.
+func parseRetryAfter(h string) time.Duration {
+	var d time.Duration
+	if secs, err := strconv.Atoi(strings.TrimSpace(h)); err == nil {
+		d = time.Duration(secs) * time.Second
+	} else if at, err := http.ParseTime(h); err == nil {
+		d = time.Until(at)
+	}
+	if d <= 0 {
+		return 0
+	}
+	return min(d, maxRetryAfter)
+}
+
+// wait sleeps for d between attempts.
+func (p *AWSProvider) wait(d time.Duration) {
+	if p.sleep != nil {
+		p.sleep(d)
+		return
+	}
+	time.Sleep(d)
 }
 
 // toSchema converts a CloudFormation schema to an iam.Schema. The
