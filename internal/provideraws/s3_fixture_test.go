@@ -35,10 +35,7 @@ func TestS3BucketActionsFixture(t *testing.T) {
 		t.Skipf("provider checkout not found at %s", dir)
 	}
 
-	p := NewSourceProviderWithPath(dir)
-	if err := p.Ensure(); err != nil {
-		t.Fatal(err)
-	}
+	p := parsedCheckout(t, dir)
 	got := s3BucketActions{
 		Comment:     "S3 actions the provider-source parser emits for the aws_s3_bucket resource family. Regenerate with UPDATE_S3_FIXTURE=1 go test -run TestS3BucketActionsFixture ./internal/provideraws/",
 		ProviderRef: DefaultProviderRef,

@@ -7,13 +7,18 @@ on:
   # pull request's branch rather than main.
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -26,17 +31,36 @@ jobs:
       - name: Format check
         run: test -z "$(gofmt -l .)"
 
-      - name: Test (short)
-        run: go test ./... -short -count=1 -v
+      - name: Test (short, race detector)
+        run: go test ./... -short -race -count=1 -v
 
+  # test-live and permissions-drift need a clone of terraform-provider-aws
+  # at DefaultProviderRef, about 300 MB. Both restore it from the Actions
+  # cache, keyed on that ref, so only the first run after a bump clones it.
   test-live:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
+
+      - name: Find the provider ref
+        id: provider
+        run: |
+          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
+
+      - name: Restore the provider clone
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ runner.temp }}/provider-cache
+          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
 
       - name: Test (live CFN registry)
         run: go test ./... -count=1 -v
@@ -44,13 +68,30 @@ jobs:
   permissions-drift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: go.mod
 
-      # Clones terraform-provider-aws at DefaultProviderRef and parses it.
+      - name: Find the provider ref
+        id: provider
+        run: |
+          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
+
+      - name: Restore the provider clone
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ${{ runner.temp }}/provider-cache
+          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
+
+      # Clones terraform-provider-aws at DefaultProviderRef, unless the cache
+      # restored it, and parses it.
       - name: Regenerate the embedded permissions table
         run: go run . generate-permissions --out internal/permdata/permissions.json
 
@@ -64,7 +105,9 @@ jobs:
   action:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
 
       - name: Run the action with a policy that covers the plan
         id: covered
