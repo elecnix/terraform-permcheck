@@ -86,7 +86,7 @@ func exitCode(err error) int {
 // version is the single source of truth for the release version — bump it
 // here when tagging a release; the version test derives its expectation from
 // this constant.
-const version = "v0.8.1"
+const version = "v0.9.0"
 
 // usage is the top-level help text.
 const usage = `Usage: terraform-permcheck <command> [flags]
