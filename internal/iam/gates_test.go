@@ -56,7 +56,7 @@ func TestValidate_AnyGateUngatedPath(t *testing.T) {
 		{Action: "apigateway:POST", Gate: Gate{Attribute: "tags"}},
 		{Action: "apigateway:POST"},
 	}}
-	changes := []*plan.ResourceChange{{Type: "aws_apigatewayv2_domain_name", Name: "api", Change: "create", Attributes: map[string]bool{}}}
+	changes := []*plan.ResourceChange{{Type: "aws_apigatewayv2_api", Name: "api", Change: "create", Attributes: map[string]bool{}}}
 	missing, err := Validate(changes, grantNothing(), fakeResolver{schema}, FilterConfig{ExcludeConditional: true})
 	if err != nil {
 		t.Fatal(err)

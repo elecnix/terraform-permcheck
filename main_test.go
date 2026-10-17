@@ -875,7 +875,8 @@ resource "aws_sqs_queue" "orders" {
 
 // TestValidate_APIGatewayV2ByHTTPVerb runs the plan from issue #56. API
 // Gateway v2 authorizes by HTTP verb under the apigateway prefix, so a policy
-// that grants the verbs covers a domain name and its API mapping.
+// that grants the verbs, plus the service-linked role a domain name creates,
+// covers a domain name and its API mapping.
 func TestValidate_APIGatewayV2ByHTTPVerb(t *testing.T) {
 	out := captureStdout(t, func() {
 		err := run([]string{"validate",

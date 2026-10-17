@@ -23,6 +23,11 @@ type resourceRule struct {
 	passesRole []string
 	// callbacks are the actions AWS calls in the target's service, or nil.
 	callbacks *crossServiceRule
+	// serviceLinkedRoles lists the service principals whose service-linked
+	// role AWS may create for the resource, such as
+	// "ops.apigateway.amazonaws.com". AWS checks iam:CreateServiceLinkedRole
+	// on each, though the provider never calls it.
+	serviceLinkedRoles []string
 }
 
 // resourceRules maps a terraform resource type to its rule. A type with no
@@ -49,6 +54,12 @@ var resourceRules = map[string]resourceRule{
 	"aws_ecs_task_definition":      {passesRole: []string{"execution_role_arn", "task_role_arn"}},
 	"aws_cloudwatch_event_target":  {passesRole: []string{"role_arn"}},
 	"aws_apigatewayv2_integration": {passesRole: []string{"credentials_arn"}},
+
+	// A regional custom domain makes API Gateway create its service-linked
+	// role.
+	"aws_apigatewayv2_domain_name": {serviceLinkedRoles: []string{"ops.apigateway.amazonaws.com"}},
+	// Enabling Inspector creates its service-linked role.
+	"aws_inspector2_enabler": {serviceLinkedRoles: []string{"inspector2.amazonaws.com"}},
 
 	"aws_wafv2_web_acl_association": {callbacks: &crossServiceRule{
 		arnAttribute: "resource_arn",
