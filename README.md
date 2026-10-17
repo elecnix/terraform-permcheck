@@ -231,6 +231,12 @@ rather than only the action name:
   with a known `name`. When the plan shows that the attribute is set but not
   which role it holds, a policy with no `iam:PassRole` grant at all is
   reported missing.
+- `iam:CreateServiceLinkedRole` is required when a create makes the service
+  build its service-linked role on first use (`aws_apigatewayv2_domain_name`,
+  `aws_inspector2_enabler`). The target is the role path
+  `role/aws-service-role/<service principal>/*`. AWS creates the role only
+  when the account has none, so a policy without the grant can pass for a long
+  time and fail on the first apply in a fresh account.
 - PermCheck checks cross-service callbacks, such as
   `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
   `aws_wafv2_web_acl_association`. The target is a literal ARN, or the

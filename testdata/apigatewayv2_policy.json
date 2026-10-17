@@ -4,7 +4,13 @@
     {
       "Sid": "ApiGatewayByVerb",
       "Effect": "Allow",
-      "Action": ["apigateway:GET", "apigateway:POST", "apigateway:PUT", "apigateway:PATCH", "apigateway:DELETE"],
+      "Action": [
+        "apigateway:GET",
+        "apigateway:POST",
+        "apigateway:PUT",
+        "apigateway:PATCH",
+        "apigateway:DELETE"
+      ],
       "Resource": [
         "arn:aws:apigateway:us-east-1::/apis",
         "arn:aws:apigateway:us-east-1::/apis/*",
@@ -12,6 +18,12 @@
         "arn:aws:apigateway:us-east-1::/domainnames/*",
         "arn:aws:apigateway:us-east-1::/tags/*"
       ]
+    },
+    {
+      "Sid": "ApiGatewayServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/ops.apigateway.amazonaws.com/*"
     }
   ]
 }
