@@ -204,3 +204,47 @@ func TestConditionValues(t *testing.T) {
 		t.Errorf("an action with no condition key must have no values, got %+v", values)
 	}
 }
+
+// TestValidate_PassRoleConditionIsUnaffected checks that a conditional
+// iam:PassRole grant is unaffected: the plan supplies no value for
+// iam:PassedToService, so the tool cannot check the condition and the
+// grant still counts.
+func TestValidate_PassRoleConditionIsUnaffected(t *testing.T) {
+	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"iam:PassRole","Resource":"*",
+		 "Condition":{"StringEquals":{"iam:PassedToService":"lambda.amazonaws.com"}}}]}`)
+
+	rc := &plan.ResourceChange{
+		Type: "aws_lambda_function", Name: "fn", Change: "create",
+		AttributeValues: map[string]string{"role": "arn:aws:iam::111122223333:role/app"},
+	}
+	missing, err := Validate([]*plan.ResourceChange{rc}, policy, fakeResolver{actionsSchema(map[string][]string{
+		"create": {"lambda:CreateFunction"},
+	})}, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range missing {
+		if m.Action == "iam:PassRole" {
+			t.Errorf("a conditional PassRole grant must still count, got %+v", m)
+		}
+	}
+}
+
+// TestValidate_ConditionOnAnActionThePlanDoesNotGateIsUnaffected checks that
+// a conditional grant for an action of the same resource, but not one the
+// table names a condition key for, is unaffected.
+func TestValidate_ConditionOnAnActionThePlanDoesNotGateIsUnaffected(t *testing.T) {
+	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"lambda:GetEventSourceMapping","Resource":"*",
+		 "Condition":{"ArnLike":{"lambda:FunctionArn":"`+otherFunctionARN+`"}}}]}`)
+
+	missing, err := Validate(eventSourceMappingChange(mappedFunctionARN), policy,
+		fakeResolver{actionsSchema(map[string][]string{"create": {"lambda:GetEventSourceMapping"}})}, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("a condition on an action with no condition key covers, got %+v", missing)
+	}
+}
