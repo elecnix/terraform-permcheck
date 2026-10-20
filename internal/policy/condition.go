@@ -206,6 +206,11 @@ func (s Statement) conditionHolds(conds Conditions) bool {
 // tool does not model, leaves the condition unknown, and one key that
 // provably cannot match makes the whole condition fail.
 func matchCondition(block conditionBlock, conds Conditions) conditionResult {
+	if len(block.unreadable) > 0 {
+		// The tool could not read the block, so it cannot tell what it
+		// says.
+		return condUnknown
+	}
 	worst := condHolds
 	for _, operator := range block.operators {
 		keys, ok := block.keys[operator]

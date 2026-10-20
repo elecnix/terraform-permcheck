@@ -333,6 +333,23 @@ func TestMatchCondition_UndecidablePatternsAreUnknown(t *testing.T) {
 	}
 }
 
+func TestMatchCondition_UnreadableBlockIsUnknown(t *testing.T) {
+	// A Condition the tool cannot read leaves the condition unknown, so
+	// the grant is still a grant.
+	doc := mustPolicy(t, `{"Statement":[
+		{"Effect":"Allow","Action":"sqs:*","Resource":"*","Condition":"nonsense"}]}`)
+	if got := matchCondition(doc.Statements[0].Condition, functionContext); got != condUnknown {
+		t.Errorf("matchCondition = %v, want %v", got, condUnknown)
+	}
+
+	// So does an operator block the tool cannot read.
+	doc = mustPolicy(t, `{"Statement":[
+		{"Effect":"Allow","Action":"sqs:*","Resource":"*","Condition":{"StringEquals":"nonsense"}}]}`)
+	if got := matchCondition(doc.Statements[0].Condition, functionContext); got != condUnknown {
+		t.Errorf("matchCondition = %v, want %v", got, condUnknown)
+	}
+}
+
 func TestMatchCondition_ResourcePartMayHoldColons(t *testing.T) {
 	// A log group ARN has colons in its resource part. The six components
 	// are compared on their own, so a pattern naming the same group
