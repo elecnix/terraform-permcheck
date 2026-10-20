@@ -1,0 +1,27 @@
+--- stdout ---
+--- stderr ---
+Missing IAM permissions (11):
+  s3:Action0 [required]
+    → aws_s3_bucket.b0 (create)
+  s3:Action1 [required]
+    → aws_s3_bucket.b1 (create)
+  s3:Action2 [required]
+    → aws_s3_bucket.b2 (create)
+  s3:Action3 [required]
+    → aws_s3_bucket.b3 (create)
+  s3:Action4 [required]
+    → aws_s3_bucket.b4 (create)
+  s3:Action5 [required]
+    → aws_s3_bucket.b5 (create)
+  s3:Action6 [required]
+    → aws_s3_bucket.b6 (create)
+  s3:Action7 [required]
+    → aws_s3_bucket.b7 (create)
+  s3:Action8 [required]
+    → aws_s3_bucket.b8 (create)
+  s3:Action9 [required]
+    → aws_s3_bucket.b9 (create)
+  s3:Action10 [required]
+    → aws_s3_bucket.b10 (create)
+
+11 resource changes checked, 11 distinct missing permissions found.

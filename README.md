@@ -712,6 +712,15 @@ resource block. In plan mode, only resources of the root module get one: the
 parser does not resolve module calls, so it cannot tell which block a module
 resource comes from.
 
+GitHub keeps at most 10 annotations of one type per step and drops the rest
+without a sign, so a long list of findings looks complete when it is not.
+When the report writes more `::warning::` lines than that, it ends with one
+`::notice::` that says how many findings it found, for example
+`::notice title=Annotation limit reached::11 findings, GitHub shows at most 10 annotations per step; see the full report`.
+The notice counts the warning lines the report wrote, so an unresolved
+resource type counts as one. A report of 10 or fewer findings gets no
+notice.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

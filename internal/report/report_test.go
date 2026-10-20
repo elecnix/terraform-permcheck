@@ -36,6 +36,12 @@ func TestReport_CountsMatchRenderers(t *testing.T) {
 	if got := strings.Count(r.annotations(), "::warning "); got != len(r.groups) {
 		t.Errorf("%d ::warning lines, want %d", got, len(r.groups))
 	}
+	// The count the truncation notice states is the number of warning lines
+	// the renderer writes, not the number of missing permissions the
+	// summary line counts.
+	if got := r.warningCount(); got != strings.Count(r.annotations(), "::warning ") {
+		t.Errorf("warningCount = %d, want the %d warning lines the renderer writes", got, strings.Count(r.annotations(), "::warning "))
+	}
 	if want := "4 resource changes checked, 3 distinct missing permissions found, 1 unverified (resource scope)."; r.summary() != want {
 		t.Errorf("summary = %q, want %q", r.summary(), want)
 	}

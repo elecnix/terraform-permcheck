@@ -1,0 +1,16 @@
+--- stdout ---
+::warning title=Missing IAM permission::s3:Action0 needed by: aws_s3_bucket.b0 (create)
+::warning title=Missing IAM permission::s3:Action1 needed by: aws_s3_bucket.b1 (create)
+::warning title=Missing IAM permission::s3:Action2 needed by: aws_s3_bucket.b2 (create)
+::warning title=Missing IAM permission::s3:Action3 needed by: aws_s3_bucket.b3 (create)
+::warning title=Missing IAM permission::s3:Action4 needed by: aws_s3_bucket.b4 (create)
+::warning title=Missing IAM permission::s3:Action5 needed by: aws_s3_bucket.b5 (create)
+::warning title=Missing IAM permission::s3:Action6 needed by: aws_s3_bucket.b6 (create)
+::warning title=Missing IAM permission::s3:Action7 needed by: aws_s3_bucket.b7 (create)
+::warning title=Missing IAM permission::s3:Action8 needed by: aws_s3_bucket.b8 (create)
+::warning title=Missing IAM permission::s3:Action9 needed by: aws_s3_bucket.b9 (create)
+::warning title=Missing IAM permission::s3:Action10 needed by: aws_s3_bucket.b10 (create)
+
+11 resource changes checked, 11 distinct missing permissions found.
+::notice title=Annotation limit reached::11 findings, GitHub shows at most 10 annotations per step; see the full report
+--- stderr ---

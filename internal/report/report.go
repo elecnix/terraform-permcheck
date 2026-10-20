@@ -178,6 +178,12 @@ func (r *Report) Write(f Format, stdout, stderr io.Writer) {
 				fmt.Fprintf(stdout, "%s\n", a)
 			}
 			fmt.Fprintln(stdout, r.summary())
+			// The notice says the annotation list is longer than what
+			// GitHub shows, so it goes after the summary and before the
+			// excluded notices, which stay grouped at the end.
+			if n := r.truncationNotice(); n != "" {
+				fmt.Fprintln(stdout, n)
+			}
 		}
 		fmt.Fprint(stdout, r.excludedAnnotations())
 	default:

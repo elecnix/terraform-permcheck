@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -66,6 +67,20 @@ func goldenCases() []goldenCase {
 	moduleDelete := iam.MissingAction{ModuleAddress: "module.prod", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: iam.ClassManagement}
 	moduleNew := iam.MissingAction{ModuleAddress: `module.app["eu"]`, ResourceType: "aws_new_thing", ResourceName: "a[0]", Change: "create", Unresolved: true}
 	moduleExcluded := iam.ExcludedAction{MissingAction: iam.MissingAction{ModuleAddress: "module.legacy", ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "delete", Action: "sqs:DeleteQueue", Class: iam.ClassManagement}, Reason: "deleted by hand"}
+
+	// GitHub keeps a limited number of annotations per step and drops the
+	// rest, so a report with more warning lines than the cap says so with
+	// a ::notice. These findings make eleven groups, one over the cap.
+	var overCap []iam.MissingAction
+	for i := 0; i < 11; i++ {
+		overCap = append(overCap, iam.MissingAction{
+			ResourceType: "aws_s3_bucket",
+			ResourceName: fmt.Sprintf("b%d", i),
+			Change:       "create",
+			Action:       fmt.Sprintf("s3:Action%d", i),
+			Class:        iam.ClassManagement,
+		})
+	}
 
 	planLabel := "resource changes"
 	return []goldenCase{
@@ -203,6 +218,15 @@ func goldenCases() []goldenCase {
 				Checked:  3, Label: planLabel,
 			},
 			showExcluded: true,
+		},
+		{
+			// More warning lines than GitHub shows in a step: the report
+			// says so with a ::notice after the summary line.
+			name: "over_cap",
+			res: check.Result{
+				Missing: overCap,
+				Checked: 11, Label: planLabel,
+			},
 		},
 	}
 }

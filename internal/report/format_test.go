@@ -2,6 +2,7 @@ package report
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -31,6 +32,22 @@ func formatExcluded(excluded []iam.ExcludedAction) string {
 
 func formatExcludedAnnotations(excluded []iam.ExcludedAction) string {
 	return New(check.Result{Excluded: excluded}, nil, true).excludedAnnotations()
+}
+
+// missingActions builds n findings, each with its own action, so each one
+// lands in a group of its own and gets a ::warning line of its own.
+func missingActions(n int) []iam.MissingAction {
+	out := make([]iam.MissingAction, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, iam.MissingAction{
+			ResourceType: "aws_s3_bucket",
+			ResourceName: fmt.Sprintf("b%d", i),
+			Change:       "create",
+			Action:       fmt.Sprintf("s3:Action%d", i),
+			Class:        iam.ClassManagement,
+		})
+	}
+	return out
 }
 
 func distinctCount(missing []iam.MissingAction) int {
@@ -598,6 +615,144 @@ func TestFormatGitHubAnnotations_EscapesCommandValues(t *testing.T) {
 	got = formatExcludedAnnotations(excluded)
 	if strings.Count(got, "\n") != 1 || !strings.Contains(got, "50%25%0A::error::x") {
 		t.Errorf("reason not escaped as message data:\n%q", got)
+	}
+}
+
+// GitHub keeps a limited number of annotations of one type per step, and
+// drops the rest without a sign. The report must say so when it writes more
+// warning lines than the cap allows, so a reader of the annotation list does
+// not take it for the whole report.
+func TestFormatGitHubAnnotations_TruncationNotice(t *testing.T) {
+	unresolved := iam.MissingAction{ResourceType: "aws_new_thing", ResourceName: "a", Change: "create", Unresolved: true}
+
+	tests := []struct {
+		name      string
+		res       check.Result
+		cap       int
+		wantNot   bool
+		wantMsg   string
+		wantWarns int
+	}{
+		{
+			name:      "at the cap",
+			res:       check.Result{Missing: missingActions(githubAnnotationCap)},
+			cap:       githubAnnotationCap,
+			wantNot:   false,
+			wantWarns: githubAnnotationCap,
+		},
+		{
+			name:      "over the cap",
+			res:       check.Result{Missing: missingActions(githubAnnotationCap + 1)},
+			cap:       githubAnnotationCap,
+			wantNot:   true,
+			wantMsg:   "11 findings, GitHub shows at most 10 annotations per step; see the full report",
+			wantWarns: githubAnnotationCap + 1,
+		},
+		{
+			// The count is the number of warning lines the report writes,
+			// not the number of missing permissions: the unresolved type
+			// writes a warning line of its own. A cap of 3 puts the report
+			// over it, so the notice appears and names 4, not 3.
+			name: "unresolved type counts as a finding",
+			res: check.Result{
+				Missing:    missingActions(3),
+				Unresolved: []iam.MissingAction{unresolved},
+			},
+			cap:       3,
+			wantNot:   true,
+			wantMsg:   "4 findings, GitHub shows at most 3 annotations per step; see the full report",
+			wantWarns: 4,
+		},
+		{
+			name:    "all clear",
+			res:     check.Result{Checked: 3, Label: "resource changes"},
+			cap:     githubAnnotationCap,
+			wantNot: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := New(tc.res, nil, false)
+			got := r.truncationNoticeWithCap(tc.cap)
+			if !tc.wantNot {
+				if got != "" {
+					t.Errorf("notice = %q, want none", got)
+				}
+				return
+			}
+			if strings.Count(got, "\n") != 0 {
+				t.Errorf("notice must be one line, got %q", got)
+			}
+			if !strings.HasPrefix(got, "::notice ") {
+				t.Errorf("notice = %q, want a ::notice command", got)
+			}
+			if !strings.Contains(got, tc.wantMsg) {
+				t.Errorf("notice = %q, want it to name %q", got, tc.wantMsg)
+			}
+			if w := strings.Count(r.annotations(), "::warning "); w != tc.wantWarns {
+				t.Errorf("%d warning lines, want %d", w, tc.wantWarns)
+			}
+		})
+	}
+}
+
+// The notice is a workflow command, so its message is escaped as data: a
+// newline in it cannot end the command and start another one.
+func TestFormatGitHubAnnotations_TruncationNoticeEscapesMessage(t *testing.T) {
+	got := noticeCommand("Annotation limit reached", "11 findings\n::error::x")
+	want := "::notice title=Annotation limit reached::11 findings%0A::error::x"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	if strings.Count(got, "\n") != 0 {
+		t.Errorf("notice must not contain a newline, got %q", got)
+	}
+}
+
+// The notice goes after the summary line and before the excluded notices,
+// so the excluded notices stay grouped at the end.
+func TestFormatGitHubAnnotations_TruncationNoticePlacement(t *testing.T) {
+	res := check.Result{
+		Missing: missingActions(githubAnnotationCap + 1),
+		Excluded: []iam.ExcludedAction{
+			{MissingAction: iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a", Change: "delete", Action: "s3:DeleteBucket"}, Reason: "bucket is retained"},
+		},
+		Checked: 11, Label: "resource changes",
+	}
+	r := New(res, nil, true)
+	var out, errOut strings.Builder
+	r.Write(GitHubAnnotations, &out, &errOut)
+	got := out.String()
+
+	summary := r.summary()
+	notice := r.truncationNotice()
+	excluded := r.excludedAnnotations()
+	si := strings.Index(got, summary)
+	ni := strings.Index(got, notice)
+	ei := strings.Index(got, excluded)
+	if si < 0 || ni < 0 || ei < 0 {
+		t.Fatalf("missing a part of the output:\n%s", got)
+	}
+	if !(si < ni && ni < ei) {
+		t.Errorf("want summary, then notice, then excluded notices; got:\n%s", got)
+	}
+}
+
+// The notice counts the warning lines the report writes, which include the
+// unverified groups the summary line leaves out.
+func TestFormatGitHubAnnotations_TruncationNoticeCountsUnverified(t *testing.T) {
+	missing := append(missingActions(githubAnnotationCap), iam.MissingAction{
+		ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create",
+		Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true,
+	})
+	r := New(check.Result{Missing: missing}, nil, false)
+	if r.warningCount() != githubAnnotationCap+1 {
+		t.Fatalf("warningCount = %d, want %d", r.warningCount(), githubAnnotationCap+1)
+	}
+	got := r.truncationNotice()
+	if !strings.Contains(got, "11 findings") {
+		t.Errorf("notice = %q, want it to name 11 findings", got)
 	}
 }
 
