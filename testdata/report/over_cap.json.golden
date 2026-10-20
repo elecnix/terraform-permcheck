@@ -1,0 +1,86 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 11,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b0",
+      "change": "create",
+      "missing_action": "s3:Action0",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b1",
+      "change": "create",
+      "missing_action": "s3:Action1",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b2",
+      "change": "create",
+      "missing_action": "s3:Action2",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b3",
+      "change": "create",
+      "missing_action": "s3:Action3",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b4",
+      "change": "create",
+      "missing_action": "s3:Action4",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b5",
+      "change": "create",
+      "missing_action": "s3:Action5",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b6",
+      "change": "create",
+      "missing_action": "s3:Action6",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b7",
+      "change": "create",
+      "missing_action": "s3:Action7",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b8",
+      "change": "create",
+      "missing_action": "s3:Action8",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b9",
+      "change": "create",
+      "missing_action": "s3:Action9",
+      "class": "[required]"
+    },
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "b10",
+      "change": "create",
+      "missing_action": "s3:Action10",
+      "class": "[required]"
+    }
+  ]
+}
+--- stderr ---

@@ -103,6 +103,37 @@ func TestValidate_GitHubAnnotationsFormat(t *testing.T) {
 	}
 }
 
+// TestValidate_GitHubAnnotationsTruncationNotice checks that a plan with
+// more findings than GitHub shows annotations for says so, and that the
+// notice does not change the exit code.
+func TestValidate_GitHubAnnotationsTruncationNotice(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/plan.json",
+			"--policy-file", "testdata/policy_partial.json",
+			"--cloud", "aws",
+			"--format", "github-annotations",
+		})
+		// The notice is output only: the run still fails on the gaps.
+		if !errors.Is(err, errGapsFound) {
+			t.Fatalf("expected errGapsFound, got %v", err)
+		}
+	})
+
+	warnings := strings.Count(out, "::warning ")
+	notices := strings.Count(out, "::notice ")
+	if warnings <= 10 {
+		t.Fatalf("the test plan must produce more than 10 warnings, got %d:\n%s", warnings, out)
+	}
+	if notices != 1 {
+		t.Errorf("expected exactly one ::notice, got %d:\n%s", notices, out)
+	}
+	want := fmt.Sprintf("::notice title=Annotation limit reached::%d findings, GitHub shows at most 10 annotations per step; see the full report", warnings)
+	if !strings.Contains(out, want) {
+		t.Errorf("expected %q in output, got:\n%s", want, out)
+	}
+}
+
 // TestValidate_GitHubAnnotationsWithExitZero combines both flags.
 func TestValidate_GitHubAnnotationsWithExitZero(t *testing.T) {
 	out := captureStdout(t, func() {

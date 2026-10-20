@@ -50,6 +50,60 @@ func (r *Report) annotations() string {
 	return b.String()
 }
 
+// githubAnnotationCap is how many annotations of one type GitHub Actions
+// keeps for a step. The actions/runner sets
+// ExecutionContext._maxCountPerIssueType = 10, and the actions/toolkit
+// docs/problem-matchers.md states "10 warning annotations, 10 error
+// annotations, and 10 notice annotations per step / 50 annotations per job
+// / 50 annotations per run". The annotations past that are dropped without a
+// sign, so the report says how many findings it found when it crosses the
+// cap. A change to either source is a one-line edit here.
+const githubAnnotationCap = 10
+
+// warningCount is the number of ::warning lines the annotations render: one
+// per finding group, plus one per unresolved resource type. It is not the
+// number of missing permissions the summary line counts, which leaves out
+// the unverified groups and the unresolved types, both of which produce a
+// ::warning line.
+func (r *Report) warningCount() int {
+	return len(r.groups) + len(r.unresolved)
+}
+
+// truncationNotice renders the ::notice command that says the annotation
+// list is longer than what GitHub shows. It is empty when the report stays
+// within the cap, so a report that fits is not disturbed. The message names
+// the count the report wrote and the cap this tool knows, so a later raise
+// of GitHub's cap is a one-line change of the constant above and the
+// message follows it.
+func (r *Report) truncationNotice() string {
+	return r.truncationNoticeWithCap(githubAnnotationCap)
+}
+
+// truncationNoticeWithCap renders the notice against a given cap. The cap is
+// a parameter so a test can exercise the boundary without changing the
+// constant the tool ships with.
+func (r *Report) truncationNoticeWithCap(cap int) string {
+	n := r.warningCount()
+	if n <= cap {
+		return ""
+	}
+	return noticeCommand("Annotation limit reached", truncationMessage(n, cap))
+}
+
+// truncationMessage is the text of the truncation notice. It states the
+// count the report wrote and the cap the tool knows, so the two cannot
+// disagree: both come from the same constants.
+func truncationMessage(n, cap int) string {
+	return fmt.Sprintf("%d findings, GitHub shows at most %d annotations per step; see the full report", n, cap)
+}
+
+// noticeCommand renders one ::notice workflow command. The message is
+// escaped as data, so a newline in it cannot end the command and start
+// another.
+func noticeCommand(title, msg string) string {
+	return fmt.Sprintf("::notice title=%s::%s", title, escapeData(msg))
+}
+
 // escapeData escapes the message of a workflow command the way the Actions
 // toolkit does, so a newline in it cannot end the command and start another.
 func escapeData(s string) string {
@@ -97,7 +151,7 @@ func (r *Report) excludedAnnotations() string {
 			msg += fmt.Sprintf(": %s", g.key.reason)
 		}
 		msg += " for: " + strings.Join(sources, ", ")
-		fmt.Fprintf(&b, "::notice title=Excluded IAM permission::%s\n", escapeData(msg))
+		fmt.Fprintf(&b, "%s\n", noticeCommand("Excluded IAM permission", msg))
 	}
 	return b.String()
 }
