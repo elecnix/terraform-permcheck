@@ -442,7 +442,12 @@ config file, and PermCheck checks them against the same policy as the plan:
   checks one policy per run, so a need with a principal applies only when
   `--principal` names it. A need without a principal applies on every run.
   An unknown `--principal` value is an error.
-- **`reason`** (optional) is a note for reviewers.
+- **`reason`** (optional) is a note for reviewers. PermCheck shows it with
+  every finding the need produces: in the `text` and `github-annotations`
+  formats it follows the need in parentheses, and in `json` it is the
+  `reason` key of the finding. It is the reason the need wanted the action,
+  not the reason an exclusion suppressed the gap: an exclusion's own reason
+  is labelled "Excluded (per config)" in the report.
 
 With the config above, check the deploy role and the task role in two runs:
 
@@ -453,16 +458,18 @@ terraform-permcheck validate --plan-file plan.json --cloud aws \
   --policy-from-plan-output task_policy_json --principal task
 ```
 
-A missing need is reported like any other gap, with the need as its source:
+A missing need is reported like any other gap, with the need as its source
+and its reason in parentheses:
 
 ```
-::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:us-east-1:123456789012:repository/my-app
+::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:us-east-1:123456789012:repository/my-app (CI verifies images before deploy)
 ```
 
 In `--format json`, the finding carries `need` and `need_resource` in place of
-`resource_type`, `resource_name` and `change`. A missing need fails the run
-unless `--exit-zero` is set. An exclusion can suppress it: its `permission`
-matches the action, and its `resource` matches `needs.<sid>`.
+`resource_type`, `resource_name` and `change`, plus the need's `reason`. A
+missing need fails the run unless `--exit-zero` is set. An exclusion can
+suppress it: its `permission` matches the action, and its `resource` matches
+`needs.<sid>`.
 
 PermCheck checks the needs against the one policy it is given. It does not
 collect the other policies in the plan or evaluate resource-based policies.

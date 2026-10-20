@@ -296,7 +296,8 @@ func (r *Report) allClear() string {
 }
 
 // source names what needs the action: the terraform resource change, or the
-// declared need and the resource it is on.
+// declared need and the resource it is on. The reason of the need follows in
+// parentheses, so a reader sees why the action was wanted.
 func source(m iam.MissingAction) string {
 	if m.Need == "" {
 		return fmt.Sprintf("%s (%s)", m.Address(), m.Change)
@@ -304,6 +305,9 @@ func source(m iam.MissingAction) string {
 	s := fmt.Sprintf("needs %q", m.Need)
 	if m.NeedResource != "" {
 		s += " on " + m.NeedResource
+	}
+	if m.Reason != "" {
+		s += " (" + m.Reason + ")"
 	}
 	return s
 }

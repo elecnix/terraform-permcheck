@@ -975,6 +975,7 @@ func TestValidate_NeedsReportMissing(t *testing.T) {
 		NeedResource:  "arn:aws:ecr:us-east-1:111111111111:repository/app",
 		MissingAction: "ecr:DescribeImages",
 		Class:         "[required]",
+		Reason:        "CI verifies images",
 	}
 	if len(result.Missing) != 1 || result.Missing[0] != want {
 		t.Errorf("missing = %+v, want [%+v]", result.Missing, want)
@@ -984,6 +985,9 @@ func TestValidate_NeedsReportMissing(t *testing.T) {
 	if !strings.Contains(out, `::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:`) {
 		t.Errorf("annotation does not name the need:\n%s", out)
 	}
+	if !strings.Contains(out, "(CI verifies images)") {
+		t.Errorf("annotation does not carry the reason:\n%s", out)
+	}
 	if !strings.Contains(out, "2 declared needs") {
 		t.Errorf("summary does not count the needs:\n%s", out)
 	}
@@ -991,6 +995,9 @@ func TestValidate_NeedsReportMissing(t *testing.T) {
 	stderr := captureStderr(t, func() { runErr = run(needsArgs(t, "--principal", "deploy")) })
 	if !strings.Contains(stderr, `→ needs "EcrImageVerification" on arn:aws:ecr:`) {
 		t.Errorf("text report does not name the need:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "(CI verifies images)") {
+		t.Errorf("text report does not carry the reason:\n%s", stderr)
 	}
 }
 

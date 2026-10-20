@@ -2,7 +2,7 @@
 --- stderr ---
 Missing IAM permissions (3):
   ecr:DescribeImages [required]
-    → needs "EcrImageVerification" on arn:aws:ecr:us-east-1:111122223333:repository/a
+    → needs "EcrImageVerification" on arn:aws:ecr:us-east-1:111122223333:repository/a (CI verifies images before deploy)
   s3:PutBucketTagging [required]
     → aws_s3_bucket.a[0] (create) [s3.tf:3]
   logs:CreateLogGroup [required]

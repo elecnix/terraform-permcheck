@@ -578,6 +578,86 @@ func TestFormat_NeedSource(t *testing.T) {
 	}
 }
 
+// TestFormat_NeedReason verifies that the reason of a declared need reaches
+// every format, and that a finding without a reason is unchanged.
+func TestFormat_NeedReason(t *testing.T) {
+	withReason := []iam.MissingAction{{Action: "ecr:DescribeImages", Service: "ecr", Class: iam.ClassManagement, Need: "EcrImageVerification", NeedResource: repoA, Reason: "CI verifies images before deploy"}}
+	withoutReason := []iam.MissingAction{{Action: "ecr:DescribeImages", Service: "ecr", Class: iam.ClassManagement, Need: "EcrImageVerification", NeedResource: repoA}}
+
+	if got := formatMissing(withReason, nil); !strings.Contains(got, "CI verifies images before deploy") {
+		t.Errorf("FormatMissing does not carry the reason:\n%s", got)
+	}
+	if got := formatGitHubAnnotations(withReason, nil); !strings.Contains(got, "CI verifies images before deploy") {
+		t.Errorf("FormatGitHubAnnotations does not carry the reason:\n%s", got)
+	}
+	got := formatJSON(withReason, nil, 0, "resource changes", nil)
+	if !strings.Contains(got, `"reason": "CI verifies images before deploy"`) {
+		t.Errorf("FormatJSON does not carry the reason:\n%s", got)
+	}
+
+	// A finding without a reason is unchanged: no reason in any format.
+	if got := formatMissing(withoutReason, nil); strings.Contains(got, "reason") {
+		t.Errorf("FormatMissing adds a reason to a finding without one:\n%s", got)
+	}
+	if got := formatGitHubAnnotations(withoutReason, nil); strings.Contains(got, "reason") {
+		t.Errorf("FormatGitHubAnnotations adds a reason to a finding without one:\n%s", got)
+	}
+	got = formatJSON(withoutReason, nil, 0, "resource changes", nil)
+	if strings.Contains(got, `"reason"`) {
+		t.Errorf("FormatJSON adds a reason to a finding without one:\n%s", got)
+	}
+}
+
+// TestFormatJSON_ReasonKey checks the json contract: the reason key appears
+// for a need finding and is absent for a resource-change finding.
+func TestFormatJSON_ReasonKey(t *testing.T) {
+	out := formatJSON([]iam.MissingAction{
+		{Action: "ecr:DescribeImages", Class: iam.ClassManagement, Need: "EcrImageVerification", Reason: "CI verifies images"},
+		{ResourceType: "aws_s3_bucket", ResourceName: "b", Change: "create", Action: "s3:CreateBucket", Class: iam.ClassManagement},
+	}, nil, 1, "resource changes", nil)
+	var res struct {
+		Missing []map[string]interface{} `json:"missing"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Missing) != 2 {
+		t.Fatalf("got %d findings, want 2", len(res.Missing))
+	}
+	if got := res.Missing[0]["reason"]; got != "CI verifies images" {
+		t.Errorf("reason = %v, want \"CI verifies images\"", got)
+	}
+	if _, ok := res.Missing[1]["reason"]; ok {
+		t.Errorf("a resource-change finding must omit the reason, got %v", res.Missing[1])
+	}
+}
+
+// TestFormat_NeedReasonDiffersFromExclusionReason keeps the two reasons
+// apart: the need says why the action was wanted, the exclusion says why the
+// gap was suppressed.
+func TestFormat_NeedReasonDiffersFromExclusionReason(t *testing.T) {
+	missing := iam.MissingAction{Action: "ecr:DescribeImages", Class: iam.ClassManagement, Need: "EcrImageVerification", Reason: "CI verifies images before deploy"}
+	excluded := []iam.ExcludedAction{{MissingAction: missing, Reason: "checked by hand"}}
+
+	got := formatExcluded(excluded)
+	if !strings.Contains(got, "Excluded (per config)") {
+		t.Errorf("the exclusion is not labelled:\n%s", got)
+	}
+	if !strings.Contains(got, "reason: checked by hand") {
+		t.Errorf("the exclusion does not carry its own reason:\n%s", got)
+	}
+	if !strings.Contains(got, `→ needs "EcrImageVerification" (CI verifies images before deploy)`) {
+		t.Errorf("the need does not carry its own reason:\n%s", got)
+	}
+	if strings.Contains(got, "reason: CI verifies images before deploy") {
+		t.Errorf("the need's reason must not read as the exclusion's reason:\n%s", got)
+	}
+
+	if got := formatExcludedAnnotations(excluded); !strings.Contains(got, "excluded (per config): checked by hand") {
+		t.Errorf("the exclusion does not carry its own reason:\n%s", got)
+	}
+}
+
 // A workflow command ends at a newline, and its properties end at a comma.
 // The renderer escapes them as the Actions toolkit does, so a file name or a
 // reason cannot split the command or start another one.
