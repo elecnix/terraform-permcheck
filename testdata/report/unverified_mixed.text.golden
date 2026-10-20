@@ -6,7 +6,7 @@ Missing IAM permissions (2):
   kms:CreateGrant [conditional: kms_key_arn]
     → aws_backup_vault.v (delete) [modules/backup/main.tf:40]
 
-Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+Unverified IAM permissions (1), granted only where the tool cannot check the grant:
   sqs:CreateQueue [required] [unverified: resource scope]
     → aws_sqs_queue.q (create)
     → aws_sqs_queue.r["k"] (create) [sqs.tf:7]

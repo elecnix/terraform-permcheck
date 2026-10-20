@@ -37,6 +37,7 @@ func goldenCases() []goldenCase {
 	conditional2 := iam.MissingAction{ResourceType: "aws_sns_topic", ResourceName: "t[1]", Change: "create", Action: "kms:CreateGrant", Class: iam.ClassManagement, ConditionAttribute: "kms_key_arn"}
 	unverified := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: "q", Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true}
 	unverified2 := iam.MissingAction{ResourceType: "aws_sqs_queue", ResourceName: `r["k"]`, Change: "create", Action: "sqs:CreateQueue", Class: iam.ClassManagement, ResourceScopeUnverified: true}
+	conditionUnverified := iam.MissingAction{ResourceType: "aws_lambda_event_source_mapping", ResourceName: "events", Change: "create", Action: "lambda:CreateEventSourceMapping", Class: iam.ClassManagement, ConditionUnverified: true}
 	needOn := iam.MissingAction{Need: "EcrImageVerification", NeedResource: "arn:aws:ecr:us-east-1:111122223333:repository/a", Action: "ecr:DescribeImages", Class: iam.ClassManagement, Reason: "CI verifies images before deploy"}
 	needAny := iam.MissingAction{Need: "Logs", Action: "logs:CreateLogGroup", Class: iam.ClassManagement}
 	needUnverified := iam.MissingAction{Need: "Logs", Action: "logs:PutLogEvents", Class: iam.ClassManagement, ResourceScopeUnverified: true}
@@ -119,6 +120,16 @@ func goldenCases() []goldenCase {
 			name: "unverified_only",
 			res: check.Result{
 				Missing: []iam.MissingAction{unverified, unverified2},
+				Checked: 2, Label: planLabel,
+			},
+			locations: locations,
+		},
+		{
+			// A grant the tool cannot check because of a condition, and
+			// one it cannot check because of a resource scope.
+			name: "unverified_condition",
+			res: check.Result{
+				Missing: []iam.MissingAction{conditionUnverified, unverified},
 				Checked: 2, Label: planLabel,
 			},
 			locations: locations,

@@ -392,7 +392,7 @@ func TestS3EncryptionConfiguration_PolicyCoversResource(t *testing.T) {
 			continue
 		}
 		for _, action := range changeActions {
-			if !doc.Covers(action.Action) {
+			if !doc.Covers(action.Action, nil) {
 				t.Errorf("%s: policy does not cover %s", change, action.Action)
 			}
 		}

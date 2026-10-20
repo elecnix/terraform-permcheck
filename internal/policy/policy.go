@@ -111,7 +111,14 @@ func Parse(raw []byte) (*Document, error) {
 // and has no Condition. An action that takes no resource is matched against
 // "*" by AWS, which an arn: pattern does not match. The tool cannot tell such
 // actions apart, so it may report one as missing behind an arn:* Deny.
-func (d *Document) Covers(action string) bool {
+//
+// conds holds the condition key values the plan supplies. A condition that
+// provably cannot match one of them means the grant does not apply.
+func (d *Document) Covers(action string, conds Conditions) bool {
+	return d.covers(action, conds)
+}
+
+func (d *Document) covers(action string, conds Conditions) bool {
 	allowed := false
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
@@ -123,7 +130,9 @@ func (d *Document) Covers(action string) bool {
 				return false
 			}
 		case "Allow":
-			allowed = true
+			if s.conditionHolds(conds) {
+				allowed = true
+			}
 		}
 	}
 	return allowed

@@ -1,0 +1,25 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 2,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_lambda_event_source_mapping",
+      "resource_name": "events",
+      "change": "create",
+      "missing_action": "lambda:CreateEventSourceMapping",
+      "class": "[required]",
+      "unverified": "condition"
+    },
+    {
+      "resource_type": "aws_sqs_queue",
+      "resource_name": "q",
+      "change": "create",
+      "missing_action": "sqs:CreateQueue",
+      "class": "[required]",
+      "unverified": "resource_scope"
+    }
+  ]
+}
+--- stderr ---

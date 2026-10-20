@@ -23,6 +23,9 @@ type targeted struct {
 	// patterns per resource. Nil means the plan does not show them, and the
 	// action alone decides coverage.
 	targets [][]string
+	// conditions holds the condition key values the plan supplies, so a
+	// grant that is scoped to a key can be checked against them.
+	conditions policy.Conditions
 	// knownTargetsOnly drops a missing verdict when targets is nil. The
 	// resource may act on no target at all, so only a grant checked against
 	// a known target, or a grant scoped elsewhere under --strict-resources,
@@ -30,11 +33,12 @@ type targeted struct {
 	knownTargetsOnly bool
 }
 
-// withTargets pairs each requirement with the same targets.
-func withTargets(reqs []Requirement, targets [][]string) []targeted {
+// withTargets pairs each requirement with the same targets, and with the
+// condition key values the plan supplies for the requirement's action.
+func withTargets(reqs []Requirement, targets [][]string, conditions func(string) policy.Conditions) []targeted {
 	out := make([]targeted, len(reqs))
 	for i, r := range reqs {
-		out[i] = targeted{Requirement: r, targets: targets}
+		out[i] = targeted{Requirement: r, targets: targets, conditions: conditions(r.Action)}
 	}
 	return out
 }
@@ -79,12 +83,12 @@ func instanceProfileDetachRequirements(rc *plan.ResourceChange, set *changeSet) 
 
 // verdict returns the policy's verdict on a requirement: whether the policy
 // grants its action on each of its targets.
-func (t targeted) verdict(doc *policy.Document, strict bool) policy.Verdict {
-	v := doc.WorstVerdict(t.Action, t.targets, strict)
-	if v == policy.Missing && t.knownTargetsOnly && len(t.targets) == 0 {
-		return policy.Covered
+func (t targeted) verdict(doc *policy.Document, strict bool) policy.Result {
+	res := doc.WorstVerdict(t.Action, t.targets, t.conditions, strict)
+	if res.Verdict == policy.Missing && t.knownTargetsOnly && len(t.targets) == 0 {
+		return policy.Result{Verdict: policy.Covered}
 	}
-	return v
+	return res
 }
 
 // actionPaths is an action with every path that reaches it.
@@ -120,17 +124,18 @@ func (a actionPaths) gates() []Gate {
 }
 
 // verdict returns the worst verdict over the paths that run for rc.
-func (a actionPaths) verdict(rc *plan.ResourceChange, doc *policy.Document, strict bool) policy.Verdict {
-	worst := policy.Covered
+func (a actionPaths) verdict(rc *plan.ResourceChange, doc *policy.Document, strict bool) policy.Result {
+	worst := policy.Result{Verdict: policy.Covered}
 	for _, p := range a.paths {
 		if !p.holds(rc) {
 			continue
 		}
-		switch p.verdict(doc, strict) {
+		res := p.verdict(doc, strict)
+		switch res.Verdict {
 		case policy.Missing:
-			return policy.Missing
+			return res
 		case policy.Unverified:
-			worst = policy.Unverified
+			worst = res
 		}
 	}
 	return worst

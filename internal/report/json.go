@@ -1,6 +1,10 @@
 package report
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/elecnix/terraform-permcheck/internal/iam"
+)
 
 // JSONResult is the structured JSON output produced by --format json.
 type JSONResult struct {
@@ -75,8 +79,11 @@ type JSONMissing struct {
 	Reason string `json:"reason,omitempty"`
 	File   string `json:"file,omitempty"`
 	Line   int    `json:"line,omitempty"`
-	// Unverified is "resource_scope" when the policy grants the action only
-	// on some resources and the target ARN is unknown (--strict-resources).
+	// Unverified names why the tool could not check the grant:
+	// "resource_scope" when the policy grants the action only on some
+	// resources and the target ARN is unknown, "condition" when a
+	// condition on the grant names a key the plan does not supply or an
+	// operator the tool does not model (--strict-resources).
 	Unverified string `json:"unverified,omitempty"`
 }
 
@@ -136,8 +143,8 @@ func (r *Report) json() string {
 				ConditionAttribute: f.ConditionAttribute,
 				Reason:             f.Reason,
 			}
-			if f.ResourceScopeUnverified {
-				item.Unverified = "resource_scope"
+			if reason := f.unverifiedReason(); reason != iam.ReasonNone {
+				item.Unverified = reason.Value()
 			}
 			if f.loc != nil {
 				item.File = f.loc.Path

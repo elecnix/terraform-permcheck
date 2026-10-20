@@ -1,0 +1,6 @@
+--- stdout ---
+::warning title=Unverified IAM permission::lambda:CreateEventSourceMapping [unverified: condition] needed by: aws_lambda_event_source_mapping.events (create)
+::warning title=Unverified IAM permission::sqs:CreateQueue [unverified: resource scope] needed by: aws_sqs_queue.q (create)
+
+2 resource changes checked, 0 distinct missing permissions found, 2 unverified (condition, resource scope).
+--- stderr ---

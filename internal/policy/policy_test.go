@@ -39,21 +39,21 @@ func TestPolicyCovers(t *testing.T) {
 	}
 
 	// Exact match
-	if !doc.Covers("backup:CreateBackupVault") {
+	if !doc.Covers("backup:CreateBackupVault", nil) {
 		t.Error("expected policy to cover backup:CreateBackupVault (exact match)")
 	}
 
-	if !doc.Covers("kms:CreateGrant") {
+	if !doc.Covers("kms:CreateGrant", nil) {
 		t.Error("expected policy to cover kms:CreateGrant (single action string)")
 	}
 
 	// Wildcard match via iam:*
-	if !doc.Covers("iam:CreateRole") {
+	if !doc.Covers("iam:CreateRole", nil) {
 		t.Error("expected policy to cover iam:CreateRole via iam:* wildcard")
 	}
 
 	// Not covered
-	if doc.Covers("s3:PutObject") {
+	if doc.Covers("s3:PutObject", nil) {
 		t.Error("policy should NOT cover s3:PutObject (not declared)")
 	}
 }
@@ -70,16 +70,16 @@ func TestPolicyCoversPartial(t *testing.T) {
 	}
 
 	// backup:* wildcard should cover any backup action
-	if !doc.Covers("backup:CreateBackupVault") {
+	if !doc.Covers("backup:CreateBackupVault", nil) {
 		t.Error("expected backup:* to cover backup:CreateBackupVault")
 	}
 
-	if !doc.Covers("backup:DeleteBackupVault") {
+	if !doc.Covers("backup:DeleteBackupVault", nil) {
 		t.Error("expected backup:* to cover backup:DeleteBackupVault")
 	}
 
 	// Should not cover non-backup actions
-	if doc.Covers("kms:CreateGrant") {
+	if doc.Covers("kms:CreateGrant", nil) {
 		t.Error("partial policy should NOT cover kms:CreateGrant")
 	}
 }

@@ -46,7 +46,7 @@ type findingKey struct {
 	action     string
 	class      iam.Class
 	condition  string
-	unverified bool
+	unverified iam.UnverifiedReason
 }
 
 // excludedKey groups excluded actions by permission and reason.
@@ -142,10 +142,10 @@ func New(res check.Result, locations Locations, showExcluded bool) *Report {
 	}
 	r.excludedUnresolved = len(excludedTypes)
 	r.groups = groupBy(r.findings, func(f finding) findingKey {
-		return findingKey{action: f.Action, class: f.Class, condition: f.ConditionAttribute, unverified: f.ResourceScopeUnverified}
+		return findingKey{action: f.Action, class: f.Class, condition: f.ConditionAttribute, unverified: f.unverifiedReason()}
 	})
 	for _, g := range r.groups {
-		if g.key.unverified {
+		if g.key.unverified != iam.ReasonNone {
 			r.unverified = append(r.unverified, g)
 		} else {
 			r.missing = append(r.missing, g)
@@ -257,7 +257,7 @@ func (r *Report) summary() string {
 	}
 	line := fmt.Sprintf("%s checked, %d distinct missing %s found", r.checkedCount(), len(r.missing), permissions)
 	if len(r.unverified) > 0 {
-		line += fmt.Sprintf(", %d unverified (resource scope)", len(r.unverified))
+		line += fmt.Sprintf(", %d unverified (%s)", len(r.unverified), r.unverifiedReasons())
 	}
 	if n := len(r.unresolved); n > 0 {
 		line += ", " + resourceTypes(n) + " unresolved"
@@ -269,6 +269,23 @@ func (r *Report) summary() string {
 		line += ", " + resourceTypes(n) + " unresolved (excluded)"
 	}
 	return line + "."
+}
+
+// unverifiedReasons names the reasons the unverified findings carry, in the
+// order they first appear, so the summary line says why the tool could not
+// check them: "condition", "resource scope" or "condition, resource scope".
+func (r *Report) unverifiedReasons() string {
+	var reasons []string
+	seen := map[string]bool{}
+	for _, g := range r.unverified {
+		name := g.key.unverified.String()
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		reasons = append(reasons, name)
+	}
+	return strings.Join(reasons, ", ")
 }
 
 // resourceTypes counts resource types in words: "1 resource type", "2
@@ -334,6 +351,25 @@ func classTag(c iam.Class) string {
 	}
 }
 
-// unverifiedTag marks a finding whose coverage depends on a resource scope the
-// tool cannot check (--strict-resources).
-const unverifiedTag = "[unverified: resource scope]"
+// unverifiedReason returns why the tool could not check the finding's grant,
+// or iam.ReasonNone when it could.
+func (f finding) unverifiedReason() iam.UnverifiedReason {
+	switch {
+	case f.ConditionUnverified:
+		return iam.ReasonCondition
+	case f.ResourceScopeUnverified:
+		return iam.ReasonResourceScope
+	default:
+		return iam.ReasonNone
+	}
+}
+
+// unverifiedTag marks a finding whose coverage depends on a grant the tool
+// cannot check: a resource scope it cannot derive, or a condition it cannot
+// evaluate (--strict-resources).
+func unverifiedTag(reason iam.UnverifiedReason) string {
+	if reason == iam.ReasonNone {
+		return ""
+	}
+	return "[unverified: " + reason.String() + "]"
+}

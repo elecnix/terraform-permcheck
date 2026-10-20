@@ -1,0 +1,129 @@
+{
+  "$comment": "The condition keys each action accepts, from the AWS Service Authorization Reference (https://servicereference.us-east-1.amazonaws.com/, fetched 2026-10-20). It lists the ActionConditionKeys of every action, so a condition key the tool uses can be checked against the action it is listed under.",
+  "services": {
+    "lambda": {
+      "AddPermission": [
+        "lambda:FunctionUrlAuthType",
+        "lambda:Principal"
+      ],
+      "CreateCapacityProvider": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys",
+        "lambda:SecurityGroupIds",
+        "lambda:SubnetIds"
+      ],
+      "CreateCodeSigningConfig": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys"
+      ],
+      "CreateEventSourceMapping": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys",
+        "lambda:FunctionArn"
+      ],
+      "CreateFunction": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys",
+        "lambda:CodeSigningConfigArn",
+        "lambda:Layer",
+        "lambda:SecurityGroupIds",
+        "lambda:SubnetIds",
+        "lambda:VpcIds"
+      ],
+      "CreateFunctionUrlConfig": [
+        "lambda:FunctionArn",
+        "lambda:FunctionUrlAuthType"
+      ],
+      "CreateMicrovmImage": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys"
+      ],
+      "CreateNetworkConnector": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys",
+        "lambda:SecurityGroupIds",
+        "lambda:SubnetIds"
+      ],
+      "CreateWebFunction": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys",
+        "lambda:Request/WebFunctionAuthType"
+      ],
+      "CreateWebFunctionEndpoint": [
+        "lambda:Request/WebFunctionAuthType"
+      ],
+      "DeleteEventSourceMapping": [
+        "lambda:FunctionArn"
+      ],
+      "DeleteFunctionUrlConfig": [
+        "lambda:FunctionArn",
+        "lambda:FunctionUrlAuthType"
+      ],
+      "DeleteResourcePolicy": [
+        "lambda:Principal"
+      ],
+      "DeleteWebFunctionEndpoint": [
+        "lambda:Resource/WebFunctionAuthType"
+      ],
+      "GetEventSourceMapping": [
+        "lambda:FunctionArn"
+      ],
+      "GetFunctionUrlConfig": [
+        "lambda:FunctionArn",
+        "lambda:FunctionUrlAuthType"
+      ],
+      "GetWebFunctionEndpoint": [
+        "lambda:Resource/WebFunctionAuthType"
+      ],
+      "InvokeFunction": [
+        "lambda:EventSourceToken",
+        "lambda:InvokedViaFunctionUrl"
+      ],
+      "InvokeFunctionUrl": [
+        "lambda:EventSourceToken",
+        "lambda:FunctionArn",
+        "lambda:FunctionUrlAuthType"
+      ],
+      "InvokeWebFunctionEndpoint": [
+        "lambda:Resource/WebFunctionAuthType"
+      ],
+      "ListFunctionUrlConfigs": [
+        "lambda:FunctionUrlAuthType"
+      ],
+      "PutFunctionCodeSigningConfig": [
+        "lambda:CodeSigningConfigArn"
+      ],
+      "PutResourcePolicy": [
+        "lambda:Principal"
+      ],
+      "RemovePermission": [
+        "lambda:FunctionUrlAuthType",
+        "lambda:Principal"
+      ],
+      "TagResource": [
+        "aws:RequestTag/${TagKey}",
+        "aws:TagKeys"
+      ],
+      "UntagResource": [
+        "aws:TagKeys"
+      ],
+      "UpdateEventSourceMapping": [
+        "lambda:FunctionArn"
+      ],
+      "UpdateFunctionConfiguration": [
+        "lambda:Layer",
+        "lambda:SecurityGroupIds",
+        "lambda:SubnetIds",
+        "lambda:VpcIds"
+      ],
+      "UpdateFunctionUrlConfig": [
+        "lambda:FunctionArn",
+        "lambda:FunctionUrlAuthType"
+      ],
+      "UpdateWebFunctionEndpoint": [
+        "lambda:Request/WebFunctionAuthType",
+        "lambda:Resource/WebFunctionAuthType"
+      ]
+    }
+  }
+}

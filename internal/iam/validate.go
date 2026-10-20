@@ -41,6 +41,23 @@ func (c Class) String() string {
 	}
 }
 
+// UnverifiedReason names why the tool could not check a grant. It is the
+// policy package's reason, re-exported so the report layer names it without
+// importing the policy package.
+type UnverifiedReason = policy.UnverifiedReason
+
+// The reasons a grant can be unverifiable.
+const (
+	// ReasonNone is no reason: the tool could check the grant.
+	ReasonNone = policy.ReasonNone
+	// ReasonResourceScope means the target ARN is unknown and the policy
+	// grants the action only on some resources.
+	ReasonResourceScope = policy.ReasonResourceScope
+	// ReasonCondition means a condition on the grant names a key the plan
+	// does not supply, or an operator the tool does not model.
+	ReasonCondition = policy.ReasonCondition
+)
+
 // MissingAction is a single required permission found to be absent from the policy.
 type MissingAction struct {
 	// ModuleAddress is the module of the resource, e.g. "module.prod". It
@@ -56,6 +73,12 @@ type MissingAction struct {
 	// resources while the target ARN is unknown (--strict-resources). The
 	// grant may or may not apply, so the finding is unverified, not missing.
 	ResourceScopeUnverified bool
+	// ConditionUnverified marks an action the policy grants only through a
+	// condition the tool cannot evaluate (--strict-resources): the
+	// condition names a key the plan does not supply, or an operator the
+	// tool does not model. The grant may or may not apply, so the finding
+	// is unverified, not missing.
+	ConditionUnverified bool
 	// ConditionAttribute is the attribute gating this action, e.g.
 	// "kms_key_arn": set in the planned resource (d.GetOk) or changed between
 	// prior and planned state (d.HasChange). Empty for an unconditional action.
@@ -152,7 +175,7 @@ func Validate(changes []*plan.ResourceChange, doc *policy.Document, resolver Res
 		} else {
 			reqs = operationRequirements(schema, rc.Change)
 		}
-		paths := append(withTargets(reqs, resourceTargets(rc, set)), impliedRequirements(rc, set)...)
+		paths := append(withTargets(reqs, resourceTargets(rc, set), resourceConditions(rc)), impliedRequirements(rc, set)...)
 		missing = append(missing, checkChange(rc, paths, doc, isDedicated(schema), inPlan, filter)...)
 	}
 
@@ -198,9 +221,10 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		}
 
 		// Action coverage, resource-scoped when the target ARN is derivable
-		// from the plan.
+		// from the plan, and condition-scoped when the plan shows the
+		// value of a condition key the policy uses.
 		verdict := paths.verdict(rc, doc, filter.StrictResources)
-		if verdict == policy.Covered {
+		if verdict.Verdict == policy.Covered {
 			continue
 		}
 
@@ -224,14 +248,21 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 }
 
 // newFinding returns the finding that the policy does not grant action, of
-// class class. A verdict of Unverified marks it unverified.
-func newFinding(action string, class Class, verdict policy.Verdict) MissingAction {
-	return MissingAction{
-		Action:                  action,
-		Service:                 actionService(action),
-		Class:                   class,
-		ResourceScopeUnverified: verdict == policy.Unverified,
+// class class. A verdict of Unverified marks it unverified, with the reason
+// the tool could not check the grant.
+func newFinding(action string, class Class, res policy.Result) MissingAction {
+	m := MissingAction{
+		Action:  action,
+		Service: actionService(action),
+		Class:   class,
 	}
+	switch res.Reason {
+	case policy.ReasonCondition:
+		m.ConditionUnverified = true
+	case policy.ReasonResourceScope:
+		m.ResourceScopeUnverified = true
+	}
+	return m
 }
 
 // on returns m as a finding on resource change rc.

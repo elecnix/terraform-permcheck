@@ -134,6 +134,25 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			name: "deny on every ARN", plan: "deny_key_plan.json", policy: "deny_every_arn_policy.json",
 			present: []string{"aws_kms_key.k kms:ScheduleKeyDeletion"},
 		},
+		{
+			// A grant whose condition names another function does not
+			// reach the mapping the plan creates, so the action is
+			// missing.
+			name: "condition excludes the planned function", plan: "condition_plan.json", policy: "condition_policy.json",
+			present: []string{"aws_lambda_event_source_mapping.events lambda:CreateEventSourceMapping"},
+		},
+		{
+			// The control: with no statement at all, the action is
+			// missing too. The condition is what hides the gap.
+			name: "condition with no grant at all", plan: "condition_plan.json", policy: "condition_absent_policy.json",
+			present: []string{"aws_lambda_event_source_mapping.events lambda:CreateEventSourceMapping"},
+		},
+		{
+			// A condition that covers the planned function leaves the
+			// action covered.
+			name: "condition covers the planned function", plan: "condition_plan.json", policy: "condition_matching_policy.json",
+			absent: []string{"aws_lambda_event_source_mapping.events lambda:CreateEventSourceMapping"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { runVerdictCase(t, c) })
