@@ -191,23 +191,30 @@ func (d *Document) CoversTarget(action string, targets []string) bool {
 // coversTarget reports whether the policy grants action for a resource
 // matching any of the target patterns, and whether the grant that reaches it
 // carries a condition the tool cannot evaluate.
+//
+// A target reached by a grant whose condition holds is covered and checked.
+// A target reached only by a grant whose condition the tool cannot evaluate
+// is covered too, but not checked.
 func (d *Document) coversTarget(action string, targets []string, conds Conditions) (covered, conditionUnknown bool) {
+	verified := false
+	unknown := false
 	for _, t := range targets {
 		c, u := d.coversOneTarget(action, t, targets, conds)
-		if c {
-			return true, u
-		}
+		verified = verified || c
+		unknown = unknown || u
 	}
-	return false, false
+	// A target reached by a checked grant settles the resource, so the
+	// unknown one does not make it unverified.
+	return verified || unknown, unknown && !verified
 }
 
 // coversOneTarget reports whether the policy grants action for a target, and
-// whether the grant carries a condition the tool cannot evaluate.
+// whether the grant that reaches it carries a condition the tool cannot
+// evaluate.
 //
 // A grant whose condition holds settles the target: the tool checked it, so
 // the target is covered and not unverified.
-func (d *Document) coversOneTarget(action, target string, forms []string, conds Conditions) (covered, conditionUnknown bool) {
-	allowed := false
+func (d *Document) coversOneTarget(action, target string, forms []string, conds Conditions) (verified, conditionUnknown bool) {
 	unknown := false
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
@@ -226,7 +233,11 @@ func (d *Document) coversOneTarget(action, target string, forms []string, conds 
 			case condFails:
 				// The grant provably does not apply.
 			case condHolds:
-				allowed = true
+				// The grant reaches the target and the tool checked
+				// it, so the target is covered and not unverified. A
+				// later Deny may still override it, so the loop goes
+				// on.
+				verified = true
 			default:
 				// The condition is one the tool cannot evaluate, so
 				// the grant may or may not apply.
@@ -234,10 +245,7 @@ func (d *Document) coversOneTarget(action, target string, forms []string, conds 
 			}
 		}
 	}
-	if allowed {
-		return true, false
-	}
-	return unknown, unknown
+	return verified, unknown
 }
 
 // targetsLike returns the targets with as many ARN segments as pattern, or
