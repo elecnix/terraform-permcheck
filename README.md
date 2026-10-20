@@ -546,7 +546,7 @@ accepts `--policy-file` only.
 | `--policy-from-plan-output` | none | Read the policy from the plan output with this name. The output may be a JSON string or an object |
 | `--policy-from-state-output` | none | Read the policy from the state output with this name |
 | `--state-file` | stdin | Path to the state JSON from `terraform show -json`, or `-` for stdin. Used with `--policy-from-state-output`. The plan and the state can't both come from stdin |
-| `--terraform-root` | none | Terraform root directory. Adds file and line numbers to `github-annotations` and `json` findings. Without `--plan-file`, it turns on static HCL mode |
+| `--terraform-root` | none | Terraform root directory. Adds file and line numbers to `github-annotations` and `json` findings. The file paths are relative to the repository root, so GitHub places the annotation on the file it names. Without `--plan-file`, it turns on static HCL mode |
 | `--format` | `text` | Output format: `text`, `github-annotations`, or `json` |
 | `--exit-zero` | `false` | Exit 0 even when gaps are found (warn, don't fail) |
 | `--only-required` | `false` | Report only unconditional `[required]` permissions, and drop `[conditional: ...]` ones |
@@ -647,6 +647,10 @@ release tag:
     terraform-root: .   # adds file and line to each annotation
 ```
 
+The `terraform-root` input can point at a subdirectory of the repository, such
+as `infra/envs/prod`. The annotation file paths are relative to the
+repository root, so GitHub still places them on the file they name.
+
 For a release tag, the action downloads that release's archive for the
 runner and checks its SHA-256 against the release's `checksums.txt`. For any
 other ref, such as a commit SHA or a branch, it builds the tool from the
@@ -708,9 +712,13 @@ in the PR diff. `--exit-zero` ensures the step itself succeeds so the check
 passes green while surfacing warnings.
 
 With `--terraform-root`, an annotation also carries the file and line of the
-resource block. In plan mode, only resources of the root module get one: the
-parser does not resolve module calls, so it cannot tell which block a module
-resource comes from.
+resource block. The file path is relative to the repository root, so GitHub
+places the annotation inline in the diff, even when the terraform root is a
+subdirectory such as `infra/envs/prod`. The tool takes the repository root
+from the `GITHUB_WORKSPACE` environment variable the runner sets, and falls
+back to the working directory outside CI. In plan mode, only resources of the
+root module get one: the parser does not resolve module calls, so it cannot
+tell which block a module resource comes from.
 
 GitHub keeps at most 10 annotations of one type per step and drops the rest
 without a sign, so a long list of findings looks complete when it is not.

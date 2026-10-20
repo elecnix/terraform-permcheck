@@ -252,6 +252,11 @@ func validateCmd(args []string) error {
 	// by address, and the parser knows the address of root-module blocks
 	// only, so plan mode maps those. Static mode checks every block it
 	// parsed, so it maps every block.
+	//
+	// The paths are anchored to the directory a consumer resolves them
+	// against, which is the repository root rather than the terraform root:
+	// the terraform root is often a subdirectory of the repository, and a
+	// path relative to it alone names a file the repository does not have.
 	var locations report.Locations
 	if *terraformRoot != "" {
 		mapResources := hcl.MapRootResources
@@ -259,7 +264,7 @@ func validateCmd(args []string) error {
 			mapResources = hcl.MapResources
 		}
 		var locErr error
-		locations, locErr = mapResources(*terraformRoot)
+		locations, locErr = mapResources(*terraformRoot, annotationAnchor())
 		if locErr != nil {
 			// Non-fatal: continue without file locations.
 			fmt.Fprintf(os.Stderr, "terraform-permcheck: building file map: %v\n", locErr)
@@ -299,6 +304,31 @@ func validateCmd(args []string) error {
 	}
 
 	return reportResult(res, outFormat, *exitZero, *showExcluded, locations)
+}
+
+// githubWorkspaceEnv is the environment variable the Actions runner sets to
+// the repository root. The runner resolves a workflow command's file=
+// against that directory, so it is the directory the annotation paths must
+// be relative to.
+const githubWorkspaceEnv = "GITHUB_WORKSPACE"
+
+// annotationAnchor returns the directory the annotation paths are anchored
+// to. In CI it is GITHUB_WORKSPACE, the repository root, because the runner
+// resolves a workflow command's file= against it. A local run has no such
+// variable, so the working directory stands in for the repository root.
+//
+// The working directory is a fallback, not the anchor: a CI step's working
+// directory is configurable and need not be the repository root, so
+// anchoring to it there would reproduce the bug this replaces.
+func annotationAnchor() string {
+	if ws := os.Getenv(githubWorkspaceEnv); ws != "" {
+		return ws
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return wd
 }
 
 // processStdin describes os.Stdin to the input rules without reading it.

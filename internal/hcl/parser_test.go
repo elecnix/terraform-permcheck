@@ -205,7 +205,7 @@ data "aws_iam_role" "admin" {
 		t.Fatalf("write data.tf: %v", err)
 	}
 
-	locations, err := MapResources(dir)
+	locations, err := MapResources(dir, dir)
 	if err != nil {
 		t.Fatalf("MapResources failed: %v", err)
 	}

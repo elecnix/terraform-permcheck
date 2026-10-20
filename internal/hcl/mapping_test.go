@@ -61,7 +61,7 @@ resource "aws_iam_role" "hidden" {
 
 	reads := countingReadFile(t)
 
-	locations, err := MapResources(dir)
+	locations, err := MapResources(dir, dir)
 	if err != nil {
 		t.Fatalf("MapResources failed: %v", err)
 	}
@@ -131,7 +131,7 @@ resource "aws_s3_bucket" "unique" {
 		want[key] = Location{Path: rel, Line: b.Line}
 	}
 
-	locations, err := MapResources(dir)
+	locations, err := MapResources(dir, dir)
 	if err != nil {
 		t.Fatalf("MapResources failed: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestResourceLocations_Projection(t *testing.T) {
 		{Mode: "resource", Type: "aws_s3_bucket", Name: "nested", Filename: "/root/modules/x/x.tf", Line: 1},
 	}
 
-	locations := resourceLocations(absDir, blocks)
+	locations := resourceLocations(absDir, absDir, blocks)
 
 	want := map[string]Location{
 		"aws_s3_bucket.dup":    {Path: "a.tf", Line: 3},
@@ -192,7 +192,7 @@ func TestResourceLocations_Projection(t *testing.T) {
 	}
 
 	// Relative filenames are anchored at the walk root.
-	rel := resourceLocations(absDir, []ResourceBlock{
+	rel := resourceLocations(absDir, absDir, []ResourceBlock{
 		{Mode: "resource", Type: "aws_s3_bucket", Name: "rel", Filename: filepath.Join("a.tf"), Line: 2},
 	})
 	if got := rel["aws_s3_bucket.rel"]; got.Path != "a.tf" || got.Line != 2 {
@@ -200,7 +200,7 @@ func TestResourceLocations_Projection(t *testing.T) {
 	}
 
 	// Empty input yields an empty, non-nil map (callers range over it).
-	if empty := resourceLocations(absDir, nil); empty == nil || len(empty) != 0 {
+	if empty := resourceLocations(absDir, absDir, nil); empty == nil || len(empty) != 0 {
 		t.Errorf("resourceLocations(nil) = %+v, want empty non-nil map", empty)
 	}
 }
@@ -209,8 +209,190 @@ func TestResourceLocations_Projection(t *testing.T) {
 // terraform root does not exist.
 func TestMapResources_MissingRoot(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	if _, err := MapResources(missing); err == nil {
+	if _, err := MapResources(missing, missing); err == nil {
 		t.Fatal("expected an error for a missing terraform root")
+	}
+}
+
+// TestMapResources_AnchorAboveRoot pins the case from issue #137: the
+// terraform root is a subdirectory of the repository, so a path relative to
+// the terraform root alone names a file the repository does not have. The
+// anchor is the repository root, and the path is relative to it.
+func TestMapResources_AnchorAboveRoot(t *testing.T) {
+	repo := t.TempDir()
+	root := filepath.Join(repo, "infra", "envs", "prod")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTF(t, root, "main.tf", `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+
+	locations, err := MapResources(root, repo)
+	if err != nil {
+		t.Fatalf("MapResources failed: %v", err)
+	}
+	loc, ok := locations["aws_sqs_queue.q"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.q: %+v", locations)
+	}
+	want := filepath.Join("infra", "envs", "prod", "main.tf")
+	if loc.Path != want {
+		t.Errorf("path = %q, want %q (relative to the anchor, not the terraform root)", loc.Path, want)
+	}
+}
+
+// TestMapResources_AnchorEqualToRoot pins the unchanged case: the anchor is
+// the terraform root, so the paths are relative to it, as they were before
+// the anchor existed.
+func TestMapResources_AnchorEqualToRoot(t *testing.T) {
+	root := t.TempDir()
+	writeTF(t, root, "main.tf", `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+
+	locations, err := MapResources(root, root)
+	if err != nil {
+		t.Fatalf("MapResources failed: %v", err)
+	}
+	loc, ok := locations["aws_sqs_queue.q"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.q: %+v", locations)
+	}
+	if loc.Path != "main.tf" {
+		t.Errorf("path = %q, want main.tf", loc.Path)
+	}
+}
+
+// TestMapResources_EmptyAnchorUsesRoot pins that a caller with no anchor
+// gets the paths relative to the terraform root, as before.
+func TestMapResources_EmptyAnchorUsesRoot(t *testing.T) {
+	root := t.TempDir()
+	writeTF(t, root, "main.tf", `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+
+	locations, err := MapResources(root, "")
+	if err != nil {
+		t.Fatalf("MapResources failed: %v", err)
+	}
+	loc, ok := locations["aws_sqs_queue.q"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.q: %+v", locations)
+	}
+	if loc.Path != "main.tf" {
+		t.Errorf("path = %q, want main.tf (no anchor means the terraform root is the anchor)", loc.Path)
+	}
+}
+
+// TestMapResources_UnrelatableAnchorFallsBack pins the fallback: when the
+// anchor cannot contain the file, the path relative to the terraform root
+// is used, because a ".." path cannot be resolved by a consumer that
+// resolves the path against the anchor.
+func TestMapResources_UnrelatableAnchorFallsBack(t *testing.T) {
+	root := t.TempDir()
+	writeTF(t, root, "main.tf", `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+
+	// An anchor on a different tree: the root is not under it, so the
+	// relative path would climb out of the anchor.
+	elsewhere := filepath.Join(t.TempDir(), "other-repo")
+
+	locations, err := MapResources(root, elsewhere)
+	if err != nil {
+		t.Fatalf("MapResources failed: %v", err)
+	}
+	loc, ok := locations["aws_sqs_queue.q"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.q: %+v", locations)
+	}
+	if loc.Path != "main.tf" {
+		t.Errorf("path = %q, want main.tf (the root-relative fallback)", loc.Path)
+	}
+	if strings.HasPrefix(loc.Path, "..") {
+		t.Errorf("path = %q, want no .. segments: a consumer cannot resolve them", loc.Path)
+	}
+}
+
+// TestMapRootResources_AnchorAboveRoot pins that the root-module filter
+// keeps using the terraform root, whatever the anchor is, and that the paths
+// use the anchor. A block in a subdirectory of the terraform root belongs to
+// a module, so it is excluded no matter where the paths are anchored.
+func TestMapRootResources_AnchorAboveRoot(t *testing.T) {
+	repo := t.TempDir()
+	root := filepath.Join(repo, "infra", "envs", "prod")
+	if err := os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTF(t, root, "main.tf", `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+	writeTF(t, root, filepath.Join("modules", "app", "main.tf"), `
+resource "aws_sqs_queue" "q" {
+  name = "q"
+}
+`)
+
+	locations, err := MapRootResources(root, repo)
+	if err != nil {
+		t.Fatalf("MapRootResources failed: %v", err)
+	}
+	loc, ok := locations["aws_sqs_queue.q"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.q: %+v", locations)
+	}
+	// The module block must not win: the filter asks which blocks belong to
+	// the root module, and that question is about the terraform root, not
+	// about the anchor. The root block wins, so its path is the one the
+	// anchor gives.
+	want := filepath.Join("infra", "envs", "prod", "main.tf")
+	if loc.Path != want {
+		t.Errorf("path = %q, want %q (the root block, anchored to the repository root)", loc.Path, want)
+	}
+	if strings.Contains(loc.Path, "modules") {
+		t.Errorf("path = %q, want the root block: a module block must be excluded", loc.Path)
+	}
+}
+
+// TestRootResourceLocations_AnchorDoesNotChangeTheFilter pins the subtle
+// case: the module filter is about the terraform root, so an anchor that
+// makes the module block look like a root block must not let it in.
+func TestRootResourceLocations_AnchorDoesNotChangeTheFilter(t *testing.T) {
+	absDir := "/repo/infra/envs/prod"
+	blocks := []ResourceBlock{
+		// A module block, in a subdirectory of the terraform root.
+		{Mode: "resource", Type: "aws_sqs_queue", Name: "q", Filename: "/repo/infra/envs/prod/modules/app/main.tf", Line: 1},
+		// A root block.
+		{Mode: "resource", Type: "aws_sqs_queue", Name: "root", Filename: "/repo/infra/envs/prod/main.tf", Line: 5},
+	}
+
+	// The anchor is the repository root, so the module block's path relative
+	// to it is "infra/envs/prod/modules/app/main.tf" and the root block's is
+	// "infra/envs/prod/main.tf". The filter must still keep only the root
+	// block, so the module block is excluded.
+	got := rootResourceLocations(absDir, "/repo", blocks)
+
+	if _, ok := got["aws_sqs_queue.q"]; ok {
+		t.Errorf("the module block must not be in the map: %+v", got)
+	}
+	loc, ok := got["aws_sqs_queue.root"]
+	if !ok {
+		t.Fatalf("no location for aws_sqs_queue.root: %+v", got)
+	}
+	want := filepath.Join("infra", "envs", "prod", "main.tf")
+	if loc.Path != want {
+		t.Errorf("path = %q, want %q", loc.Path, want)
 	}
 }
 
@@ -317,7 +499,7 @@ func TestRelPath_FallbackReturnsGivenFilename(t *testing.T) {
 func TestMapResources_MissingRootErrorContract(t *testing.T) {
 	const missing = "/definitely/not/here"
 
-	_, err := MapResources(missing)
+	_, err := MapResources(missing, missing)
 	if err == nil {
 		t.Fatal("MapResources: expected an error for a missing root")
 	}
@@ -418,7 +600,7 @@ func TestRootResourceLocations(t *testing.T) {
 		{Mode: "resource", Type: "aws_s3_bucket", Name: "a", Filename: "/root/main.tf", Line: 5},
 		{Mode: "resource", Type: "aws_s3_bucket", Name: "nested", Filename: "/root/modules/x/x.tf", Line: 9},
 	}
-	got := rootResourceLocations(absDir, blocks)
+	got := rootResourceLocations(absDir, absDir, blocks)
 	want := map[string]Location{"aws_s3_bucket.a": {Path: "main.tf", Line: 5}}
 	if len(got) != len(want) || got["aws_s3_bucket.a"] != want["aws_s3_bucket.a"] {
 		t.Errorf("rootResourceLocations = %+v, want %+v", got, want)

@@ -1231,3 +1231,136 @@ func TestValidate_ModuleFindingHasNoRootLocation(t *testing.T) {
 		t.Errorf("a module finding must have no file location, got:\n%s", out)
 	}
 }
+
+// annotationFixture lays out a repository whose terraform root is a
+// subdirectory, the shape issue #137 describes, and returns the repository
+// root, the terraform root, the plan and the path to a policy that grants
+// nothing.
+func annotationFixture(t *testing.T) (repo, root, plan, policy string) {
+	t.Helper()
+	repo = t.TempDir()
+	root = filepath.Join(repo, "infra", "envs", "prod")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	queue := "resource \"aws_sqs_queue\" \"q\" {\n  name = \"q\"\n}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte(queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan = filepath.Join(repo, "plan.json")
+	planJSON := `{"resource_changes":[
+		{"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["create"]}}]}`
+	if err := os.WriteFile(plan, []byte(planJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policy = filepath.Join(repo, "policy.json")
+	if err := os.WriteFile(policy, []byte(`{"Version":"2012-10-17","Statement":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return repo, root, plan, policy
+}
+
+// TestValidate_AnnotationPathRelativeToWorkspace pins the fix for issue
+// #137: the annotation's file= is relative to the repository root, so GitHub
+// resolves it against the file it names. The runner sets GITHUB_WORKSPACE to
+// the repository root and resolves file= against it, so the path must be
+// relative to that directory, not to the terraform root.
+func TestValidate_AnnotationPathRelativeToWorkspace(t *testing.T) {
+	repo, root, plan, policy := annotationFixture(t)
+	t.Setenv("GITHUB_WORKSPACE", repo)
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", plan,
+			"--terraform-root", root,
+			"--policy-file", policy,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	want := "file=" + filepath.Join("infra", "envs", "prod", "main.tf")
+	if !strings.Contains(out, want) {
+		t.Errorf("annotation does not carry %q:\n%s", want, out)
+	}
+}
+
+// TestValidate_AnnotationPathWithoutWorkspace pins the fallback: with no
+// GITHUB_WORKSPACE, the working directory stands in for the repository root,
+// so a terraform root below it still gets a repository-relative path.
+func TestValidate_AnnotationPathWithoutWorkspace(t *testing.T) {
+	repo, root, plan, policy := annotationFixture(t)
+	t.Setenv("GITHUB_WORKSPACE", "")
+
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(repo); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(orig) }()
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", plan,
+			"--terraform-root", root,
+			"--policy-file", policy,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	want := "file=" + filepath.Join("infra", "envs", "prod", "main.tf")
+	if !strings.Contains(out, want) {
+		t.Errorf("annotation does not carry %q:\n%s", want, out)
+	}
+}
+
+// TestValidate_AnnotationPathUnchangedWhenRootIsWorkspace pins that a
+// terraform root that is the repository root keeps today's behaviour: the
+// path stays relative to the terraform root, which is the same directory.
+func TestValidate_AnnotationPathUnchangedWhenRootIsWorkspace(t *testing.T) {
+	repo := t.TempDir()
+	queue := "resource \"aws_sqs_queue\" \"q\" {\n  name = \"q\"\n}\n"
+	if err := os.WriteFile(filepath.Join(repo, "main.tf"), []byte(queue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := filepath.Join(repo, "plan.json")
+	planJSON := `{"resource_changes":[
+		{"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","change":{"actions":["create"]}}]}`
+	if err := os.WriteFile(plan, []byte(planJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policy := filepath.Join(repo, "policy.json")
+	if err := os.WriteFile(policy, []byte(`{"Version":"2012-10-17","Statement":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GITHUB_WORKSPACE", repo)
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", plan,
+			"--terraform-root", repo,
+			"--policy-file", policy,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "file=main.tf,") {
+		t.Errorf("annotation does not carry file=main.tf:\n%s", out)
+	}
+}
