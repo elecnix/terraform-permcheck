@@ -102,6 +102,21 @@ func (s *changeSet) named(module, typ, name string) []*plan.ResourceChange {
 	return s.byName[changeKey{module, typ, name}]
 }
 
+// allByType returns every change of the given resource type, across all
+// modules and resource names. A nil set returns nil.
+func (s *changeSet) allByType(typ string) []*plan.ResourceChange {
+	if s == nil {
+		return nil
+	}
+	var out []*plan.ResourceChange
+	for k, changes := range s.byName {
+		if k.typ == typ {
+			out = append(out, changes...)
+		}
+	}
+	return out
+}
+
 // parseResourceReference splits a reference to a managed resource of type
 // resType into the resource name and its instance key, such as "[0]" or
 // `["a"]`. The key is empty when the reference has none. It reports false

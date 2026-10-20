@@ -14702,7 +14702,6 @@
         ],
         "delete": [
           {"action":"iam:DeleteRole"},
-          {"action":"iam:RemoveRoleFromInstanceProfile"},
           {"action":"iam:ListInstanceProfilesForRole"},
           {"action":"iam:ListAttachedRolePolicies"},
           {"action":"iam:DetachRolePolicy"},

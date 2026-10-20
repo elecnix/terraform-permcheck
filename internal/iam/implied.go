@@ -43,7 +43,38 @@ func withTargets(reqs []Requirement, targets [][]string) []targeted {
 // rc beyond the calls the provider makes.
 func impliedRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	reqs := append(passRoleRequirements(rc, set), crossServiceRequirements(rc, set)...)
-	return append(reqs, serviceLinkedRoleRequirements(rc)...)
+	reqs = append(reqs, serviceLinkedRoleRequirements(rc)...)
+	return append(reqs, instanceProfileDetachRequirements(rc, set)...)
+}
+
+// instanceProfileDetachRequirements returns iam:RemoveRoleFromInstanceProfile
+// when an aws_iam_role delete has co-deleted aws_iam_instance_profile resources
+// in the plan that name this role. The provider calls RemoveRoleFromInstanceProfile
+// only when ListInstanceProfilesForRole returns non-empty; a co-deleted profile
+// is direct evidence that the role has at least one instance profile to detach.
+//
+// This handles the common Terraform case where both the role and its profiles
+// are managed together. Roles that have profiles outside the plan still need
+// the permission, but there is no plan-level signal to detect them from.
+func instanceProfileDetachRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
+	if rc.Type != "aws_iam_role" || rc.Change != "delete" {
+		return nil
+	}
+	roleName := rc.AttributeValues["name"]
+	for _, profile := range set.allByType("aws_iam_instance_profile") {
+		if profile.Change != "delete" {
+			continue
+		}
+		if roleName != "" && profile.AttributeValues["role"] == roleName {
+			return []targeted{{Requirement: Requirement{Action: "iam:RemoveRoleFromInstanceProfile"}}}
+		}
+		for _, ref := range referencedChanges(profile, set, "role", "aws_iam_role") {
+			if ref == rc {
+				return []targeted{{Requirement: Requirement{Action: "iam:RemoveRoleFromInstanceProfile"}}}
+			}
+		}
+	}
+	return nil
 }
 
 // verdict returns the policy's verdict on a requirement: whether the policy
