@@ -33,6 +33,18 @@ jobs:
             exit 1
           fi
 
+      # The tap update needs a token for the tap repository, which is a
+      # separate secret from GITHUB_TOKEN. Without it, GoReleaser skips the
+      # cask upload and the release carries no cask. Say so: a silent skip
+      # reads like a successful publish.
+      - name: Warn when the Homebrew tap secret is missing
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_GITHUB_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the Homebrew cask was not published and 'brew install terraform-permcheck' will not find it. The release binaries are unaffected. Add the repository secret HOMEBREW_TAP_GITHUB_TOKEN to publish the cask."
+          fi
+
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser

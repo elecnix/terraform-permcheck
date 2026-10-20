@@ -58,6 +58,18 @@ inputs:
     description: Set to `true` to list the permissions the config file excludes.
     required: false
     default: "false"
+  principal:
+    description: Also check the config file's `needs` declared for this principal. A need without a principal is checked on every run, and an unknown principal is an error. Leave empty to check only the needs that apply to every run.
+    required: false
+    default: ""
+  strict-resources:
+    description: Set to `true` to report an action as unverified when its target ARN is unknown and the policy grants it only on some resources. Leave empty to let the config file's `strict_resources` decide. Set to `false` to override that config and turn the check off.
+    required: false
+    default: ""
+  allow-unresolved-types:
+    description: Set to `true` to report resource types no schema source knows but not fail the run on them. Leave empty to let the config file's `allow_unresolved_types` decide. Set to `false` to override that config and fail on them.
+    required: false
+    default: ""
   args:
     description: Extra flags passed to `terraform-permcheck validate`. The action splits the value on whitespace and does not apply shell quoting, so a value cannot contain a space.
     required: false
@@ -113,6 +125,9 @@ runs:
         INPUT_EXIT_ZERO: ${{ inputs.exit-zero }}
         INPUT_ONLY_REQUIRED: ${{ inputs.only-required }}
         INPUT_SHOW_EXCLUDED: ${{ inputs.show-excluded }}
+        INPUT_PRINCIPAL: ${{ inputs.principal }}
+        INPUT_STRICT_RESOURCES: ${{ inputs.strict-resources }}
+        INPUT_ALLOW_UNRESOLVED_TYPES: ${{ inputs.allow-unresolved-types }}
         INPUT_ARGS: ${{ inputs.args }}
         PERMCHECK_BIN: ${{ steps.install.outputs.path }}
         PERMCHECK_PROVIDER_CACHE_DIR: ${{ runner.temp }}/terraform-permcheck-provider-cache
@@ -129,6 +144,9 @@ runs:
         [ "$INPUT_EXIT_ZERO" = "true" ] && flags+=(--exit-zero)
         [ "$INPUT_ONLY_REQUIRED" = "true" ] && flags+=(--only-required)
         [ "$INPUT_SHOW_EXCLUDED" = "true" ] && flags+=(--show-excluded)
+        [ -n "$INPUT_PRINCIPAL" ] && flags+=(--principal "$INPUT_PRINCIPAL")
+        [ -n "$INPUT_STRICT_RESOURCES" ] && flags+=(--strict-resources="$INPUT_STRICT_RESOURCES")
+        [ -n "$INPUT_ALLOW_UNRESOLVED_TYPES" ] && flags+=(--allow-unresolved-types="$INPUT_ALLOW_UNRESOLVED_TYPES")
         if [ -n "$INPUT_ARGS" ]; then
           read -r -a extra <<< "$INPUT_ARGS"
           flags+=("${extra[@]}")

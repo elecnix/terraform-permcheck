@@ -1,0 +1,18 @@
+{
+  "needs": [
+    {
+      "sid": "EcrImageVerification",
+      "principal": "deploy",
+      "actions": ["ecr:DescribeImages"],
+      "resources": ["*"],
+      "reason": "CI verifies images before deploy"
+    },
+    {
+      "sid": "FetchSecrets",
+      "principal": "task",
+      "actions": ["secretsmanager:GetSecretValue"],
+      "resources": ["*"],
+      "reason": "the task role reads a secret at startup"
+    }
+  ]
+}
