@@ -125,6 +125,8 @@ func TestSource(t *testing.T) {
 		{iam.MissingAction{ResourceType: "aws_s3_bucket", ResourceName: "a[0]", Change: "create"}, "aws_s3_bucket.a[0] (create)"},
 		{iam.MissingAction{Need: "Push"}, `needs "Push"`},
 		{iam.MissingAction{Need: "Push", NeedResource: repoA}, `needs "Push" on ` + repoA},
+		{iam.MissingAction{Need: "Push", Reason: "CI pushes the image"}, `needs "Push" (CI pushes the image)`},
+		{iam.MissingAction{Need: "Push", NeedResource: repoA, Reason: "CI verifies images"}, `needs "Push" on ` + repoA + ` (CI verifies images)`},
 	}
 	for _, tt := range tests {
 		if got := source(tt.m); got != tt.want {

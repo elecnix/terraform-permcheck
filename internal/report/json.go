@@ -69,8 +69,12 @@ type JSONMissing struct {
 	MissingAction      string `json:"missing_action"`
 	Class              string `json:"class"`
 	ConditionAttribute string `json:"condition_attribute,omitempty"`
-	File               string `json:"file,omitempty"`
-	Line               int    `json:"line,omitempty"`
+	// Reason is the reason the declared need asked for the action, as the
+	// need's "reason" field says. It is absent for a finding from a
+	// terraform resource change, and for a need without a reason.
+	Reason string `json:"reason,omitempty"`
+	File   string `json:"file,omitempty"`
+	Line   int    `json:"line,omitempty"`
 	// Unverified is "resource_scope" when the policy grants the action only
 	// on some resources and the target ARN is unknown (--strict-resources).
 	Unverified string `json:"unverified,omitempty"`
@@ -130,6 +134,7 @@ func (r *Report) json() string {
 				MissingAction:      f.Action,
 				Class:              classTag(f.Class),
 				ConditionAttribute: f.ConditionAttribute,
+				Reason:             f.Reason,
 			}
 			if f.ResourceScopeUnverified {
 				item.Unverified = "resource_scope"

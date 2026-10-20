@@ -8,7 +8,8 @@
       "need": "EcrImageVerification",
       "need_resource": "arn:aws:ecr:us-east-1:111122223333:repository/a",
       "missing_action": "ecr:DescribeImages",
-      "class": "[required]"
+      "class": "[required]",
+      "reason": "CI verifies images before deploy"
     },
     {
       "resource_type": "aws_s3_bucket",

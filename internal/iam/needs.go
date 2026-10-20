@@ -109,6 +109,7 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 				m := newFinding(action, ClassManagement, verdict)
 				m.Need = n.Sid
 				m.NeedResource = resource
+				m.Reason = n.Reason
 				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {

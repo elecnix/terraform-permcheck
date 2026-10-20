@@ -67,6 +67,11 @@ type MissingAction struct {
 	// NeedResource is the resource of the need that the policy does not
 	// cover. Empty when the need lists no resources.
 	NeedResource string
+	// Reason is the reason the declared need asked for the action, as the
+	// need's "reason" field says. It is empty for a finding that comes from
+	// a terraform resource change, and then the resource fields name the
+	// source instead.
+	Reason string
 	// Unresolved marks a resource change whose type no schema source knows.
 	// The tool has no permission data for it, so Action is empty and the
 	// change was not checked.

@@ -99,6 +99,32 @@ func TestCheckNeeds_FindingShape(t *testing.T) {
 	}
 }
 
+// TestCheckNeeds_FindingCarriesReason checks that the reason of the need
+// reaches the finding, so the report can show why the action was needed.
+func TestCheckNeeds_FindingCarriesReason(t *testing.T) {
+	got := CheckNeeds([]Need{
+		{Sid: "Push", Actions: []string{"ecr:PutImage"}, Reason: "CI pushes the image before deploy"},
+	}, mustPolicy(t, `{"Statement":[]}`), false)
+	if len(got) != 1 {
+		t.Fatalf("got %d findings, want 1", len(got))
+	}
+	if got[0].Reason != "CI pushes the image before deploy" {
+		t.Errorf("reason = %q, want %q", got[0].Reason, "CI pushes the image before deploy")
+	}
+}
+
+// TestCheckNeeds_NoReasonLeavesTheFieldEmpty checks that a need without a
+// reason leaves the field empty, so the report stays unchanged for it.
+func TestCheckNeeds_NoReasonLeavesTheFieldEmpty(t *testing.T) {
+	got := CheckNeeds([]Need{{Sid: "Push", Actions: []string{"ecr:PutImage"}}}, mustPolicy(t, `{"Statement":[]}`), false)
+	if len(got) != 1 {
+		t.Fatalf("got %d findings, want 1", len(got))
+	}
+	if got[0].Reason != "" {
+		t.Errorf("reason = %q, want it empty", got[0].Reason)
+	}
+}
+
 func TestSelectNeeds(t *testing.T) {
 	needs := []Need{
 		{Sid: "Shared"},
