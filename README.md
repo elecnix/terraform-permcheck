@@ -270,15 +270,24 @@ A grant on `"*"` still covers the action. So does a grant checked against a
 derived ARN. The same rule applies to `iam:PassRole` when the role ARN is
 unknown, and to cross-service callbacks when `resource_arn` is unknown.
 
+A grant the tool cannot check because of its `Condition` is unverified for
+the same reason. PermCheck evaluates the condition keys the plan can supply
+(see [Policy evaluation](#policy-evaluation)); when a condition names a key
+the plan does not supply, or an operator PermCheck does not model, the grant
+may or may not apply, so `--strict-resources` reports it unverified with the
+tag `[unverified: condition]`.
+
 Unverified findings count as gaps: they fail the run unless you pass
 `--exit-zero`, and config exclusions apply to them. Each output format tags
 them:
 
 - `text` lists them under their own heading, `Unverified IAM permissions`,
-  with the tag `[unverified: resource scope]` on each action.
+  with the tag `[unverified: resource scope]` or `[unverified: condition]` on
+  each action, and the summary line names the reasons it found.
 - `github-annotations` writes a `::warning` titled `Unverified IAM permission`
   with the same tag.
-- `json` sets `"unverified": "resource_scope"` on each entry in `missing`.
+- `json` sets `"unverified": "resource_scope"` or `"unverified": "condition"`
+  on each entry in `missing`.
 
 Static HCL mode reads `.tf` files and has no ARNs at all. With
 `--strict-resources`, every action that the policy grants only on some
@@ -302,8 +311,9 @@ case, as in IAM. Resource ARNs match with case.
 A `Deny` that matches the action overrides any `Allow`, but only when it
 provably applies:
 
-- The `Deny` has no `Condition`. PermCheck can't evaluate condition keys, so
-  a conditional `Deny` might never apply. PermCheck doesn't report it.
+- The `Deny` has no `Condition`. A conditional `Deny` might never apply, so
+  PermCheck never reports one, even when the condition names a value the
+  plan shows.
 - The `Deny` covers the whole target. When PermCheck doesn't know the target
   ARN, only a `Resource` that matches every ARN counts, such as `"*"`,
   `"arn:*"` or `"arn:aws:*"`. When it knows the target, a `Resource`
@@ -317,7 +327,33 @@ provably applies:
   pattern doesn't match. PermCheck can't tell those actions apart, so it may
   report such an action as missing.
 
-An `Allow` with a `Condition` still counts as a grant. `NotAction` grants or
+An `Allow` with a `Condition` is a grant, but PermCheck checks the condition
+when the plan shows the value it names. The clearest case is
+`lambda:CreateEventSourceMapping`: IAM authorizes it on `Resource: "*"`, so
+a least-privilege policy scopes it with the `lambda:FunctionArn` condition
+key. The plan shows that value — it is the mapping's `function_name` — so
+PermCheck compares the two. An `ArnLike` or `StringEquals` that cannot match
+the planned function means the grant does not apply, and the action is
+reported missing.
+
+PermCheck models the `ArnEquals`, `ArnLike`, `StringEquals` and `StringLike`
+operators. `ArnEquals` and `ArnLike` compare the six colon-delimited
+components of an ARN one by one, and `StringEquals` compares the whole
+string, so those can show that a condition cannot match. `StringLike` allows
+a wildcard anywhere, and no test can show two wildcard patterns are
+disjoint, so it never proves a mismatch. Every other operator — `Bool`,
+`NumericEquals`, `DateEquals`, the `...IfExists` variants and the
+`ForAnyValue:` and `ForAllValues:` prefixes — is one PermCheck does not
+model.
+
+A condition PermCheck cannot evaluate is still a grant, so the default
+output does not change for policies that were not provably wrong. With
+`--strict-resources` it is unverified instead. The same goes for a condition
+on a key the plan does not supply, and for a value the plan does not show:
+terraform's `function_name` may hold a bare function name rather than an
+ARN, and a value computed at apply time is absent from the plan.
+
+`NotAction` grants or
 denies every action outside its list. A `NotResource` grant covers any target
 outside its list, and doesn't cover a target that a listed pattern contains.
 
@@ -555,7 +591,7 @@ accepts `--policy-file` only.
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 | `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
-| `--strict-resources` | `false` | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
+| `--strict-resources` | `false` | Report an action as unverified when the tool cannot check the grant: its target ARN is unknown and the policy grants it only on some resources, or a condition on the grant names a key the plan does not supply (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 | `--allow-unresolved-types` | `false` | Report resource types that no schema source knows, but don't fail the run on them (see [Unresolved resource types](#unresolved-resource-types)). The config key `allow_unresolved_types` sets the default |
 
 ### Output streams
