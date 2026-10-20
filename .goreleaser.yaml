@@ -45,7 +45,9 @@ homebrew_casks:
     description: Check a Terraform deploy role's IAM policy against the plan before apply
     license: MIT
     # The tap update runs only when the repository has the token secret.
-    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    # `not` reads the token as a boolean and inverts it, so the line says
+    # what it does: skip the upload when the secret is missing.
+    skip_upload: '{{ not (index .Env "HOMEBREW_TAP_GITHUB_TOKEN") }}'
     hooks:
       post:
         install: |

@@ -152,6 +152,69 @@ jobs:
           policy-file: testdata/policy_full.json
           format: text
 
+      # The `principal` input selects the config needs that apply to one
+      # principal. The config declares a need for `deploy` and one for
+      # `task`, so naming `deploy` checks the first and not the second.
+      - name: Run the action with a principal
+        id: principal
+        uses: ./
+        with:
+          plan-file: testdata/plan_strict.json
+          policy-file: testdata/policy_strict.json
+          config: testdata/principal_config.json
+          principal: deploy
+          format: json
+          fail-on-gaps: "false"
+
+      # The same run without the principal checks the needs that apply to
+      # every run, and there are none, so it passes.
+      - name: Run the action without a principal
+        id: no-principal
+        uses: ./
+        with:
+          plan-file: testdata/plan_strict.json
+          policy-file: testdata/policy_strict.json
+          config: testdata/principal_config.json
+          format: json
+
+      # `strict-resources` is a tri-state input: unset leaves the config
+      # file in charge, "false" overrides it. The config turns the check on,
+      # so the first run reports the unverified grants and the second, which
+      # sets the input to false, passes.
+      - name: Run the action with strict-resources unset
+        id: strict-config
+        uses: ./
+        with:
+          plan-file: testdata/plan_strict.json
+          policy-file: testdata/policy_strict.json
+          config: testdata/strict_resources_config.json
+          format: json
+          fail-on-gaps: "false"
+
+      - name: Run the action with strict-resources off
+        id: strict-off
+        uses: ./
+        with:
+          plan-file: testdata/plan_strict.json
+          policy-file: testdata/policy_strict.json
+          config: testdata/strict_resources_config.json
+          strict-resources: "false"
+          format: json
+
+      - name: Check the new input runs
+        env:
+          PRINCIPAL: ${{ steps.principal.outputs.exit-code }}
+          PRINCIPAL_REPORT: ${{ steps.principal.outputs.report-file }}
+          NO_PRINCIPAL: ${{ steps.no-principal.outputs.exit-code }}
+          STRICT_CONFIG: ${{ steps.strict-config.outputs.exit-code }}
+          STRICT_OFF: ${{ steps.strict-off.outputs.exit-code }}
+        run: |
+          test "$PRINCIPAL" = 1 || { echo "principal run exited $PRINCIPAL, want 1"; exit 1; }
+          jq -e '[.missing[].need] == ["EcrImageVerification"]' "$PRINCIPAL_REPORT" || { echo "principal run does not name the deploy need"; exit 1; }
+          test "$NO_PRINCIPAL" = 0 || { echo "no-principal run exited $NO_PRINCIPAL, want 0"; exit 1; }
+          test "$STRICT_CONFIG" = 1 || { echo "strict-resources unset run exited $STRICT_CONFIG, want 1"; exit 1; }
+          test "$STRICT_OFF" = 0 || { echo "strict-resources off run exited $STRICT_OFF, want 0"; exit 1; }
+
       - name: Check the exit codes and outputs
         env:
           COVERED: ${{ steps.covered.outputs.exit-code }}

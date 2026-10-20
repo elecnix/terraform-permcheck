@@ -667,6 +667,21 @@ CLI flags, as listed in [`action.yml`](action.yml). The `args` input passes
 extra flags. The action splits its value on whitespace without shell quoting,
 so a flag value in `args` can't contain a space.
 
+Three flags that `args` cannot carry comfortably have an input of their own,
+because their value may contain a space or the flag is a boolean the config
+file also sets:
+
+| Input | Default | What it does |
+|-------|---------|--------------|
+| `principal` | empty | Also check the config file's `needs` declared for this principal, as `--principal` does (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)). Empty checks only the needs that apply to every run |
+| `strict-resources` | empty | Report an action as unverified when its target ARN is unknown and the policy grants it only on some resources, as `--strict-resources` does. Empty leaves the config file's `strict_resources` in charge, and `"false"` overrides that config and turns the check off |
+| `allow-unresolved-types` | empty | Report resource types that no schema source knows but don't fail the run on them, as `--allow-unresolved-types` does. Empty leaves the config file's `allow_unresolved_types` in charge, and `"false"` overrides that config and fails on them |
+
+An explicit flag, `true` or `false`, overrides the config file. The two
+boolean inputs are therefore tri-state: leave them empty to let the config
+file decide, set them to `"true"` or `"false"` to override it. Setting them to
+`"false"` explicitly is not the same as leaving them empty.
+
 | Output | Content |
 |--------|---------|
 | `exit-code` | 0 when covered, 1 when permissions are missing, 2 on bad input |
