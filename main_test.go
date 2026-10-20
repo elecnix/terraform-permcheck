@@ -1259,9 +1259,51 @@ func TestValidate_AnnotationPathRelativeToWorkspace(t *testing.T) {
 }
 
 // TestValidate_AnnotationPathWithoutWorkspace pins the fallback: with no
-// GITHUB_WORKSPACE, the working directory stands in for the repository root,
-// so a terraform root below it still gets a repository-relative path.
+// GITHUB_WORKSPACE, the working directory is the anchor. When that
+// directory cannot contain the terraform root, the path falls back to the
+// terraform-root-relative one, which is today's behaviour.
 func TestValidate_AnnotationPathWithoutWorkspace(t *testing.T) {
+	_, root, plan, policy := annotationFixture(t)
+	t.Setenv("GITHUB_WORKSPACE", "")
+
+	// A working directory on another tree, so it cannot contain the
+	// terraform root.
+	elsewhere := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(orig) }()
+
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", plan,
+			"--terraform-root", root,
+			"--policy-file", policy,
+			"--cloud", "aws",
+			"--format", "github-annotations",
+			"--exit-zero",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "file=main.tf,") {
+		t.Errorf("annotation does not carry file=main.tf:\n%s", out)
+	}
+	if strings.Contains(out, "file=..") {
+		t.Errorf("annotation carries a path that leaves the anchor:\n%s", out)
+	}
+}
+
+// TestValidate_AnnotationPathFromWorkingDirectory pins the local run: with
+// no GITHUB_WORKSPACE, the working directory is the anchor, so a run from
+// the repository root gets the same repository-relative path a CI run gets.
+func TestValidate_AnnotationPathFromWorkingDirectory(t *testing.T) {
 	repo, root, plan, policy := annotationFixture(t)
 	t.Setenv("GITHUB_WORKSPACE", "")
 
