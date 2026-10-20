@@ -19,13 +19,16 @@ type Document struct {
 // Statement is a single IAM policy statement. A statement names its actions
 // with Action or NotAction, and its resources with Resource or NotResource.
 type Statement struct {
-	Sid         string                     `json:"Sid,omitempty"`
-	Effect      string                     `json:"Effect"`
-	Action      actionField                `json:"Action,omitempty"`
-	NotAction   actionField                `json:"NotAction,omitempty"`
-	Resource    resourceField              `json:"Resource,omitempty"`
-	NotResource resourceField              `json:"NotResource,omitempty"`
-	Condition   map[string]json.RawMessage `json:"Condition,omitempty"`
+	Sid         string        `json:"Sid,omitempty"`
+	Effect      string        `json:"Effect"`
+	Action      actionField   `json:"Action,omitempty"`
+	NotAction   actionField   `json:"NotAction,omitempty"`
+	Resource    resourceField `json:"Resource,omitempty"`
+	NotResource resourceField `json:"NotResource,omitempty"`
+	// Condition is the statement's condition block, decoded. A block the
+	// tool cannot read stays in the statement as an unreadable condition,
+	// so the statement is still conditional.
+	Condition conditionBlock `json:"Condition,omitempty"`
 }
 
 // statementList handles a Statement given as one object or as an array.
@@ -124,14 +127,6 @@ func (d *Document) Covers(action string) bool {
 		}
 	}
 	return allowed
-}
-
-// conditional reports whether the statement carries a Condition. The tool
-// cannot evaluate condition keys, so a conditional Deny never counts as a
-// definite deny, and a conditional Allow still counts as an allow: either way
-// only provable gaps are reported. An empty Condition block sets no condition.
-func (s Statement) conditional() bool {
-	return len(s.Condition) > 0
 }
 
 // matchesAction reports whether the statement names action, through Action or
