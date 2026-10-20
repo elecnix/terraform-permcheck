@@ -27,8 +27,8 @@ func (r *Report) annotations() string {
 			msg += fmt.Sprintf(" [conditional: %s]", g.key.condition)
 		}
 		title := "Missing IAM permission"
-		if g.key.unverified {
-			msg += " " + unverifiedTag
+		if tag := unverifiedTag(g.key.unverified); tag != "" {
+			msg += " " + tag
 			title = "Unverified IAM permission"
 		}
 		msg += " needed by: " + strings.Join(sources, ", ")

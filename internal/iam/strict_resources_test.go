@@ -26,6 +26,17 @@ func unverifiedOn(missing []MissingAction, action, resType string) bool {
 	return false
 }
 
+// conditionUnverifiedOn reports whether a finding names the condition as the
+// reason the tool could not check the grant.
+func conditionUnverifiedOn(missing []MissingAction, action, resType string) bool {
+	for _, m := range missing {
+		if m.Action == action && m.ResourceType == resType && m.ConditionUnverified {
+			return true
+		}
+	}
+	return false
+}
+
 func TestValidate_StrictScopedGrantWithoutRuleIsUnverified(t *testing.T) {
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"lambda:CreateFunction","Resource":"arn:aws:lambda:*:*:function:app-*"}]}`)
@@ -208,6 +219,61 @@ func TestCrossServiceMissing_StrictScopedCallback(t *testing.T) {
 		m := impliedMissing(known, policy, nil, strict)
 		if len(m) != 1 || m[0].ResourceScopeUnverified {
 			t.Errorf("strict=%v: a grant on another load balancer must be missing, got %+v", strict, m)
+		}
+	}
+}
+
+// TestValidate_StrictConditionScopedGrantIsUnverified checks the strict
+// half of the condition rule: a grant the tool cannot check because of a
+// condition is covered by default and unverified under --strict-resources.
+func TestValidate_StrictConditionScopedGrantIsUnverified(t *testing.T) {
+	// A condition on a key the plan never supplies.
+	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"lambda:CreateEventSourceMapping","Resource":"*",
+		 "Condition":{"StringEquals":{"aws:RequestedRegion":"us-east-1"}}}]}`)
+
+	missing, err := Validate(eventSourceMappingChange(mappedFunctionARN), policy, eventSourceMappingResolver, FilterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("without strict mode a condition the tool cannot check covers, got %+v", missing)
+	}
+
+	missing, err = Validate(eventSourceMappingChange(mappedFunctionARN), policy, eventSourceMappingResolver, strictFilter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(missing) != 1 {
+		t.Fatalf("strict mode must report the condition-scoped grant, got %+v", missing)
+	}
+	if !missing[0].ConditionUnverified {
+		t.Errorf("the grant is unverified on the condition, got %+v", missing[0])
+	}
+	if missing[0].ResourceScopeUnverified {
+		t.Errorf("the reason is the condition, not the resource scope, got %+v", missing[0])
+	}
+}
+
+// TestValidate_StrictProvableConditionGapStaysMissing checks that a
+// condition the tool can prove cannot match is a gap in both modes: it is
+// not an unverifiable grant.
+func TestValidate_StrictProvableConditionGapStaysMissing(t *testing.T) {
+	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"lambda:CreateEventSourceMapping","Resource":"*",
+		 "Condition":{"ArnLike":{"lambda:FunctionArn":"`+otherFunctionARN+`"}}}]}`)
+
+	for _, strict := range []bool{false, true} {
+		filter := FilterConfig{StrictResources: strict}
+		missing, err := Validate(eventSourceMappingChange(mappedFunctionARN), policy, eventSourceMappingResolver, filter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(missing) != 1 {
+			t.Fatalf("strict=%v: a condition that excludes the function is a gap, got %+v", strict, missing)
+		}
+		if missing[0].ConditionUnverified || missing[0].ResourceScopeUnverified {
+			t.Errorf("strict=%v: a provable gap is missing, not unverified, got %+v", strict, missing[0])
 		}
 	}
 }

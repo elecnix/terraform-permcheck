@@ -9,7 +9,7 @@ func TestCovers_DenyOnEveryARN(t *testing.T) {
 		doc := mustPolicy(t, `{"Statement":[
 			{"Effect":"Allow","Action":"kms:*","Resource":"*"},
 			{"Effect":"Deny","Action":"kms:ScheduleKeyDeletion","Resource":"`+resource+`"}]}`)
-		if doc.Covers("kms:ScheduleKeyDeletion") {
+		if doc.Covers("kms:ScheduleKeyDeletion", nil) {
 			t.Errorf("a Deny on %s must deny an unknown target", resource)
 		}
 	}
@@ -17,7 +17,7 @@ func TestCovers_DenyOnEveryARN(t *testing.T) {
 		doc := mustPolicy(t, `{"Statement":[
 			{"Effect":"Allow","Action":"kms:*","Resource":"*"},
 			{"Effect":"Deny","Action":"kms:ScheduleKeyDeletion","Resource":"`+resource+`"}]}`)
-		if !doc.Covers("kms:ScheduleKeyDeletion") {
+		if !doc.Covers("kms:ScheduleKeyDeletion", nil) {
 			t.Errorf("a Deny on %s cannot be shown to cover an unknown target", resource)
 		}
 	}

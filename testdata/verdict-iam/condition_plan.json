@@ -1,0 +1,1 @@
+{"resource_changes":[{"address":"aws_lambda_event_source_mapping.events","mode":"managed","type":"aws_lambda_event_source_mapping","name":"events","change":{"actions":["create"],"after":{"event_source_arn":"arn:aws:kinesis:us-east-1:111122223333:stream/example-events","function_name":"arn:aws:lambda:us-east-1:111122223333:function:example-new-consumer"}}}]}

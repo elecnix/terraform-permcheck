@@ -60,7 +60,7 @@ func TestGlobContains(t *testing.T) {
 
 func TestParsePolicy_StatementObject(t *testing.T) {
 	doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"sqs:*","Resource":"*"}}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("a single-object Statement must be read as one statement")
 	}
 }
@@ -79,7 +79,7 @@ func TestCovers_DenyOverridesAllow(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"*"}]}`)
-	if doc.Covers("sqs:SendMessage") {
+	if doc.Covers("sqs:SendMessage", nil) {
 		t.Error("Deny sqs:* on every resource must override Allow sqs:*")
 	}
 	if doc.CoversTarget("sqs:SendMessage", queueTargets) {
@@ -91,10 +91,10 @@ func TestCovers_DenyMatchesGlobCaseInsensitively(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"*","Resource":"*"},
 		{"Effect":"Deny","Action":"SQS:Send*","Resource":"*"}]}`)
-	if doc.Covers("sqs:SendMessage") {
+	if doc.Covers("sqs:SendMessage", nil) {
 		t.Error("Deny SQS:Send* must deny sqs:SendMessage")
 	}
-	if !doc.Covers("sqs:ReceiveMessage") {
+	if !doc.Covers("sqs:ReceiveMessage", nil) {
 		t.Error("Deny SQS:Send* must not deny sqs:ReceiveMessage")
 	}
 }
@@ -104,7 +104,7 @@ func TestCovers_DenyScopedToResourceIsNotDefiniteWithoutTarget(t *testing.T) {
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"`+queueARN+`"}]}`)
 	// The target is unknown, so the Deny might not apply to it.
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("a resource-scoped Deny must not deny when the target is unknown")
 	}
 }
@@ -146,7 +146,7 @@ func TestCovers_ConditionalDenyIsNotDefinite(t *testing.T) {
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"*",
 		 "Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("a Deny with a Condition must not count as a definite deny")
 	}
 	if !doc.CoversTarget("sqs:SendMessage", queueTargets) {
@@ -158,29 +158,35 @@ func TestCovers_EmptyConditionDenyIsDefinite(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"*","Condition":{}}]}`)
-	if doc.Covers("sqs:SendMessage") {
+	if doc.Covers("sqs:SendMessage", nil) {
 		t.Error("an empty Condition block places no condition on the Deny")
 	}
 }
 
 func TestCovers_ConditionalAllowCovers(t *testing.T) {
+	// aws:RequestedRegion is a global key the plan never supplies, so the
+	// tool cannot check the condition. The grant still covers: an
+	// unevaluable condition is not a gap.
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*",
 		 "Condition":{"StringEquals":{"aws:RequestedRegion":"us-east-1"}}}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("an Allow with a Condition still counts as covering")
+	}
+	if !doc.CoversTarget("sqs:SendMessage", queueTargets) {
+		t.Error("an Allow with a Condition still counts as covering a target")
 	}
 }
 
 func TestCovers_NotActionAllow(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[{"Effect":"Allow","NotAction":["iam:*","organizations:*"],"Resource":"*"}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("NotAction iam:* must allow sqs:SendMessage")
 	}
-	if doc.Covers("iam:CreateRole") {
+	if doc.Covers("iam:CreateRole", nil) {
 		t.Error("NotAction iam:* must not allow iam:CreateRole")
 	}
-	if doc.Covers("IAM:CreateRole") {
+	if doc.Covers("IAM:CreateRole", nil) {
 		t.Error("NotAction matching must be case-insensitive")
 	}
 }
@@ -189,10 +195,10 @@ func TestCovers_NotActionDeny(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"*","Resource":"*"},
 		{"Effect":"Deny","NotAction":"sqs:*","Resource":"*"}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("Deny NotAction sqs:* must leave sqs actions allowed")
 	}
-	if doc.Covers("s3:PutObject") {
+	if doc.Covers("s3:PutObject", nil) {
 		t.Error("Deny NotAction sqs:* must deny s3:PutObject")
 	}
 }
@@ -205,7 +211,7 @@ func TestCoversTarget_NotResourceAllow(t *testing.T) {
 	if doc.CoversTarget("sqs:SendMessage", []string{"arn:*:sqs:*:*:secret-queue"}) {
 		t.Error("NotResource must not allow a target inside the list")
 	}
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("with no known target, a NotResource Allow still covers the action")
 	}
 }
@@ -220,7 +226,7 @@ func TestCoversTarget_NotResourceDeny(t *testing.T) {
 	if !doc.CoversTarget("sqs:SendMessage", []string{"arn:*:sqs:*:*:app-queue"}) {
 		t.Error("Deny NotResource app-* must leave app-queue allowed")
 	}
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("with no known target, a NotResource Deny is not definite")
 	}
 }

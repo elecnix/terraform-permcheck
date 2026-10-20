@@ -105,14 +105,14 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 	var missing []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
-			add := func(resource string, verdict policy.Verdict) {
-				m := newFinding(action, ClassManagement, verdict)
+			add := func(resource string, res policy.Result) {
+				m := newFinding(action, ClassManagement, res)
 				m.Need = n.Sid
 				m.NeedResource = resource
 				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {
-				if v := doc.Coverage(action, nil, strict); v != policy.Covered {
+				if v := doc.Coverage(action, nil, nil, strict); v.Verdict != policy.Covered {
 					add("", v)
 				}
 				continue
@@ -122,12 +122,12 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 				// limited to some resources falls short of it: the strict
 				// verdict decides it.
 				if r == "*" {
-					if doc.Coverage(action, nil, true) != policy.Covered {
-						add(r, policy.Missing)
+					if doc.Coverage(action, nil, nil, true).Verdict != policy.Covered {
+						add(r, policy.Result{Verdict: policy.Missing})
 					}
 					continue
 				}
-				if v := doc.Coverage(action, []string{r}, strict); v != policy.Covered {
+				if v := doc.Coverage(action, []string{r}, nil, strict); v.Verdict != policy.Covered {
 					add(r, v)
 				}
 			}

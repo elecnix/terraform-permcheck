@@ -4,7 +4,7 @@ Missing IAM permissions (1):
   s3:PutBucketTagging [required]
     → aws_s3_bucket.a[0] (create) [s3.tf:3]
 
-Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+Unverified IAM permissions (1), granted only where the tool cannot check the grant:
   sqs:CreateQueue [required] [unverified: resource scope]
     → aws_sqs_queue.r["k"] (create) [sqs.tf:7]
 

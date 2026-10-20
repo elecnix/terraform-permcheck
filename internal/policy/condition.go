@@ -180,6 +180,24 @@ var conditionOperators = map[string]conditionOperator{
 	"StringLike":   {},
 }
 
+// conditionVerdict reports what the statement's condition concludes for the
+// context the plan supplies. A statement with no condition holds; one whose
+// condition provably cannot match fails; one the tool cannot evaluate is
+// unknown.
+func (s Statement) conditionVerdict(conds Conditions) conditionResult {
+	if !s.conditional() {
+		return condHolds
+	}
+	return matchCondition(s.Condition, conds)
+}
+
+// conditionHolds reports whether the statement's condition lets it apply for
+// the context the plan supplies. A condition that provably cannot match does
+// not hold, so the statement grants nothing.
+func (s Statement) conditionHolds(conds Conditions) bool {
+	return s.conditionVerdict(conds) != condFails
+}
+
 // matchCondition reports whether a condition block holds for the context the
 // plan supplies.
 //

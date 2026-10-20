@@ -28,6 +28,11 @@ type resourceRule struct {
 	// "ops.apigateway.amazonaws.com". AWS checks iam:CreateServiceLinkedRole
 	// on each, though the provider never calls it.
 	serviceLinkedRoles []string
+	// conditionKeys lists the condition keys the plan can supply for the
+	// resource, and the actions each one gates. A policy may grant an
+	// action only when such a key holds a value, and the tool can check
+	// that grant against the value the plan shows.
+	conditionKeys []conditionKeyRule
 }
 
 // resourceRules maps a terraform resource type to its rule. A type with no
@@ -54,6 +59,19 @@ var resourceRules = map[string]resourceRule{
 	"aws_ecs_task_definition":      {passesRole: []string{"execution_role_arn", "task_role_arn"}},
 	"aws_cloudwatch_event_target":  {passesRole: []string{"role_arn"}},
 	"aws_apigatewayv2_integration": {passesRole: []string{"credentials_arn"}},
+
+	// A Lambda event source mapping is authorized on Resource: "*", so a
+	// least-privilege policy scopes it with the lambda:FunctionArn
+	// condition key. The key holds the ARN of the function the mapping
+	// points at, which the plan shows in function_name.
+	"aws_lambda_event_source_mapping": {conditionKeys: []conditionKeyRule{{
+		actions: []string{
+			"lambda:CreateEventSourceMapping",
+			"lambda:UpdateEventSourceMapping",
+			"lambda:DeleteEventSourceMapping",
+		},
+		key: conditionKey{name: "lambda:FunctionArn", attribute: "function_name", arn: true},
+	}}},
 
 	// A regional custom domain makes API Gateway create its service-linked
 	// role.

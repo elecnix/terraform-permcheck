@@ -30,7 +30,7 @@ func TestSecretPattern_SuffixIsSixCharacters(t *testing.T) {
 	for _, c := range cases {
 		doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 			{"Effect":"Allow","Action":"secretsmanager:CreateSecret","Resource":"`+c.grant+`"}]}`)
-		if got := doc.WorstVerdict("secretsmanager:CreateSecret", targets, false) == policy.Covered; got != c.want {
+		if got := doc.WorstVerdict("secretsmanager:CreateSecret", targets, nil, false).Verdict == policy.Covered; got != c.want {
 			t.Errorf("grant %s covers secret app = %v, want %v", c.grant, got, c.want)
 		}
 	}

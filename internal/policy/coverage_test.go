@@ -28,7 +28,7 @@ func TestCoverage_Verdicts(t *testing.T) {
 	}
 	for _, c := range cases {
 		doc := mustPolicy(t, c.policy)
-		if got := doc.Coverage("sqs:SendMessage", c.targets, c.strict); got != c.want {
+		if got := doc.Coverage("sqs:SendMessage", c.targets, nil, c.strict).Verdict; got != c.want {
 			t.Errorf("%s: Coverage = %v, want %v", c.name, got, c.want)
 		}
 	}

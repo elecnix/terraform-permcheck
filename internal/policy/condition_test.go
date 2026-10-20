@@ -259,7 +259,7 @@ func TestDecodeCondition_UnreadableBlockIsStillConditional(t *testing.T) {
 	doc := mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"*","Condition":"nonsense"}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("a Deny with an unreadable Condition must not count as a definite deny")
 	}
 
@@ -267,7 +267,7 @@ func TestDecodeCondition_UnreadableBlockIsStillConditional(t *testing.T) {
 	doc = mustPolicy(t, `{"Statement":[
 		{"Effect":"Allow","Action":"sqs:*","Resource":"*"},
 		{"Effect":"Deny","Action":"sqs:*","Resource":"*","Condition":{"StringEquals":"nonsense"}}]}`)
-	if !doc.Covers("sqs:SendMessage") {
+	if !doc.Covers("sqs:SendMessage", nil) {
 		t.Error("a Deny with an unreadable Condition block must not count as a definite deny")
 	}
 }

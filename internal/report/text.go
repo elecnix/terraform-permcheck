@@ -19,7 +19,7 @@ func (r *Report) text() string {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		fmt.Fprintf(&b, "Unverified IAM permissions (%d), granted only on resources whose ARN the plan does not show:\n", len(r.unverified))
+		fmt.Fprintf(&b, "Unverified IAM permissions (%d), granted only where the tool cannot check the grant:\n", len(r.unverified))
 		writeGroups(&b, r.unverified)
 	}
 	if len(r.unresolved) > 0 {
@@ -49,8 +49,8 @@ func writeGroups(b *strings.Builder, groups []group[findingKey, finding]) {
 		} else if tag := classTag(g.key.class); tag != "" {
 			line += " " + tag
 		}
-		if g.key.unverified {
-			line += " " + unverifiedTag
+		if tag := unverifiedTag(g.key.unverified); tag != "" {
+			line += " " + tag
 		}
 		fmt.Fprintf(b, "  %s\n", line)
 		writeSources(b, g.items)

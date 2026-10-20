@@ -1,0 +1,9 @@
+--- stdout ---
+--- stderr ---
+Unverified IAM permissions (2), granted only where the tool cannot check the grant:
+  lambda:CreateEventSourceMapping [required] [unverified: condition]
+    → aws_lambda_event_source_mapping.events (create)
+  sqs:CreateQueue [required] [unverified: resource scope]
+    → aws_sqs_queue.q (create)
+
+2 resource changes checked, 0 distinct missing permissions found, 2 unverified (condition, resource scope).

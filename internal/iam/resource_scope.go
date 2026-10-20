@@ -2,6 +2,7 @@ package iam
 
 import (
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // Resource-scoped coverage.
@@ -25,6 +26,20 @@ func resourceTargets(rc *plan.ResourceChange, set *changeSet) [][]string {
 		return nil
 	}
 	return targets(rc, set)
+}
+
+// resourceConditions returns the condition key values a resource change
+// supplies for an action. A policy may grant an action only when such a key
+// holds a value, and the tool can check that grant against the value the
+// plan shows.
+//
+// It returns nil when the type's rule names no condition key for the action,
+// or when the plan shows none of their values.
+func resourceConditions(rc *plan.ResourceChange) func(string) policy.Conditions {
+	rule := resourceRules[rc.Type]
+	return func(action string) policy.Conditions {
+		return conditionValues(rc, rule, action)
+	}
 }
 
 // ownTarget returns a target rule for a resource that acts on itself: its one

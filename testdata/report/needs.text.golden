@@ -8,7 +8,7 @@ Missing IAM permissions (3):
   logs:CreateLogGroup [required]
     → needs "Logs"
 
-Unverified IAM permissions (1), granted only on resources whose ARN the plan does not show:
+Unverified IAM permissions (1), granted only where the tool cannot check the grant:
   logs:PutLogEvents [required] [unverified: resource scope]
     → needs "Logs"
 
