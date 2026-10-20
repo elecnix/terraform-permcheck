@@ -347,7 +347,54 @@ func (r resourceFile) schema() *iam.Schema {
 		addUnconditionalActions(schema, "create", r.tagActions.List)
 	}
 
+	applyCorrections(schema)
 	return schema
+}
+
+// schemaCorrection records an action that the parser includes unconditionally
+// but the provider reaches only under a runtime condition that plan-level data
+// cannot express as a static attribute gate.
+type schemaCorrection struct {
+	tfType string
+	op     string
+	action string
+}
+
+// schemaCorrections is the list of parser over-inclusions. Each entry removes
+// one action from one operation on one resource type. The implied-requirements
+// layer in internal/iam/implied.go re-adds any action that can be detected
+// from plan-level signals (for example, co-deleted resources that prove the
+// condition holds).
+var schemaCorrections = []schemaCorrection{
+	// The provider calls RemoveRoleFromInstanceProfile only when
+	// ListInstanceProfilesForRole returns a non-empty list. The aws_iam_role
+	// resource schema has no attribute that captures instance-profile
+	// membership, so the parser cannot express the condition as a gate.
+	// internal/iam/implied.go adds it back when co-deleted
+	// aws_iam_instance_profile resources reference this role.
+	{tfType: "aws_iam_role", op: "delete", action: "iam:RemoveRoleFromInstanceProfile"},
+}
+
+// applyCorrections removes the actions listed in schemaCorrections from the
+// schema. It is called after all parser-derived and tag-derived requirements
+// are assembled, so it takes effect regardless of the analysis path that added
+// the action.
+func applyCorrections(schema *iam.Schema) {
+	for _, c := range schemaCorrections {
+		if c.tfType != schema.TypeName {
+			continue
+		}
+		reqs := schema.Ops[c.op]
+		out := make([]iam.Requirement, 0, len(reqs))
+		for _, r := range reqs {
+			if r.Action != c.action {
+				out = append(out, r)
+			}
+		}
+		if len(out) != len(reqs) {
+			schema.Ops[c.op] = out
+		}
+	}
 }
 
 // addUnconditionalActions adds actions to the given operation without any
