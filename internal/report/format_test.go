@@ -617,3 +617,51 @@ func TestClassTag(t *testing.T) {
 		}
 	}
 }
+
+// TestFormatMissing_UnverifiedConditionSection checks the condition reason:
+// its own tag, and the same shape as the resource scope one.
+func TestFormatMissing_UnverifiedConditionSection(t *testing.T) {
+	missing := []iam.MissingAction{
+		{ResourceType: "aws_lambda_event_source_mapping", ResourceName: "events", Change: "create", Action: "lambda:CreateEventSourceMapping", Class: iam.ClassManagement, ConditionUnverified: true},
+		{ResourceType: "aws_lambda_function", ResourceName: "fn", Change: "create", Action: "lambda:CreateFunction", Class: iam.ClassManagement, ResourceScopeUnverified: true},
+	}
+	out := formatMissing(missing, nil)
+	if !strings.Contains(out, "Unverified IAM permissions (2)") {
+		t.Errorf("unverified section wrong:\n%s", out)
+	}
+	if !strings.Contains(out, "  lambda:CreateEventSourceMapping [required] [unverified: condition]\n    → aws_lambda_event_source_mapping.events (create)") {
+		t.Errorf("the condition tag is wrong:\n%s", out)
+	}
+	if !strings.Contains(out, "  lambda:CreateFunction [required] [unverified: resource scope]\n    → aws_lambda_function.fn (create)") {
+		t.Errorf("the resource scope tag is wrong:\n%s", out)
+	}
+}
+
+// TestFormatGitHubAnnotations_UnverifiedCondition checks the annotation
+// carries the condition tag.
+func TestFormatGitHubAnnotations_UnverifiedCondition(t *testing.T) {
+	out := formatGitHubAnnotations([]iam.MissingAction{
+		{ResourceType: "aws_lambda_event_source_mapping", ResourceName: "events", Change: "create", Action: "lambda:CreateEventSourceMapping", Class: iam.ClassManagement, ConditionUnverified: true},
+	}, nil)
+	want := "::warning title=Unverified IAM permission::lambda:CreateEventSourceMapping [unverified: condition] needed by: aws_lambda_event_source_mapping.events (create)\n"
+	if out != want {
+		t.Errorf("got  %q\nwant %q", out, want)
+	}
+}
+
+// TestFormatJSON_UnverifiedCondition checks the json discriminator of the
+// condition reason.
+func TestFormatJSON_UnverifiedCondition(t *testing.T) {
+	out := formatJSON([]iam.MissingAction{
+		{ResourceType: "aws_lambda_event_source_mapping", ResourceName: "events", Change: "create", Action: "lambda:CreateEventSourceMapping", Class: iam.ClassManagement, ConditionUnverified: true},
+	}, nil, 2, "resource changes", nil)
+	var res struct {
+		Missing []map[string]interface{} `json:"missing"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Missing[0]["unverified"] != "condition" {
+		t.Errorf("unverified = %v, want condition", res.Missing[0]["unverified"])
+	}
+}
