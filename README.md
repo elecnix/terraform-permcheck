@@ -165,6 +165,19 @@ DynamoDB KMS key and keeps its state as it is when the lookup fails. PermCheck
 reports these calls as `[optional]`, so the default filter drops them and
 `--no-filter` shows them.
 
+### Calls that need an earlier call's result
+
+A few calls only run when an earlier call returned a non-empty list. The
+provider lists a role's instance profiles, then loops over the result, so it
+makes `RemoveRoleFromInstanceProfile` only when the loop body runs. A plan
+cannot show a runtime list, so no plan attribute describes that condition.
+
+PermCheck leaves these calls out of the generated table by hand, in
+`schemaCorrections` in `internal/provideraws/source.go`, and adds the permission
+back when the plan holds evidence: a co-deleted `aws_iam_instance_profile` that
+references the role. `docs/runtime-empty-gates.md` records the pattern, the
+provider sites that share it, and why a new gate kind would not fix it.
+
 ### API Gateway actions by HTTP verb
 
 API Gateway checks the HTTP verb of each call, under the `apigateway` prefix,
