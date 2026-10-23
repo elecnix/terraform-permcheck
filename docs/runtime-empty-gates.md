@@ -6,8 +6,9 @@ that condition itself, and the cost of building it.
 
 **Summary: the parser cannot express it today. A fourth gate kind would name
 the condition without deciding it, because a plan cannot see a runtime list.
-The table is the cheaper fix, and it currently corrects one of the eleven
-provider sites that share the pattern.**
+The correction table is the cheaper fix, and it now covers two of the eleven
+provider sites that share the pattern: one entry drops an action, and another
+gives an action the plan attribute that decides it.**
 
 ## The pattern in the provider source
 
@@ -66,6 +67,11 @@ result that the plan does not carry. No attribute means "this role has an
 instance profile", so no existing test describes it, and `schemaCorrections`
 carries the workaround.
 
+A gate on a real attribute doesn't need a new field. Where the plan shows the
+attribute that decides the call, an entry in the table writes the gate the
+parser could not find. That covers the sites where the provider tests a runtime
+result and the resource schema declares an attribute that predicts it.
+
 ## A fourth gate field
 
 The smallest addition is one field on `Gate`:
@@ -111,26 +117,47 @@ sit in 10 functions across 9 files and touch 9 resource types. The rest are
 plan-derived: `schema.Set.List()`, `Difference`, `flex.ExpandStringValueSet` and
 `DiffSlices`.
 
-| File | Function | Call that needs the non-empty list |
-| --- | --- | --- |
-| `iam/role.go` | `deleteRoleInstanceProfiles` | `RemoveRoleFromInstanceProfile` |
-| `iam/role.go` | `readRoleInlinePolicies` | `GetRolePolicy` |
-| `iam/user.go` | `deleteUserAccessKeys` | `DeleteAccessKey` |
-| `route53/traffic_policy.go` | `resourceTrafficPolicyDelete` | `DeleteTrafficPolicy` |
-| `batch/job_definition.go` | `resourceJobDefinitionDelete` | `DeregisterJobDefinition` |
-| `workspaces/ip_group.go` | `resourceIPGroupDelete` | `DisassociateIpGroups` |
-| `ec2/vpc_dhcp_options.go` | `resourceVPCDHCPOptionsDelete` | `AssociateDhcpOptions` |
-| `ec2/vpc_security_group.go` | `forceRevokeSecurityGroupRules` | `RevokeSecurityGroupIngress`, `RevokeSecurityGroupEgress` |
-| `comprehend/document_classifier.go` | `resourceDocumentClassifierDelete` | `DeleteDocumentClassifier` |
-| `comprehend/entity_recognizer.go` | `resourceEntityRecognizerDelete` | `DeleteEntityRecognizer` |
+| File | Function | Call that needs the non-empty list | Verdict |
+| --- | --- | --- | --- |
+| `iam/role.go` | `deleteRoleInstanceProfiles` | `RemoveRoleFromInstanceProfile` | Dropped, re-added by `implied.go` |
+| `iam/role.go` | `readRoleInlinePolicies` | `GetRolePolicy` | Checks `inline_policy` |
+| `iam/user.go` | `deleteUserAccessKeys` | `DeleteAccessKey` | Checks `force_destroy` |
+| `route53/traffic_policy.go` | `resourceTrafficPolicyDelete` | `DeleteTrafficPolicy` | Ungated, and right |
+| `batch/job_definition.go` | `resourceJobDefinitionDelete` | `DeregisterJobDefinition` | Ungated, and right |
+| `workspaces/ip_group.go` | `resourceIPGroupDelete` | `DisassociateIpGroups` | Ungated, no plan signal |
+| `ec2/vpc_dhcp_options.go` | `resourceVPCDHCPOptionsDelete` | `AssociateDhcpOptions` | Ungated, no plan signal |
+| `ec2/vpc_security_group.go` | `forceRevokeSecurityGroupRules` | `RevokeSecurityGroupIngress`, `RevokeSecurityGroupEgress` | Checks `revoke_rules_on_delete` |
+| `comprehend/document_classifier.go` | `resourceDocumentClassifierDelete` | `DeleteDocumentClassifier` | Ungated, and right |
+| `comprehend/entity_recognizer.go` | `resourceEntityRecognizerDelete` | `DeleteEntityRecognizer` | Ungated, and right |
 
-Three of those still have no gate in the embedded table, so they remain live
-false positives of the same class: `route53:DeleteTrafficPolicy`,
-`batch:DeregisterJobDefinition` and `workspaces:DisassociateIpGroups`. The read
-path of `aws_iam_role` is a fourth, because `iam:GetRolePolicy` has no gate
-there and runs only when `ListRolePolicies` returned a name.
+Four of them are right as they stand, because the resource cannot be in the
+plan without the list being non-empty. A route 53 traffic policy has at least
+one version while it exists, so `ListTrafficPolicyVersions` returns one for
+every policy Terraform destroys. A Batch job definition is active while it
+exists, and the finder filters on that status, so `DescribeJobDefinitions`
+returns the one Terraform destroys. Comprehend follows the same rule: a
+classifier has a version of its own, and the delete loops over the versions of
+its name.
 
-The table contains one entry. The pattern occurs about eleven times.
+`aws_iam_role` did need one, and the plan shows the attribute that decides it.
+The role read calls `GetRolePolicy` once per name that `ListRolePolicies`
+returned, and both `Create` and `Update` end in that read. A role without an
+inline policy returns no name. The `inline_policy` attribute predicts it, and
+`iam:PutRolePolicy` on the same path already has that guard. The `schemaGates`
+list in `internal/provideraws/source.go` writes the same guard onto
+`iam:GetRolePolicy` for create, update and read. The checker validates create,
+update and delete only, so the read entry stays in the table for the next
+reader instead of for a finding.
+
+The IP group and the DHCP options set stay ungated. AWS refuses to delete a
+`workspaces:DisassociateIpGroups` target that a directory still uses, and
+refuses to delete a DHCP options set that a VPC still uses, so dropping either
+action breaks the apply that needs it. No attribute on either resource names
+the directory or VPC that points at it, so the plan cannot say whether the
+loop runs. The over-report stays.
+
+The table lists one removal and one gate. The pattern occurs about eleven
+times.
 
 ## Recommendation
 
@@ -140,10 +167,10 @@ corroborate.
 
 | Approach | Files touched |
 | --- | --- |
-| One table entry per site | `internal/provideraws/source.go` (one struct, one slice and one apply function, already in place), `internal/iam/implied.go` for the re-add path, one regenerated line in `internal/permdata/permissions.json` |
+| One table entry per site | `internal/provideraws/source.go` (one struct, one slice and one apply function, already in place for removals and now for gates too), `internal/iam/implied.go` for the re-add path, one regenerated line in `internal/permdata/permissions.json` |
 | A fourth gate field | `internal/iam/gates.go` (the field, `holds`, `shownBy`, `evaluateGates`), `internal/iam/schema.go`, `internal/permdata/format.go` (the field plus a format version bump, which invalidates every embedded table), `internal/provideraws/guards.go` and `internal/provideraws/walk.go` (range and early-return detection), plus a filler classifier that separates a runtime list from a plan-derived slice |
 
 The field touches six files across four packages and doesn't change a verdict.
-The table touches three files and changes one.
+The table touches three files, changes one verdict and gates one action.
 
 pi-minimax
