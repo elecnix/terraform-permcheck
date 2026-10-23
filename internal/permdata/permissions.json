@@ -14698,7 +14698,7 @@
           {"action":"iam:UntagRole"},
           {"action":"iam:TagRole"},
           {"action":"iam:GetRole"},
-          {"action":"iam:GetRolePolicy"}
+          {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true}
         ],
         "delete": [
           {"action":"iam:DeleteRole"},
@@ -14710,7 +14710,7 @@
         ],
         "read": [
           {"action":"iam:GetRole"},
-          {"action":"iam:GetRolePolicy"},
+          {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
           {"action":"iam:ListRolePolicies"},
           {"action":"iam:ListAttachedRolePolicies"}
         ],
@@ -14725,7 +14725,7 @@
           {"action":"iam:DetachRolePolicy","changed":"managed_policy_arns"},
           {"action":"iam:AttachRolePolicy","changed":"managed_policy_arns"},
           {"action":"iam:GetRole"},
-          {"action":"iam:GetRolePolicy"},
+          {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
           {"action":"iam:ListRolePolicies"},
           {"action":"iam:ListAttachedRolePolicies"}
         ]

@@ -348,6 +348,7 @@ func (r resourceFile) schema() *iam.Schema {
 	}
 
 	applyCorrections(schema)
+	applySchemaGates(schema)
 	return schema
 }
 
@@ -373,6 +374,70 @@ var schemaCorrections = []schemaCorrection{
 	// internal/iam/implied.go adds it back when co-deleted
 	// aws_iam_instance_profile resources reference this role.
 	{tfType: "aws_iam_role", op: "delete", action: "iam:RemoveRoleFromInstanceProfile"},
+}
+
+// schemaGate records the gate of an action the parser lists ungated because
+// the guard it sees tests a runtime result rather than a plan attribute.
+//
+// The parser emits a gate only for a named attribute, from the guard helpers
+// in guards.go. When the provider fills a slice from a runtime List call and
+// loops over the result, no attribute appears in the guard, so the parser
+// records an ungated path. The plan does carry the attribute that decides the
+// call, so the gate is written here instead.
+type schemaGate struct {
+	tfType string
+	op     string
+	action string
+	gate   iam.Gate
+}
+
+// schemaGates is the list of parser under-specifications. Each entry replaces
+// the gate of every path on which one operation reaches one action, on one
+// resource type. No entry re-adds an action the parser left out; that is what
+// schemaCorrections does.
+var schemaGates = []schemaGate{
+	// resourceRoleCreate, resourceRoleUpdate and resourceRoleRead all end in
+	// the role read, which calls GetRolePolicy once per name that
+	// ListRolePolicies returned. A role with no inline policy yields no name,
+	// so the call runs only when the role has one. The loop reads a runtime
+	// list, so the parser cannot see the attribute that decides it; the role's
+	// inline_policy attribute does, and iam:PutRolePolicy on the same path
+	// already carries that guard.
+	{tfType: "aws_iam_role", op: "create", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
+	{tfType: "aws_iam_role", op: "update", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
+	{tfType: "aws_iam_role", op: "read", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
+}
+
+// applySchemaGates replaces the gate of the paths listed in schemaGates. Like
+// applyCorrections it is called after all parser-derived and tag-derived
+// requirements are assembled, so it takes effect whatever path added the
+// action.
+func applySchemaGates(schema *iam.Schema) {
+	for _, g := range schemaGates {
+		if g.tfType != schema.TypeName {
+			continue
+		}
+		reqs, ok := schema.Ops[g.op]
+		if !ok {
+			continue
+		}
+		out := make([]iam.Requirement, len(reqs))
+		copy(out, reqs)
+		changed := false
+		for i, r := range out {
+			if r.Action != g.action {
+				continue
+			}
+			if out[i].Gate == g.gate {
+				continue
+			}
+			out[i].Gate = g.gate
+			changed = true
+		}
+		if changed {
+			schema.Ops[g.op] = out
+		}
+	}
 }
 
 // applyCorrections removes the actions listed in schemaCorrections from the
