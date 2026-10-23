@@ -50,9 +50,12 @@ homebrew_casks:
     skip_upload: '{{ not (index .Env "HOMEBREW_TAP_GITHUB_TOKEN") }}'
     hooks:
       post:
-        install: |
-          if OS.mac? && system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/terraform-permcheck"]
+        # Homebrew replaced the `postflight` Ruby stanza with the declarative
+        # install-steps DSL. `on_macos` is the `OS.mac?` guard, `run` is
+        # `system_command`, and `{{ .StagedPath }}` is `#{staged_path}`.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/terraform-permcheck"]
           end
 
 changelog:
