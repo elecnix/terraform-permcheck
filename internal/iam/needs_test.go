@@ -99,6 +99,43 @@ func TestCheckNeeds_FindingShape(t *testing.T) {
 	}
 }
 
+// TestCheckNeeds_StarNeedWithUnevaluableCondition checks that a need on "*"
+// whose only grant carries a condition the tool cannot evaluate stays
+// unverified, not missing. The tool cannot prove that grant falls short of
+// every resource, and an unverifiable grant must not fail the run.
+func TestCheckNeeds_StarNeedWithUnevaluableCondition(t *testing.T) {
+	needs := []Need{{Sid: "Scan", Actions: []string{"ecr:DescribeImages"}, Resources: []string{"*"}}}
+	doc := mustPolicy(t, `{"Statement":[{"Effect":"Allow","Action":"ecr:DescribeImages","Resource":"*",
+		"Condition":{"StringEquals":{"aws:PrincipalTag/team":"platform"}}}]}`)
+
+	got := CheckNeeds(needs, doc, true)
+	if len(got) != 1 {
+		t.Fatalf("got %d findings, want 1", len(got))
+	}
+	if !got[0].ConditionUnverified || got[0].ResourceScopeUnverified {
+		t.Errorf("want unverified (condition), got ConditionUnverified=%v ResourceScopeUnverified=%v",
+			got[0].ConditionUnverified, got[0].ResourceScopeUnverified)
+	}
+}
+
+// TestCheckNeeds_StarNeedWithScopedGrantIsMissing checks the other side: a
+// grant limited to some resources provably cannot cover every resource, so a
+// need on "*" is a provable gap and fails the run.
+func TestCheckNeeds_StarNeedWithScopedGrantIsMissing(t *testing.T) {
+	needs := []Need{{Sid: "Scan", Actions: []string{"ecr:DescribeImages"}, Resources: []string{"*"}}}
+	doc := mustPolicy(t, `{"Statement":[{"Effect":"Allow","Action":"ecr:DescribeImages",
+		"Resource":"arn:aws:ecr:us-east-1:111122223333:repository/a"}]}`)
+
+	got := CheckNeeds(needs, doc, true)
+	if len(got) != 1 {
+		t.Fatalf("got %d findings, want 1", len(got))
+	}
+	if got[0].ConditionUnverified || got[0].ResourceScopeUnverified {
+		t.Errorf("want a provable missing finding, got ConditionUnverified=%v ResourceScopeUnverified=%v",
+			got[0].ConditionUnverified, got[0].ResourceScopeUnverified)
+	}
+}
+
 // TestCheckNeeds_FindingCarriesReason checks that the reason of the need
 // reaches the finding, so the report can show why the action was needed.
 func TestCheckNeeds_FindingCarriesReason(t *testing.T) {
