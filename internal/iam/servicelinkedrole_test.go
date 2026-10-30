@@ -45,3 +45,24 @@ func TestServiceLinkedRole_WrongServicePath(t *testing.T) {
 		t.Errorf("a grant for another service must not cover it, got %+v", m)
 	}
 }
+
+func eventConnectionChange(change string) *plan.ResourceChange {
+	return &plan.ResourceChange{
+		Type: "aws_cloudwatch_event_connection", Name: "example", Change: change,
+		AttributeValues: map[string]string{"name": "example-connection"},
+	}
+}
+
+func TestServiceLinkedRole_EventConnectionMissingOnCreate(t *testing.T) {
+	m := impliedMissing(eventConnectionChange("create"), grantActions("events:*"), nil, false)
+	if !hasActionOn(m, "iam:CreateServiceLinkedRole", "aws_cloudwatch_event_connection", "example") {
+		t.Fatalf("expected iam:CreateServiceLinkedRole missing, got %+v", m)
+	}
+}
+
+func TestServiceLinkedRole_EventConnectionCoveredByItsPath(t *testing.T) {
+	doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:CreateServiceLinkedRole","Resource":"arn:aws:iam::123456789012:role/aws-service-role/apidestinations.events.amazonaws.com/*"}]}`)
+	if m := impliedMissing(eventConnectionChange("create"), doc, nil, false); len(m) != 0 {
+		t.Errorf("expected covered, got %+v", m)
+	}
+}

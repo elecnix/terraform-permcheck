@@ -76,6 +76,9 @@ var resourceRules = map[string]resourceRule{
 	// A regional custom domain makes API Gateway create its service-linked
 	// role.
 	"aws_apigatewayv2_domain_name": {serviceLinkedRoles: []string{"ops.apigateway.amazonaws.com"}},
+	// A connection makes EventBridge create the service-linked role its API
+	// destinations use.
+	"aws_cloudwatch_event_connection": {serviceLinkedRoles: []string{"apidestinations.events.amazonaws.com"}},
 	// Enabling Inspector creates its service-linked role.
 	"aws_inspector2_enabler": {serviceLinkedRoles: []string{"inspector2.amazonaws.com"}},
 
