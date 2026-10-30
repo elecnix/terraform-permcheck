@@ -28,6 +28,9 @@ type resourceRule struct {
 	// "ops.apigateway.amazonaws.com". AWS checks iam:CreateServiceLinkedRole
 	// on each, though the provider never calls it.
 	serviceLinkedRoles []string
+	// managedSecret describes the Secrets Manager secret the service creates
+	// for the resource, or is nil.
+	managedSecret *managedSecret
 	// conditionKeys lists the condition keys the plan can supply for the
 	// resource, and the actions each one gates. A policy may grant an
 	// action only when such a key holds a value, and the tool can check
@@ -77,8 +80,17 @@ var resourceRules = map[string]resourceRule{
 	// role.
 	"aws_apigatewayv2_domain_name": {serviceLinkedRoles: []string{"ops.apigateway.amazonaws.com"}},
 	// A connection makes EventBridge create the service-linked role its API
-	// destinations use.
-	"aws_cloudwatch_event_connection": {serviceLinkedRoles: []string{"apidestinations.events.amazonaws.com"}},
+	// destinations use, and a secret for its credentials.
+	"aws_cloudwatch_event_connection": {
+		serviceLinkedRoles: []string{"apidestinations.events.amazonaws.com"},
+		managedSecret: &managedSecret{
+			prefix: "events!connection/",
+			actions: map[string][]string{
+				"create": {"secretsmanager:CreateSecret", "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"},
+				"update": {"secretsmanager:CreateSecret", "secretsmanager:UpdateSecret", "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"},
+			},
+		},
+	},
 	// Enabling Inspector creates its service-linked role.
 	"aws_inspector2_enabler": {serviceLinkedRoles: []string{"inspector2.amazonaws.com"}},
 

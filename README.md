@@ -252,6 +252,11 @@ rather than only the action name:
   `role/aws-service-role/<service principal>/*`. AWS creates the role only
   when the account has none, so a policy without the grant can pass for a long
   time and fail on the first apply in a fresh account.
+- `secretsmanager:` actions are required on the secret a service creates for a
+  resource. An `aws_cloudwatch_event_connection` makes EventBridge create
+  `events!connection/<name>/<id>`: a create needs `CreateSecret`,
+  `GetSecretValue` and `PutSecretValue`, and an update adds `UpdateSecret`.
+  A grant on `events!connection/*` covers it.
 - PermCheck checks cross-service callbacks, such as
   `elasticloadbalancing:SetWebACL`, against the `resource_arn` of
   `aws_wafv2_web_acl_association`. The target is a literal ARN, or the
