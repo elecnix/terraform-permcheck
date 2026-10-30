@@ -247,7 +247,9 @@ func TestValidate_CrossServiceReferencedTarget(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			missing, err := Validate(c.changes, grantActions("wafv2:*"), resolver, FilterConfig{})
+			// The managed ALB case also creates a load balancer, which needs the
+			// service-linked role grant. Grant it so the case isolates the callback.
+			missing, err := Validate(c.changes, grantActions("wafv2:*", "iam:CreateServiceLinkedRole"), resolver, FilterConfig{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,7 +285,7 @@ func TestValidate_CrossServiceReferencedALBScope(t *testing.T) {
 	}
 	grant := func(resource string) *policy.Document {
 		return &policy.Document{Statements: []policy.Statement{
-			{Effect: "Allow", Action: []string{"wafv2:*"}, Resource: []string{"*"}},
+			{Effect: "Allow", Action: []string{"wafv2:*", "iam:CreateServiceLinkedRole"}, Resource: []string{"*"}},
 			{Effect: "Allow", Action: []string{"elasticloadbalancing:SetWebACL"}, Resource: []string{resource}},
 		}}
 	}
