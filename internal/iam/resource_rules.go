@@ -67,6 +67,18 @@ var resourceRules = map[string]resourceRule{
 	"aws_ecs_task_definition":      {passesRole: []string{"execution_role_arn", "task_role_arn"}, passedToService: "ecs-tasks.amazonaws.com"},
 	"aws_cloudwatch_event_target":  {passesRole: []string{"role_arn"}, passedToService: "events.amazonaws.com"},
 	"aws_apigatewayv2_integration": {passesRole: []string{"credentials_arn"}, passedToService: "apigateway.amazonaws.com"},
+	// The role of a scheduler target sits inside the target block, which the
+	// plan shows as set. The block is required, so every create passes a role.
+	"aws_scheduler_schedule":          {passesRole: []string{"target"}, passedToService: "scheduler.amazonaws.com"},
+	"aws_pipes_pipe":                  {passesRole: []string{"role_arn"}, passedToService: "pipes.amazonaws.com"},
+	"aws_glue_job":                    {passesRole: []string{"role_arn"}, passedToService: "glue.amazonaws.com"},
+	"aws_cloudtrail":                  {passesRole: []string{"cloud_watch_logs_role_arn"}, passedToService: "cloudtrail.amazonaws.com"},
+	"aws_flow_log":                    {passesRole: []string{"iam_role_arn"}, passedToService: "vpc-flow-logs.amazonaws.com"},
+	"aws_eks_cluster":                 {passesRole: []string{"role_arn"}, passedToService: "eks.amazonaws.com", serviceLinkedRoles: []string{"eks.amazonaws.com"}},
+	"aws_api_gateway_integration":     {passesRole: []string{"credentials"}, passedToService: "apigateway.amazonaws.com"},
+	"aws_cloudwatch_event_rule":       {passesRole: []string{"role_arn"}, passedToService: "events.amazonaws.com"},
+	"aws_sagemaker_notebook_instance": {passesRole: []string{"role_arn"}, passedToService: "sagemaker.amazonaws.com"},
+	"aws_batch_compute_environment":   {passesRole: []string{"service_role"}, passedToService: "batch.amazonaws.com"},
 
 	// A Lambda event source mapping is authorized on Resource: "*", so a
 	// least-privilege policy scopes it with the lambda:FunctionArn
@@ -106,7 +118,6 @@ var resourceRules = map[string]resourceRule{
 	"aws_lb":                {serviceLinkedRoles: []string{"elasticloadbalancing.amazonaws.com"}},
 	"aws_db_instance":       {serviceLinkedRoles: []string{"rds.amazonaws.com"}},
 	"aws_rds_cluster":       {serviceLinkedRoles: []string{"rds.amazonaws.com"}},
-	"aws_eks_cluster":       {serviceLinkedRoles: []string{"eks.amazonaws.com"}},
 
 	"aws_wafv2_web_acl_association": {callbacks: &crossServiceRule{
 		arnAttribute: "resource_arn",

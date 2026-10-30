@@ -239,7 +239,10 @@ rather than only the action name:
 - `iam:PassRole` is required for resources that hand a role to a service
   (`aws_lambda_function`, `aws_sfn_state_machine`, `aws_codebuild_project`,
   `aws_ecs_task_definition`, `aws_cloudwatch_event_target`,
-  `aws_apigatewayv2_integration`). The role comes from a literal ARN in the
+  `aws_apigatewayv2_integration`, `aws_scheduler_schedule`, `aws_pipes_pipe`,
+  `aws_glue_job`, `aws_cloudtrail`, `aws_flow_log`, `aws_eks_cluster`,
+  `aws_api_gateway_integration`, `aws_cloudwatch_event_rule`,
+  `aws_sagemaker_notebook_instance`, `aws_batch_compute_environment`). The role comes from a literal ARN in the
   `role` or `role_arn` attribute, or from a reference to an `aws_iam_role`
   with a known `name`. When the plan shows that the attribute is set but not
   which role it holds, a policy with no `iam:PassRole` grant at all is
