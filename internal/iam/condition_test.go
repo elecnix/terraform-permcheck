@@ -206,9 +206,8 @@ func TestConditionValues(t *testing.T) {
 }
 
 // TestValidate_PassRoleConditionIsUnaffected checks that a conditional
-// iam:PassRole grant is unaffected: the plan supplies no value for
-// iam:PassedToService, so the tool cannot check the condition and the
-// grant still counts.
+// iam:PassRole grant limited to the resource's own service still counts.
+// The passed-to-service tests cover a grant limited to another service.
 func TestValidate_PassRoleConditionIsUnaffected(t *testing.T) {
 	policy := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
 		{"Effect":"Allow","Action":"iam:PassRole","Resource":"*",

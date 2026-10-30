@@ -244,6 +244,10 @@ rather than only the action name:
   with a known `name`. When the plan shows that the attribute is set but not
   which role it holds, a policy with no `iam:PassRole` grant at all is
   reported missing.
+  A grant whose `iam:PassedToService` condition names another service doesn't
+  cover the resource: each type is checked against the principal that receives
+  the role (`lambda.amazonaws.com` for `aws_lambda_function`,
+  `events.amazonaws.com` for `aws_cloudwatch_event_target`, and so on).
 - `iam:CreateServiceLinkedRole` is required when a create makes the service
   build its service-linked role on first use (`aws_apigatewayv2_domain_name`,
   `aws_inspector2_enabler`, `aws_cloudwatch_event_connection`, `aws_ecs_cluster`,

@@ -21,6 +21,11 @@ type resourceRule struct {
 	// to a service. AWS checks iam:PassRole on that role, though the
 	// provider never calls it.
 	passesRole []string
+	// passedToService is the service principal that receives the role, such
+	// as "lambda.amazonaws.com". AWS sets iam:PassedToService to it on the
+	// iam:PassRole check, so a grant limited to another service does not
+	// cover the resource.
+	passedToService string
 	// callbacks are the actions AWS calls in the target's service, or nil.
 	callbacks *crossServiceRule
 	// serviceLinkedRoles lists the service principals whose service-linked
@@ -56,12 +61,12 @@ var resourceRules = map[string]resourceRule{
 	// value or a reference to a managed log group.
 	"aws_cloudwatch_log_stream": {targets: logStreamTargetARNs},
 
-	"aws_lambda_function":          {passesRole: []string{"role"}},
-	"aws_sfn_state_machine":        {passesRole: []string{"role_arn"}},
-	"aws_codebuild_project":        {passesRole: []string{"service_role"}},
-	"aws_ecs_task_definition":      {passesRole: []string{"execution_role_arn", "task_role_arn"}},
-	"aws_cloudwatch_event_target":  {passesRole: []string{"role_arn"}},
-	"aws_apigatewayv2_integration": {passesRole: []string{"credentials_arn"}},
+	"aws_lambda_function":          {passesRole: []string{"role"}, passedToService: "lambda.amazonaws.com"},
+	"aws_sfn_state_machine":        {passesRole: []string{"role_arn"}, passedToService: "states.amazonaws.com"},
+	"aws_codebuild_project":        {passesRole: []string{"service_role"}, passedToService: "codebuild.amazonaws.com"},
+	"aws_ecs_task_definition":      {passesRole: []string{"execution_role_arn", "task_role_arn"}, passedToService: "ecs-tasks.amazonaws.com"},
+	"aws_cloudwatch_event_target":  {passesRole: []string{"role_arn"}, passedToService: "events.amazonaws.com"},
+	"aws_apigatewayv2_integration": {passesRole: []string{"credentials_arn"}, passedToService: "apigateway.amazonaws.com"},
 
 	// A Lambda event source mapping is authorized on Resource: "*", so a
 	// least-privilege policy scopes it with the lambda:FunctionArn
