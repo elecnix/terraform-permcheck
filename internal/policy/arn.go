@@ -106,7 +106,13 @@ func globDecidable(pattern string) bool {
 		switch pattern[i] {
 		case '*', '?':
 			// supported
-		case '[', ']', '{', '}', '$', '+', '(', ')', '|', '\\':
+		case '$':
+			// "${" opens an interpolation. A bare "$" is a literal, as in
+			// the Lambda qualifier "$LATEST".
+			if i+1 < len(pattern) && pattern[i+1] == '{' {
+				return false
+			}
+		case '[', ']', '{', '}', '+', '(', ')', '|', '\\':
 			return false
 		}
 	}

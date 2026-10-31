@@ -203,11 +203,23 @@ func (s Statement) mayApplyTo(target string, forms []string) bool {
 		if !containsString(targetsLike(r, forms), target) {
 			continue
 		}
+		if literalOfOtherShape(r, target) {
+			continue
+		}
 		if arnIntersect(r, target) {
 			return true
 		}
 	}
 	return false
+}
+
+// literalOfOtherShape reports whether a grant without a wildcard has a
+// different number of ARN segments than the target. Such a grant matches only
+// ARNs with its own segment count, and every ARN of the target has the
+// target's, so the grant never applies. A grant on a Lambda function's bare ARN
+// is one: it does not cover function:<name>:$LATEST.
+func literalOfOtherShape(grant, target string) bool {
+	return !strings.ContainsAny(grant, "*?") && strings.Count(grant, ":") != strings.Count(target, ":")
 }
 
 func containsString(list []string, s string) bool {

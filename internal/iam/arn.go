@@ -63,6 +63,26 @@ func sqsQueueARNPatterns(queue *plan.ResourceChange) []string {
 	return []string{"arn:*:sqs:*:*:" + name}
 }
 
+// lambdaInvocationARNPatterns builds the ARN pattern a planned Lambda
+// invocation acts on: the function, plus the qualifier when the plan shows
+// one. function_name is a name or an ARN. IAM checks an invoke that carries a
+// qualifier against function:<name>:<qualifier>, which a grant on the bare
+// function ARN does not match. It returns nil when the function is unknown.
+func lambdaInvocationARNPatterns(inv *plan.ResourceChange) []string {
+	fn := inv.AttributeValues["function_name"]
+	if fn == "" {
+		return nil
+	}
+	arn := fn
+	if !isARN(fn) {
+		arn = "arn:*:lambda:*:*:function:" + fn
+	}
+	if q := inv.AttributeValues["qualifier"]; q != "" {
+		arn += ":" + q
+	}
+	return []string{arn}
+}
+
 // logGroupARNsOf builds the ARN patterns of a planned log group from its
 // name. It returns nil when the name is unknown.
 func logGroupARNsOf(group *plan.ResourceChange) []string {
