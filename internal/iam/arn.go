@@ -65,9 +65,15 @@ func sqsQueueARNPatterns(queue *plan.ResourceChange) []string {
 
 // lambdaInvocationARNPatterns builds the ARN pattern a planned Lambda
 // invocation acts on: the function, plus the qualifier when the plan shows
-// one. function_name is a name or an ARN. IAM checks an invoke that carries a
-// qualifier against function:<name>:<qualifier>, which a grant on the bare
-// function ARN does not match. It returns nil when the function is unknown.
+// one. function_name is a name or an ARN.
+//
+// An invoke that carries no qualifier targets $LATEST, and IAM authorizes that
+// against the unqualified function ARN -- function:<name>, never
+// function:<name>:$LATEST: the version string is not part of the ARN for
+// $LATEST. So the suffix is added only when the plan shows a qualifier, and a
+// grant on function:<name> is what covers the default case.
+//
+// It returns nil when the function is unknown.
 func lambdaInvocationARNPatterns(inv *plan.ResourceChange) []string {
 	fn := inv.AttributeValues["function_name"]
 	if fn == "" {
