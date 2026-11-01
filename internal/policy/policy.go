@@ -203,11 +203,32 @@ func (s Statement) mayApplyTo(target string, forms []string) bool {
 		if !containsString(targetsLike(r, forms), target) {
 			continue
 		}
+		if literalOfOtherShape(r, target) {
+			continue
+		}
 		if arnIntersect(r, target) {
 			return true
 		}
 	}
 	return false
+}
+
+// literalOfOtherShape reports whether a grant without a wildcard has a
+// different number of ARN segments than the target. Such a grant matches only
+// ARNs with its own segment count, and every ARN of the target has the
+// target's, so the grant never applies. A grant on a Lambda function's bare ARN
+// is one: it does not cover function:<name>:<qualifier>.
+//
+// A grant carrying a ${...} policy variable is not a literal even without a
+// wildcard: the variable expands at evaluation time, and its own text does not
+// contribute segments, so counting colons in it would misjudge the shape and
+// drop a grant that can apply. Leaving it to the general matcher reports it the
+// way every other undecidable pattern is reported -- covered by default,
+// unverified under --strict-resources.
+func literalOfOtherShape(grant, target string) bool {
+	return !strings.ContainsAny(grant, "*?") &&
+		!strings.Contains(grant, "${") &&
+		strings.Count(grant, ":") != strings.Count(target, ":")
 }
 
 func containsString(list []string, s string) bool {

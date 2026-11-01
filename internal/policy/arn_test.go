@@ -155,3 +155,21 @@ func TestCoversTargetWildcardResource(t *testing.T) {
 		t.Error("expected any action covered when Resource is *")
 	}
 }
+
+// TestArnIntersect_BareDollarIsLiteral checks that a "$" not followed by "{"
+// is a literal, so the Lambda qualifier $LATEST differs from an alias.
+func TestArnIntersect_BareDollarIsLiteral(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"arn:aws:lambda:us-east-1:111111111111:function:f:$LATEST", "arn:*:lambda:*:*:function:f:live", false},
+		{"arn:aws:lambda:us-east-1:111111111111:function:f:$LATEST", "arn:*:lambda:*:*:function:f:$LATEST", true},
+		{"arn:aws:lambda:us-east-1:111111111111:function:f:${var.q}", "arn:*:lambda:*:*:function:f:live", true},
+	}
+	for _, c := range cases {
+		if got := arnIntersect(c.a, c.b); got != c.want {
+			t.Errorf("arnIntersect(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

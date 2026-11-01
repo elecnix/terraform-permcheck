@@ -33,3 +33,25 @@ func TestCoverage_Verdicts(t *testing.T) {
 		}
 	}
 }
+
+func TestCoverage_PolicyVariableIsNotALiteral(t *testing.T) {
+	// A ${...} variable expands at evaluation time, so the grant is not a
+	// literal of a fixed shape even though it holds no wildcard; counting the
+	// colon inside ${aws:username} would drop a grant that can apply.
+	const doc = `{"Statement":[{"Effect":"Allow","Action":"lambda:InvokeFunction",
+		"Resource":"arn:aws:lambda:us-east-1:111111111111:function:${aws:username}:live"}]}`
+	target := []string{"arn:*:lambda:*:*:function:app-fn:live"}
+
+	parsed, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	// Before the fix the shape shortcut skipped this grant and the verdict was
+	// Missing. Undecidable overlap counts as coverage at this layer, in both
+	// modes, which is the same treatment every other ${...} pattern gets.
+	for _, strict := range []bool{false, true} {
+		if got := parsed.Coverage("lambda:InvokeFunction", target, nil, strict).Verdict; got != Covered {
+			t.Errorf("strict=%v verdict = %v, want Covered", strict, got)
+		}
+	}
+}

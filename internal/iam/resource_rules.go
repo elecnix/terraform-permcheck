@@ -61,6 +61,10 @@ var resourceRules = map[string]resourceRule{
 	// value or a reference to a managed log group.
 	"aws_cloudwatch_log_stream": {targets: logStreamTargetARNs},
 
+	// An invocation is its own target. Its qualifier, $LATEST unless set,
+	// is part of the ARN IAM checks the invoke against.
+	"aws_lambda_invocation": {targets: ownTarget(lambdaInvocationARNPatterns)},
+
 	"aws_lambda_function":          {passesRole: []string{"role"}, passedToService: "lambda.amazonaws.com"},
 	"aws_sfn_state_machine":        {passesRole: []string{"role_arn"}, passedToService: "states.amazonaws.com"},
 	"aws_codebuild_project":        {passesRole: []string{"service_role"}, passedToService: "codebuild.amazonaws.com"},
