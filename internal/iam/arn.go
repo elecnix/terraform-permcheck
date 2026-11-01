@@ -67,11 +67,12 @@ func sqsQueueARNPatterns(queue *plan.ResourceChange) []string {
 // invocation acts on: the function, plus the qualifier when the plan shows
 // one. function_name is a name or an ARN.
 //
-// An invoke that carries no qualifier targets $LATEST, and IAM authorizes that
-// against the unqualified function ARN -- function:<name>, never
+// An invoke with no qualifier targets $LATEST, and IAM authorizes that against
+// the unqualified function ARN -- function:<name>, never
 // function:<name>:$LATEST: the version string is not part of the ARN for
-// $LATEST. So the suffix is added only when the plan shows a qualifier, and a
-// grant on function:<name> is what covers the default case.
+// $LATEST. An explicit qualifier of "$LATEST" asks for the same target as no
+// qualifier at all, because $LATEST is the default version, so the suffix is
+// added only for a qualifier that names something else.
 //
 // It returns nil when the function is unknown.
 func lambdaInvocationARNPatterns(inv *plan.ResourceChange) []string {
@@ -83,7 +84,7 @@ func lambdaInvocationARNPatterns(inv *plan.ResourceChange) []string {
 	if !isARN(fn) {
 		arn = "arn:*:lambda:*:*:function:" + fn
 	}
-	if q := inv.AttributeValues["qualifier"]; q != "" {
+	if q := inv.AttributeValues["qualifier"]; q != "" && q != "$LATEST" {
 		arn += ":" + q
 	}
 	return []string{arn}
