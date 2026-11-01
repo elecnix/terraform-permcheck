@@ -1,13 +1,17 @@
 package iam
 
-import "github.com/elecnix/terraform-permcheck/internal/plan"
+import (
+	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
+)
 
 // iam:PassRole.
 //
 // Resources that hand an IAM role to a service need iam:PassRole on that
 // role's ARN. The terraform provider never calls iam:PassRole itself, so no
 // schema lists it. The role is named by an attribute of the resource, and
-// AWS rejects the call when the policy grants PassRole only on other roles.
+// AWS rejects the call when the policy grants PassRole only on other roles,
+// or only to another service through the iam:PassedToService condition.
 
 // passRoleRequirements returns iam:PassRole on each role the resource
 // passes. A delete passes no role. A role the plan does not show is checked
@@ -21,7 +25,12 @@ func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 		return nil
 	}
 	var reqs []targeted
-	for _, attr := range resourceRules[rc.Type].passesRole {
+	rule := resourceRules[rc.Type]
+	var conditions policy.Conditions
+	if rule.passedToService != "" {
+		conditions = policy.Conditions{"iam:PassedToService": rule.passedToService}
+	}
+	for _, attr := range rule.passesRole {
 		targets := roleTargets(rc, attr, set)
 		if len(targets) == 0 && !passesRole(rc, attr) {
 			continue
@@ -29,6 +38,7 @@ func passRoleRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 		reqs = append(reqs, targeted{
 			Requirement:      Requirement{Action: "iam:PassRole"},
 			targets:          targets,
+			conditions:       conditions,
 			knownTargetsOnly: !setsRole(rc, attr),
 		})
 	}
