@@ -62,8 +62,11 @@ func TestServiceLinkedRole_EventConnectionMissingOnCreate(t *testing.T) {
 
 func TestServiceLinkedRole_EventConnectionCoveredByItsPath(t *testing.T) {
 	doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iam:CreateServiceLinkedRole","Resource":"arn:aws:iam::123456789012:role/aws-service-role/apidestinations.events.amazonaws.com/*"}]}`)
-	if m := impliedMissing(eventConnectionChange("create"), doc, nil, false); len(m) != 0 {
-		t.Errorf("expected covered, got %+v", m)
+	// The connection's managed secret needs its own grant, so only the
+	// service-linked role is under test here.
+	m := impliedMissing(eventConnectionChange("create"), doc, nil, false)
+	if hasActionOn(m, "iam:CreateServiceLinkedRole", "aws_cloudwatch_event_connection", "example") {
+		t.Errorf("expected iam:CreateServiceLinkedRole covered, got %+v", m)
 	}
 }
 

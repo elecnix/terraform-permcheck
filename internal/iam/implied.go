@@ -10,8 +10,8 @@ import (
 // Some permissions are checked by AWS at apply time though the provider never
 // calls them, so no schema lists them: iam:PassRole on the role a resource
 // hands to a service, the callback a web ACL association makes into its
-// target's service, and the service-linked role a service creates on first
-// use. impliedRequirements describes each one as a requirement
+// target's service, the service-linked role a service creates on first
+// use, and the secret a service creates for a resource. impliedRequirements describes each one as a requirement
 // with the resources it acts on. Validate appends them to the schema's
 // requirements, and every requirement then goes through the same gates,
 // classification, coverage check and filters.
@@ -48,6 +48,7 @@ func withTargets(reqs []Requirement, targets [][]string, conditions func(string)
 func impliedRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	reqs := append(passRoleRequirements(rc, set), crossServiceRequirements(rc, set)...)
 	reqs = append(reqs, serviceLinkedRoleRequirements(rc)...)
+	reqs = append(reqs, managedSecretRequirements(rc)...)
 	return append(reqs, instanceProfileDetachRequirements(rc, set)...)
 }
 
