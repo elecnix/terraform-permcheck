@@ -247,7 +247,12 @@ rather than only the action name:
   A grant whose `iam:PassedToService` condition names another service doesn't
   cover the resource: each type is checked against the principal that receives
   the role (`lambda.amazonaws.com` for `aws_lambda_function`,
-  `events.amazonaws.com` for `aws_cloudwatch_event_target`, and so on).
+  `events.amazonaws.com` for `aws_cloudwatch_event_target`, and so on). That
+  holds for the condition operators PermCheck evaluates (`ArnEquals`,
+  `ArnLike`, `StringEquals`, `StringLike`). An operator it does not model — a
+  `ForAnyValue:` or `ForAllValues:` prefix, say — is still a grant under the
+  default verdict, so a wrong-service condition written that way reads as
+  coverage; see [Policy evaluation](#policy-evaluation).
 - `iam:CreateServiceLinkedRole` is required when a create makes the service
   build its service-linked role on first use (`aws_apigatewayv2_domain_name`,
   `aws_inspector2_enabler`, `aws_cloudwatch_event_connection`, `aws_ecs_cluster`,
