@@ -11,9 +11,9 @@ import (
 // invocation. A qualifier that names a version or an alias becomes part of the
 // ARN, function:<name>:<qualifier>, and a grant on the bare function ARN does
 // not match it -- matching the action name alone passes the plan and fails the
-// apply with a 403. $LATEST is the exception: it is the default version, so an
-// unqualified invoke and an explicit "$LATEST" both authorize against the bare
-// function ARN.
+// apply with a 403. "$LATEST" is a qualifier like any other: IAM checks the
+// qualified ARN when the plan sets it, and only an invoke with no qualifier
+// authorizes against the bare function ARN.
 func TestLambdaInvocation_QualifierIsPartOfTheTarget(t *testing.T) {
 	const bare = "arn:aws:lambda:us-east-1:111111111111:function:app-fn"
 	cases := []struct {
@@ -22,11 +22,12 @@ func TestLambdaInvocation_QualifierIsPartOfTheTarget(t *testing.T) {
 		grant  string
 		want   bool
 	}{
-		{"$LATEST, bare grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare, true},
-		{"$LATEST, $LATEST grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + ":$LATEST", false},
+		{"$LATEST, bare grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare, false},
+		{"$LATEST, $LATEST grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + ":$LATEST", true},
 		// A trailing ":*" is treated as matching the unqualified ARN too, which is
 		// permissive rather than exact: the matcher cannot prove it does not.
-		{"$LATEST, any-qualifier grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + ":*", true},
+		{"$LATEST, any-qualifier grant", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + ":*", true}, // a trailing ":*" matches the qualifier too
+		{"alias, grant on bare ARN", map[string]string{"function_name": "app-fn", "qualifier": "live"}, bare, false},
 		{"$LATEST, other function", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + "-other:$LATEST", false},
 		{"$LATEST, prefix of the name", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, bare + "x:$LATEST", false},
 		{"$LATEST, star", map[string]string{"function_name": "app-fn", "qualifier": "$LATEST"}, "*", true},
@@ -35,8 +36,8 @@ func TestLambdaInvocation_QualifierIsPartOfTheTarget(t *testing.T) {
 		{"version, grant on the version", map[string]string{"function_name": "app-fn", "qualifier": "7"}, bare + ":7", true},
 		{"no qualifier, bare grant", map[string]string{"function_name": "app-fn"}, bare, true},
 		{"no qualifier, qualified grant", map[string]string{"function_name": "app-fn"}, bare + ":$LATEST", false},
-		{"function given as an ARN, $LATEST qualifier", map[string]string{"function_name": bare, "qualifier": "$LATEST"}, bare, true},
-		{"function given as an ARN, $LATEST grant", map[string]string{"function_name": bare, "qualifier": "$LATEST"}, bare + ":$LATEST", false},
+		{"function given as an ARN, $LATEST qualifier", map[string]string{"function_name": bare, "qualifier": "$LATEST"}, bare, false},
+		{"function given as an ARN, $LATEST grant", map[string]string{"function_name": bare, "qualifier": "$LATEST"}, bare + ":$LATEST", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
