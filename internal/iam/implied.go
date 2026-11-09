@@ -49,6 +49,7 @@ func impliedRequirements(rc *plan.ResourceChange, set *changeSet) []targeted {
 	reqs := append(passRoleRequirements(rc, set), crossServiceRequirements(rc, set)...)
 	reqs = append(reqs, serviceLinkedRoleRequirements(rc)...)
 	reqs = append(reqs, managedSecretRequirements(rc)...)
+	reqs = append(reqs, valueRequirements(rc)...)
 	return append(reqs, instanceProfileDetachRequirements(rc, set)...)
 }
 

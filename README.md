@@ -264,6 +264,11 @@ rather than only the action name:
   `role/aws-service-role/<service principal>/*`. AWS creates the role only
   when the account has none, so a policy without the grant can pass for a long
   time and fail on the first apply in a fresh account.
+- `inspector2:ListAccountPermissions` is required for an
+  `aws_ecr_registry_scanning_configuration` whose `scan_type` is `ENHANCED`,
+  because enhanced scanning is Inspector scanning and AWS checks the action on
+  the caller. `BASIC` needs no Inspector action, and neither does a delete. A
+  `scan_type` the plan cannot show stays required.
 - `secretsmanager:` actions are required on the secret a service creates for a
   resource. An `aws_cloudwatch_event_connection` makes EventBridge create
   `events!connection/<name>/<id>`: a create needs `CreateSecret`,

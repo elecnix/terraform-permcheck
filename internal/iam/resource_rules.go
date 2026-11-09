@@ -41,6 +41,9 @@ type resourceRule struct {
 	// action only when such a key holds a value, and the tool can check
 	// that grant against the value the plan shows.
 	conditionKeys []conditionKeyRule
+	// valueRequirements lists the actions AWS checks on the caller, in
+	// another service, when an attribute holds a value.
+	valueRequirements []valueRequirement
 }
 
 // resourceRules maps a terraform resource type to its rule. A type with no
@@ -112,6 +115,14 @@ var resourceRules = map[string]resourceRule{
 			},
 		},
 	},
+	// Enhanced scanning is Inspector scanning: AWS checks
+	// inspector2:ListAccountPermissions on the caller before it enables it.
+	// BASIC scanning stays within ECR. The ECR User Guide, "IAM permissions
+	// required for enhanced scanning in Amazon ECR", lists the action.
+	"aws_ecr_registry_scanning_configuration": {valueRequirements: []valueRequirement{
+		{action: "inspector2:ListAccountPermissions", attribute: "scan_type", value: "ENHANCED"},
+	}},
+
 	// Enabling Inspector creates its service-linked role.
 	"aws_inspector2_enabler": {serviceLinkedRoles: []string{"inspector2.amazonaws.com"}},
 
