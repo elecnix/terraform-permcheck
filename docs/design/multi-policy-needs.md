@@ -16,7 +16,7 @@ documentation. The last sections split the work into pull requests.
 |----------|----------|
 | 1. Policy sources | Inline and attached policies of an IAM role or user, the policies of its groups, its permissions boundary, and the resource policies of Secrets Manager first, then one service per pull request. Each source has a terraform address. A source whose text the plan lacks is an *unknown source*. |
 | 2. Principal key | A new `principals` map in the config file. It maps the `principal` label a need already uses to the terraform address of an `aws_iam_role` or `aws_iam_user`. |
-| 3. Evaluation rule | In one account, a need is covered when an identity policy or a resource policy allows it and no policy has a definite Deny. A permissions boundary in the plan must also allow it. The plan doesn't show SCPs, RCPs or session policies, so they count as allowing. For a cross-account need, PermCheck checks the identity side only. |
+| 3. Evaluation rule | In one account, a need is covered when an identity policy or a resource policy allows it and no policy has a definite Deny. A permissions boundary in the plan must also allow it. The plan doesn't show SCPs, RCPs or session policies, so they count as allowing. A cross-account need needs an identity Allow and a resource-policy Allow, and a resource policy outside the plan is an unknown source. |
 | 4. Unknown policy text | An unknown source may grant anything and never denies. The need is covered by default and unverified under `--strict-resources` with the reason `policy_unknown`. The run prints one notice per unknown source. |
 | 5. Compatibility | A config without `principals` gives the same output as today, byte for byte. Mapped principals are opt-in, and the CLI flags keep their meaning. |
 
@@ -210,7 +210,7 @@ address of the role or user:
 The address is the full instance address as `terraform show -json` prints it,
 the same string as `plan.ResourceChange.Address`, with any module path and
 instance key: `module.app["eu"].aws_iam_role.task[0]`. Its type must be
-`aws_iam_role` or `aws_iam_user`. A run with a mapped principal fails with
+`aws_iam_role`, or `aws_iam_user` from stage 11 on. A run with a mapped principal fails with
 exit code 2 when the address matches no resource change in the plan, so a
 typo doesn't pass as an empty policy set.
 
@@ -360,11 +360,23 @@ the other account must also allow it.
 
 PermCheck treats a need as cross-account when it knows both account IDs and
 they differ: the account in the need's resource ARN, and the account in the
-principal's known `arn`. Then:
+principal's known `arn`. A plan can create resources in more than one account,
+through provider aliases, so the resource's policy may be in the plan. PermCheck
+evaluates the two sides apart, and the need is covered only when both are:
 
-1. The identity side alone decides Missing. Resource policies in this plan
-   don't count toward the Allow, because they belong to the principal's account.
-2. The other account's resource policy is outside the plan, so it is an
+1. **Identity side.** The principal's identity policies and its boundary, with
+   the same `Coverage` call as in one account. A provable gap here makes the
+   need missing, whatever the resource policy says.
+2. **Resource side.** The resource policies in the plan whose resource may be
+   the need's resource, with the statements whose `Principal` may match the
+   principal. The account principal row of the Principal table now grants,
+   since it specifies the principal's own account and the identity side already
+   allowed the call. A provable gap here also makes the need missing. When
+   the plan has a policy source for the resource, PermCheck reads it as the
+   resource's whole policy, since Secrets Manager, for one, replaces the existing
+   policy on each `PutResourcePolicy` call
+   ([Secrets Manager resource-based policies](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html#auth-and-access_resource_sdk)).
+3. When the plan has no policy source for the resource, its policy is an
    unknown source. The need is covered by default and unverified under
    `--strict-resources` with the reason `cross_account`.
 
@@ -400,7 +412,7 @@ extends the rule to each new case:
 | A resource whose ARN may be the need's resource | its policy's Allows count, its Denies apply only when definite | unverified, `resource_scope` |
 | A resource policy statement whose `Principal` may match | the Allow counts, the Deny doesn't | unverified, `condition` |
 | An unknown source (computed text, managed policy outside the plan, unknown boundary) | it may grant, it never denies | unverified, `policy_unknown` |
-| A cross-account need | identity side decides Missing | unverified, `cross_account` |
+| A cross-account need whose resource policy isn't in the plan | the identity side decides Missing | unverified, `cross_account` |
 
 `policy.UnverifiedReason` gains `ReasonPolicyUnknown` and `ReasonCrossAccount`.
 Their `Value()` strings are `policy_unknown` and `cross_account`, so a JSON
@@ -409,6 +421,29 @@ consumer that matches on `resource_scope` and `condition` keeps working.
 An unknown source can't supply a definite Deny, so it never turns a covered
 need into a missing one. It can turn a missing need into a covered one. That
 direction is the one the rule allows.
+
+### Sources a release doesn't read yet
+
+The stages add source types one pull request at a time, so a release can meet
+a plan resource that sets a policy PermCheck doesn't read yet. If PermCheck
+skipped it, a grant the plan shows would be absent, and the need would be
+reported missing although the plan grants it. So from the first release that
+a user can turn on, PermCheck knows the full list of source types in the
+tables of question 1. A resource of a listed type that the release doesn't
+read yet is an unknown source, with the same link rules as a read one:
+
+- An identity or boundary source whose link may match the principal makes the
+  need covered by default and unverified under `--strict-resources` with the
+  reason `policy_unknown`.
+- A resource-policy source whose resource may be the need's resource does the
+  same. Before stage 6 parses `Principal`, every resource policy counts this
+  way, read or not.
+
+Each stage that reads a type moves it from that path to the read path, and its
+red test shows a verdict that changes from unverified to covered or missing.
+Stage 3 also accepts only `aws_iam_role` addresses in `principals`. An
+`aws_iam_user` address fails with exit code 2 until stage 11 reads user and
+group policies, since a user's grants come mostly from group policies.
 
 ## Question 4: the report for a policy whose JSON is unknown
 
@@ -451,8 +486,8 @@ PermCheck checks it against the plan's policies. Any other need keeps today's
 behavior and is checked against the document from the `--policy-*` flag.
 
 `ValidateNeeds` gains two checks. The address must have the type
-`aws_iam_role` or `aws_iam_user`. A key in `principals` that no need uses is
-an error, as an unknown `--principal` is today.
+`aws_iam_role`, or `aws_iam_user` from stage 11 on. A key in `principals` that
+no need uses is an error, as an unknown `--principal` is today.
 
 ### CLI
 
@@ -703,15 +738,21 @@ first that a user can turn on.
    `ReasonPolicyUnknown`. Red: a need covered only by the second of two
    documents, and a need that an unknown source makes unverified under strict.
 3. **The `principals` config key and its wiring.** A mapped need runs against
-   the merged identity policies of its role. The notice line and the JSON
-   `principal` and `policy_sources` keys arrive here. Red: the worked example
-   1 fixture without the secret policy reports `FetchSecrets` missing, and the
-   golden files don't change.
+   the merged inline policies of its role. Each other source type of
+   question 1 that may apply is an unknown source, as
+   [Sources a release doesn't read yet](#sources-a-release-doesnt-read-yet)
+   describes. The notice line and the JSON `principal` and `policy_sources`
+   keys arrive here. Red: the worked example 1 fixture without the secret
+   policy reports `FetchSecrets` missing. With the secret policy it reports
+   covered, and unverified under strict. Worked example 2 reports
+   `RollService` unverified under strict, not missing, because its grant
+   comes from an attachment. The golden files don't change.
 4. **Managed policy attachments.** `aws_iam_role_policy_attachment`,
    `aws_iam_policy_attachment`, `managed_policy_arns`, resolution to
    `aws_iam_policy`, AWS managed ARNs as unknown sources, and the
    `data "aws_iam_policy"` lookup once a captured plan shows where terraform
-   records it. Red: worked example 2.
+   records it. Red: worked example 2, where `RollService` changes from
+   unverified to covered under strict.
 5. **Exclusive attachment resources.** `aws_iam_role_policies_exclusive` and
    `aws_iam_role_policy_attachments_exclusive` mark a role's set as complete.
    Red: depends on the owner's answer to open question 1.
@@ -728,7 +769,8 @@ first that a user can turn on.
 10. **Cross-account needs.** `ReasonCrossAccount`. Red: the cross-account
     cases in the test plan.
 11. **IAM users and groups.** User policies, group policies, and group
-    membership. Red: a user whose only grant comes from a group.
+    membership, and `principals` accepts `aws_iam_user` addresses. Red: a
+    user whose only grant comes from a group.
 12. **README and `not_evaluated`.** The README's "Policy evaluation" and
     "Permissions a principal needs beyond terraform" sections describe the
     new mode, and the JSON report gains `not_evaluated`. The README changes
