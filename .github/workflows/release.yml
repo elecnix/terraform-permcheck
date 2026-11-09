@@ -33,16 +33,16 @@ jobs:
             exit 1
           fi
 
-      # The tap update needs a token for the tap repository, which is a
-      # separate secret from GITHUB_TOKEN. Without it, GoReleaser skips the
-      # cask upload and the release carries no cask. Say so: a silent skip
-      # reads like a successful publish.
+      # The tap update pushes to the tap repository over SSH with a deploy
+      # key, which is a separate secret from GITHUB_TOKEN. Without it,
+      # GoReleaser skips the cask upload and the release carries no cask.
+      # Say so: a silent skip reads like a successful publish.
       - name: Warn when the Homebrew tap secret is missing
         env:
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
         run: |
-          if [ -z "$HOMEBREW_TAP_GITHUB_TOKEN" ]; then
-            echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the Homebrew cask was not published and 'brew install terraform-permcheck' will not find it. The release binaries are unaffected. Add the repository secret HOMEBREW_TAP_GITHUB_TOKEN to publish the cask."
+          if [ -z "$HOMEBREW_TAP_SSH_KEY" ]; then
+            echo "::warning::HOMEBREW_TAP_SSH_KEY is not set, so the Homebrew cask was not published and 'brew install elecnix/tap/terraform-permcheck' will not find it. The release binaries are unaffected. Add the repository secret HOMEBREW_TAP_SSH_KEY, the private half of the tap's write-enabled deploy key, to publish the cask."
           fi
 
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
@@ -52,4 +52,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}

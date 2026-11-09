@@ -40,14 +40,20 @@ homebrew_casks:
     repository:
       owner: elecnix
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      # Push over SSH with the tap's write-enabled deploy key. GoReleaser
+      # accepts the key contents or a path to a key file here. `index` reads
+      # a missing variable as empty, so snapshot builds without the secret
+      # still render the config.
+      git:
+        url: git@github.com:elecnix/homebrew-tap.git
+        private_key: '{{ index .Env "HOMEBREW_TAP_SSH_KEY" }}'
     homepage: https://github.com/elecnix/terraform-permcheck
     description: Check a Terraform deploy role's IAM policy against the plan before apply
     license: MIT
-    # The tap update runs only when the repository has the token secret.
-    # `not` reads the token as a boolean and inverts it, so the line says
+    # The tap update runs only when the repository has the deploy key secret.
+    # `not` reads the key as a boolean and inverts it, so the line says
     # what it does: skip the upload when the secret is missing.
-    skip_upload: '{{ not (index .Env "HOMEBREW_TAP_GITHUB_TOKEN") }}'
+    skip_upload: '{{ not (index .Env "HOMEBREW_TAP_SSH_KEY") }}'
     hooks:
       post:
         # Homebrew replaced the `postflight` Ruby stanza with the declarative

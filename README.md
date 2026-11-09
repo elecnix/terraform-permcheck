@@ -701,7 +701,14 @@ data "tf-permcheck_iam_check" "deploy_role" {
 
 ## Install
 
-Download a binary for Linux, macOS or Windows from the
+Install with Homebrew on macOS or Linux. Each release publishes its cask to
+the `elecnix/tap` tap:
+
+```bash
+brew install elecnix/tap/terraform-permcheck
+```
+
+Or download a binary for Linux, macOS or Windows from the
 [releases page](https://github.com/elecnix/terraform-permcheck/releases).
 Each release lists the SHA-256 of its archives in `checksums.txt`. Or build
 from source with Go 1.26 or later:
