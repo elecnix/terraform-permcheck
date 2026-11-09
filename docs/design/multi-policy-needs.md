@@ -277,7 +277,7 @@ forms come from the IAM reference
 | An ARN whose name part matches the principal's name, with an account PermCheck can't read | may grant | not definite |
 | A role session (`arn:aws:sts::...:assumed-role/...`) | may grant | not definite |
 | A service, a federated provider, or another principal's ARN | dropped | dropped |
-| `NotPrincipal` | may grant unless it lists the principal | not definite |
+| `NotPrincipal` | dropped: AWS supports `NotPrincipal` only with Deny | definite unless the list may exclude the principal (see [Explicit deny](#explicit-deny)) |
 
 The account row follows the IAM reference: an account principal "delegates
 authority to the account" and its administrator "must then grant access to an
@@ -312,6 +312,37 @@ code returns a final decision of Deny"
 PermCheck applies its current rule to a Deny from any source: the Deny counts
 only when it has no `Condition` and covers the whole target. The merged
 document applies the rule to resource-policy statements unchanged.
+
+A resource policy can deny through `NotPrincipal`, which denies "all
+principals except the principal specified"
+([NotPrincipal element](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notprincipal.html)).
+For the need's principal, such a Deny is definite unless its list may exclude
+that principal. The list may exclude it when it contains:
+
+- the principal's role or user ARN, or an ARN whose name part matches the
+  principal's name while the account is unknown;
+- a role session ARN for the principal's role;
+- the principal's account, or an account PermCheck can't compare with the
+  principal's.
+
+The list also may exclude the principal when PermCheck can't compare it at
+all, such as a principal created with `name_prefix` whose name is unknown at
+plan time. In those cases the Deny isn't definite, as a conditional Deny isn't
+today.
+
+A listed role isn't always spared. AWS "might validate the account first,
+then the role, and then the assumed-role user", and recommends listing both
+the role ARN and its account ARN. AWS also says a `NotPrincipal` Deny "will
+always deny any IAM principal that has a permissions boundary policy
+attached, regardless of the values specified in the `NotPrincipal` element"
+([NotPrincipal key points](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notprincipal.html#notprincipal-key-points)).
+So when the plan shows a `permissions_boundary` on the principal, PermCheck
+treats the Deny as definite whatever the list contains. A Deny whose list
+contains the role but not its account is still not definite, since the
+documentation says "might", and PermCheck reports only gaps it can prove.
+
+A `NotPrincipal` Allow is unsupported ("Using it with `"Effect":"Allow"` is
+not supported", same page), so it grants nothing.
 
 ### Permissions boundaries
 
@@ -707,7 +738,11 @@ terraform writes a value, and hand-written otherwise.
   splitting a document into two sources never changes a verdict.
 - **Principal matching** (`internal/policy`): one case per row of the
   Principal table, including `{"AWS": "111122223333"}`, a list of principals,
-  `NotPrincipal`, and an ARN with a name match and an unknown account.
+  and an ARN with a name match and an unknown account. `NotPrincipal` cases:
+  a Deny whose list holds another role only (definite), the principal's role
+  and account (not definite), a name match with an unknown account (not
+  definite), another role while the principal has a boundary (definite), and
+  an Allow (dropped).
 - **Boundaries**: a boundary that allows, that provably doesn't, that has
   unknown text, and a resource policy that grants the role ARN under a
   boundary that doesn't allow.
