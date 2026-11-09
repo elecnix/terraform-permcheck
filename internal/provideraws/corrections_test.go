@@ -102,3 +102,62 @@ func TestApplySchemaGates_EveryEntryNamesAKnownOperation(t *testing.T) {
 		}
 	}
 }
+
+// acmCreateSchema is the part of the parsed aws_acm_certificate create schema
+// the import gates act on. The parser lists acm:ImportCertificate ungated,
+// because resourceCertificateCreate reaches it from the else branch of the
+// domain_name test, which no guard helper names.
+func acmCreateSchema() *iam.Schema {
+	return &iam.Schema{
+		TypeName: "aws_acm_certificate",
+		Ops: map[string][]iam.Requirement{
+			"create": {
+				{Action: "acm:RequestCertificate", Gate: iam.Gate{Attribute: "domain_name"}},
+				{Action: "acm:ImportCertificate"},
+				{Action: "acm:DescribeCertificate"},
+			},
+			"update": {
+				{Action: "acm:ImportCertificate", Gate: iam.Gate{Changed: "certificate_body"}},
+			},
+		},
+	}
+}
+
+// TestApplySchemaGates_GatesImportCertificateOnTheImportAttributes checks that
+// create reaches acm:ImportCertificate on two paths: a certificate_body, and a
+// write-only private_key_wo, which leaves no certificate_body behind.
+func TestApplySchemaGates_GatesImportCertificateOnTheImportAttributes(t *testing.T) {
+	schema := acmCreateSchema()
+	applySchemaGates(schema)
+
+	want := []iam.Gate{
+		{Attribute: "certificate_body", ValueGuarded: true},
+		{Attribute: "private_key_wo", ValueGuarded: true},
+	}
+	got := schema.Gates("create", "acm:ImportCertificate")
+	if len(got) != len(want) {
+		t.Fatalf("create acm:ImportCertificate has %d paths, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("create acm:ImportCertificate path %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestApplySchemaGates_ImportCertificateKeepsTheOtherPaths checks that the
+// correction leaves the other create actions and the update paths alone.
+func TestApplySchemaGates_ImportCertificateKeepsTheOtherPaths(t *testing.T) {
+	schema := acmCreateSchema()
+	applySchemaGates(schema)
+
+	if g := schema.Gates("create", "acm:DescribeCertificate"); len(g) != 1 || !g[0].Ungated() {
+		t.Errorf("create acm:DescribeCertificate = %+v, want one ungated path", g)
+	}
+	if g := schema.Gates("create", "acm:RequestCertificate"); len(g) != 1 || g[0].Attribute != "domain_name" {
+		t.Errorf("create acm:RequestCertificate = %+v, want the domain_name gate", g)
+	}
+	if g := schema.Gates("update", "acm:ImportCertificate"); len(g) != 1 || g[0].Changed != "certificate_body" {
+		t.Errorf("update acm:ImportCertificate = %+v, want the certificate_body change gate", g)
+	}
+}

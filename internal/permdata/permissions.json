@@ -66,7 +66,8 @@
       "ops": {
         "create": [
           {"action":"acm:RequestCertificate","attribute":"domain_name"},
-          {"action":"acm:ImportCertificate"},
+          {"action":"acm:ImportCertificate","attribute":"certificate_body","value_guarded":true},
+          {"action":"acm:ImportCertificate","attribute":"private_key_wo","value_guarded":true},
           {"action":"acm:DescribeCertificate"},
           {"action":"acm:AddTagsToCertificate","attribute":"tags"},
           {"action":"acm:ListTagsForCertificate"}

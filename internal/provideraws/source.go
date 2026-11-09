@@ -391,9 +391,11 @@ type schemaGate struct {
 	gate   iam.Gate
 }
 
-// schemaGates is the list of parser under-specifications. Each entry replaces
-// the gate of every path on which one operation reaches one action, on one
-// resource type. No entry re-adds an action the parser left out; that is what
+// schemaGates is the list of parser under-specifications. The entries for one
+// operation, action and resource type replace every path on which that
+// operation reaches the action: each entry becomes one path, in the order
+// listed. Several entries give an action that runs on any of several
+// attributes. No entry re-adds an action the parser left out; that is what
 // schemaCorrections does.
 var schemaGates = []schemaGate{
 	// resourceRoleCreate, resourceRoleUpdate and resourceRoleRead all end in
@@ -406,6 +408,19 @@ var schemaGates = []schemaGate{
 	{tfType: "aws_iam_role", op: "create", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
 	{tfType: "aws_iam_role", op: "update", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
 	{tfType: "aws_iam_role", op: "read", action: "iam:GetRolePolicy", gate: iam.Gate{Attribute: "inline_policy", ValueGuarded: true}},
+
+	// resourceCertificateCreate calls RequestCertificate when the
+	// configuration sets domain_name, and ImportCertificate in the else
+	// branch. Schema rules keep the two apart: domain_name conflicts with
+	// certificate_body and private_key_wo. The else branch tests no
+	// attribute, so the parser lists the import ungated and every requested
+	// certificate reports it. The import runs when the author gives a
+	// certificate_body. certificate_body is not sensitive, unlike private_key,
+	// whose value the plan may withhold. private_key_wo is write-only, so a
+	// certificate imported through it has no certificate_body to key on, and
+	// its presence in the configuration gates the second path.
+	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "certificate_body", ValueGuarded: true}},
+	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "private_key_wo", ValueGuarded: true}},
 }
 
 // applySchemaGates replaces the gate of the paths listed in schemaGates. Like
@@ -413,29 +428,43 @@ var schemaGates = []schemaGate{
 // requirements are assembled, so it takes effect whatever path added the
 // action.
 func applySchemaGates(schema *iam.Schema) {
+	type target struct{ op, action string }
+	gates := make(map[target][]iam.Gate)
+	var order []target
 	for _, g := range schemaGates {
 		if g.tfType != schema.TypeName {
 			continue
 		}
-		reqs, ok := schema.Ops[g.op]
+		t := target{g.op, g.action}
+		if _, seen := gates[t]; !seen {
+			order = append(order, t)
+		}
+		gates[t] = append(gates[t], g.gate)
+	}
+	for _, t := range order {
+		reqs, ok := schema.Ops[t.op]
 		if !ok {
 			continue
 		}
-		out := make([]iam.Requirement, len(reqs))
-		copy(out, reqs)
-		changed := false
-		for i, r := range out {
-			if r.Action != g.action {
+		out := make([]iam.Requirement, 0, len(reqs)+len(gates[t]))
+		emitted, changed := false, false
+		for _, r := range reqs {
+			if r.Action != t.action {
+				out = append(out, r)
 				continue
 			}
-			if out[i].Gate == g.gate {
+			if emitted {
+				changed = true
 				continue
 			}
-			out[i].Gate = g.gate
-			changed = true
+			emitted = true
+			for _, gate := range gates[t] {
+				out = append(out, iam.Requirement{Action: t.action, Gate: gate})
+			}
+			changed = changed || len(gates[t]) != 1 || r.Gate != gates[t][0]
 		}
 		if changed {
-			schema.Ops[g.op] = out
+			schema.Ops[t.op] = out
 		}
 	}
 }

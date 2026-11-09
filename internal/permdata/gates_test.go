@@ -47,3 +47,27 @@ func TestEmbedded_IAMRolePutRolePolicyKeepsItsGate(t *testing.T) {
 		}
 	}
 }
+
+// TestEmbedded_ACMImportCertificateIsGatedOnTheImportAttributes checks that
+// the generated table gates create's acm:ImportCertificate on certificate_body
+// and on the write-only private_key_wo. Ungated, it reports the import for a
+// certificate requested by domain_name.
+func TestEmbedded_ACMImportCertificateIsGatedOnTheImportAttributes(t *testing.T) {
+	s, err := Embedded().Resolve("aws_acm_certificate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s.Gates("create", "acm:ImportCertificate")
+	want := []iam.Gate{
+		{Attribute: "certificate_body", ValueGuarded: true},
+		{Attribute: "private_key_wo", ValueGuarded: true},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("create acm:ImportCertificate paths = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("path %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

@@ -1,0 +1,4 @@
+{"resource_changes":[
+{"address":"aws_acm_certificate.web","mode":"managed","type":"aws_acm_certificate","name":"web","change":{"actions":["create"],"before":null,"after":{"domain_name":"app.example.com","validation_method":"DNS","certificate_body":null,"private_key":null},"after_unknown":{"arn":true}}}
+],
+"configuration":{"root_module":{"resources":[{"address":"aws_acm_certificate.web","mode":"managed","type":"aws_acm_certificate","name":"web","expressions":{"domain_name":{"constant_value":"app.example.com"},"validation_method":{"constant_value":"DNS"}}}]}}}

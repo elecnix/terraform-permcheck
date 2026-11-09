@@ -1,0 +1,4 @@
+{"resource_changes":[
+{"address":"aws_acm_certificate.imported","mode":"managed","type":"aws_acm_certificate","name":"imported","change":{"actions":["create"],"before":null,"after":{"certificate_body":null,"private_key_wo":null,"private_key_wo_version":1,"domain_name":null},"after_unknown":{"arn":true}}}
+],
+"configuration":{"root_module":{"resources":[{"address":"aws_acm_certificate.imported","mode":"managed","type":"aws_acm_certificate","name":"imported","expressions":{"private_key_wo":{"references":["var.key"]},"private_key_wo_version":{"constant_value":1}}}]}}}
