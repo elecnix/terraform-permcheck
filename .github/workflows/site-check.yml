@@ -1,0 +1,40 @@
+name: site-check
+
+# Fails a pull request that breaks the Pages site: invalid HTML, or a link
+# to a local file or anchor that does not exist.
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - ".github/html-validate.json"
+      - ".github/workflows/site-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+
+permissions:
+  contents: read
+
+jobs:
+  site-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Validate the HTML
+        run: npx --yes html-validate@11.17.0 --config .github/html-validate.json site
+
+      # --offline checks only links to local files, and --include-fragments
+      # also checks that each #anchor exists in the page it points at.
+      - name: Check internal links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --offline --include-fragments --no-progress 'site/**/*.html'
+          fail: true

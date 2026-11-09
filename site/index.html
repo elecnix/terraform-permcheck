@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PermCheck: Terraform IAM permission check</title>
+<meta name="description" content="PermCheck checks a Terraform plan against the deploy role's IAM policy and reports each missing permission before terraform apply runs.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f5fd1'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300&amp;display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Apply a saved theme before the first paint, so the page does not flash.
+  (function () {
+    try {
+      var t = localStorage.getItem("permcheck-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* storage blocked: follow the system setting */ }
+  })();
+</script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>PermCheck</h1>
+      <p class="byline">Terraform IAM permission check, for AWS. Open source, MIT license.</p>
+    </div>
+    <button type="button" id="theme-toggle" class="toggle">Theme</button>
+  </header>
+
+  <nav class="toc" aria-label="On this page"><a href="#example">Example</a> <a href="#checks">Steps</a> <a href="#install">Install</a> <a href="#links">Documentation</a></nav>
+
+  <p class="lead">PermCheck reads a Terraform plan and checks that your deploy role's IAM policy allows the API calls the apply will make. It runs before <code>terraform apply</code>, so a missing permission shows up in the pull request, before a deploy fails on it.</p>
+
+  <section id="example">
+    <h2>An example finding</h2>
+    <p>The plan below creates an SQS queue with tags. The deploy policy grants <code>sqs:CreateQueue</code> and the other queue actions, but leaves out <code>sqs:TagQueue</code>. The AWS provider calls <code>TagQueue</code> when a queue has tags, so the apply would stop with <code>AccessDenied</code>.</p>
+<pre><code>$ terraform show -json plan.tfplan | terraform-permcheck validate \
+    --policy-file deploy_policy.json --cloud aws
+Missing IAM permissions (1):
+  sqs:TagQueue [required]
+    → aws_sqs_queue.orders (create)
+
+1 resource change checked, 1 distinct missing permission found.
+$ echo $?
+1</code></pre>
+    <p>Exit code 1 fails the CI step. With <code>--format github-annotations</code>, each finding appears as a warning annotation on the pull request, next to the resource block when the run knows its file and line.</p>
+  </section>
+
+  <section id="checks">
+    <h2>Steps of a check</h2>
+    <div class="flow">
+      <div class="box"><h3>Read the plan</h3><p>Each resource change in <code>terraform show -json</code>: create, update, replace and delete.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="box"><h3>List the API calls</h3><p>The IAM actions each resource type needs, parsed from the AWS provider source, with CloudFormation schemas for the rest.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="box"><h3>Compare with the policy</h3><p>Actions, resource ARNs and conditions in the deploy role's policy document.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="box req"><h3>Report the gaps</h3><p>Text, GitHub annotations or JSON. Exit code 1 when a permission is missing.</p></div>
+    </div>
+    <p>Some permissions depend on what the plan sets. A <code>tags</code> block adds a tagging call, and a change to <code>permissions_boundary</code> adds a boundary call. PermCheck reads the planned values and asks for those permissions only when the apply makes the call.</p>
+    <p>Static HCL mode reads the <code>.tf</code> files directly. It runs without a plan or cloud credentials, so pull requests from forks can run the check too. AWS is the supported cloud today. GCP and Azure are planned.</p>
+  </section>
+
+  <section id="install">
+    <h2>Install and run</h2>
+    <div class="ways">
+      <div class="card">
+        <h3>GitHub Action</h3>
+        <p>Listed on the Marketplace as <a href="https://github.com/marketplace/actions/terraform-iam-permission-check">Terraform IAM permission check</a>. Pin it to a release tag.</p>
+<pre><code>- name: Check IAM permissions
+  uses: elecnix/terraform-permcheck@v0.9.2
+  with:
+    plan-file: plan.json
+    policy-file: deploy_policy.json
+    terraform-root: .</code></pre>
+      </div>
+      <div class="card">
+        <h3>Homebrew</h3>
+        <p>Installs the release binary from the project tap.</p>
+<pre><code>brew install elecnix/tap/terraform-permcheck</code></pre>
+      </div>
+      <div class="card">
+        <h3>Go</h3>
+        <p>Builds from source with Go 1.26 or later. Binaries for Linux, macOS and Windows are on the <a href="https://github.com/elecnix/terraform-permcheck/releases">releases page</a>.</p>
+<pre><code>go install github.com/elecnix/terraform-permcheck@latest</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="links">
+    <h2>Documentation and support</h2>
+    <ul class="links">
+      <li><a href="https://github.com/elecnix/terraform-permcheck#readme">README</a>: every flag, output format, exit code and config option.</li>
+      <li><a href="https://github.com/elecnix/terraform-permcheck/releases">Releases</a>: binaries and checksums for each version.</li>
+      <li><a href="https://github.com/elecnix/terraform-permcheck/issues">Issues</a>: report a false positive, a missing permission or a bug.</li>
+      <li><a href="https://github.com/elecnix/terraform-permcheck">Source on GitHub</a>, under the <a href="https://github.com/elecnix/terraform-permcheck/blob/main/LICENSE">MIT license</a>.</li>
+    </ul>
+  </section>
+</main>
+<script>
+  (function () {
+    var root = document.documentElement;
+    var button = document.getElementById("theme-toggle");
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    function current() {
+      var t = root.getAttribute("data-theme");
+      if (t === "light" || t === "dark") return t;
+      return media.matches ? "dark" : "light";
+    }
+    function label() {
+      var next = current() === "dark" ? "light" : "dark";
+      button.textContent = next === "dark" ? "Dark mode" : "Light mode";
+      button.setAttribute("aria-label", "Switch to " + next + " mode");
+    }
+    button.addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("permcheck-theme", next); } catch (e) { /* not saved */ }
+      label();
+    });
+    if (media.addEventListener) media.addEventListener("change", label);
+    label();
+  })();
+</script>
+</body>
+</html>
