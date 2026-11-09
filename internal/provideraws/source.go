@@ -274,11 +274,13 @@ func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
 			}
 			continue
 		}
-		// Prefer the @SDKResource annotation (canonical), fall back to
-		// file-path derivation.
-		tfType := resourceTypeFromAnnotation(src)
-		if tfType == "" {
-			tfType = resourceTypeFromFile(serviceName, name)
+		// Prefer the @SDKResource annotations (canonical), fall back to
+		// file-path derivation. A file that declares its resource under
+		// several names, such as aws_alb_listener and aws_lb_listener,
+		// yields one resource per name, all bound to the same functions.
+		tfTypes := resourceTypesFromAnnotation(src)
+		if len(tfTypes) == 0 {
+			tfTypes = []string{resourceTypeFromFile(serviceName, name)}
 		}
 		// A resource names its operations by suffix (resourceVaultCreate)
 		// or binds them in its schema.Resource literal. Only a literal that
@@ -287,21 +289,21 @@ func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
 		// A create bound to a method (h.Upsert) names no function to follow,
 		// so such a file stays unresolved rather than get an empty entry.
 		resourceName := resourceNameFromFile(parsed[name])
-		if tfType == "" {
-			continue
-		}
 		if resourceName == "" {
 			if create := operationBindings(parsed[name])["create"]; len(create) == 0 || create[0] == "" {
 				continue
 			}
 		}
-		found = append(found, resourceFile{
-			pkg:        pkg,
-			tfType:     tfType,
-			funcs:      pkg.resourceFuncs(name, resourceName),
-			tagged:     hasTagsAnnotation(src),
-			tagActions: tagActions,
-		})
+		funcs := pkg.resourceFuncs(name, resourceName)
+		for _, tfType := range tfTypes {
+			found = append(found, resourceFile{
+				pkg:        pkg,
+				tfType:     tfType,
+				funcs:      funcs,
+				tagged:     hasTagsAnnotation(src),
+				tagActions: tagActions,
+			})
+		}
 	}
 	pkg.files = nil
 	return pkg, found
@@ -567,19 +569,20 @@ func setGates(schema *iam.Schema, op, action string, gates []iam.Gate) {
 	schema.Ops[op] = out
 }
 
-// resourceTypeFromAnnotation extracts the terraform resource type from an
-// @SDKResource annotation in the Go source code.
+// resourceTypesFromAnnotation extracts the terraform resource types from the
+// @SDKResource annotations in the Go source code, in source order. A file
+// may declare its resource under a deprecated name and its current one:
 //
-//	// @SDKResource("aws_instance", name="Instance")
-//	// @SDKResource("aws_cloudwatch_log_group", name="Log Group")
+//	// @SDKResource("aws_alb_listener", name="Listener")
+//	// @SDKResource("aws_lb_listener", name="Listener")
 //
-// Returns empty string if no annotation is found.
-func resourceTypeFromAnnotation(src []byte) string {
-	matches := sdkResourceAnnotationRE.FindSubmatch(src)
-	if len(matches) >= 2 {
-		return string(matches[1])
+// Returns nil if no annotation is found.
+func resourceTypesFromAnnotation(src []byte) []string {
+	var types []string
+	for _, m := range sdkResourceAnnotationRE.FindAllSubmatch(src, -1) {
+		types = append(types, string(m[1]))
 	}
-	return ""
+	return types
 }
 
 // resourceTypeFromFile derives the terraform resource type from the file path.

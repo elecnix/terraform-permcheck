@@ -1,0 +1,49 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "resource_changes": [
+    {
+      "address": "aws_lb_listener.https",
+      "mode": "managed",
+      "type": "aws_lb_listener",
+      "name": "https",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/web/0123456789abcdef",
+          "port": 443,
+          "protocol": "HTTPS",
+          "certificate_arn": "arn:aws:acm:us-east-1:111111111111:certificate/00000000-0000-0000-0000-000000000000",
+          "ssl_policy": "ELBSecurityPolicy-2016-08",
+          "default_action": [
+            {
+              "type": "forward",
+              "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:targetgroup/web/0123456789abcdef",
+              "authenticate_cognito": [],
+              "authenticate_oidc": []
+            }
+          ],
+          "tags": null
+        },
+        "after": {
+          "load_balancer_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:loadbalancer/app/web/0123456789abcdef",
+          "port": 443,
+          "protocol": "HTTPS",
+          "certificate_arn": "arn:aws:acm:us-east-1:111111111111:certificate/00000000-0000-0000-0000-000000000000",
+          "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+          "default_action": [
+            {
+              "type": "forward",
+              "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:111111111111:targetgroup/web/0123456789abcdef",
+              "authenticate_cognito": [],
+              "authenticate_oidc": []
+            }
+          ],
+          "tags": null
+        },
+        "after_unknown": {}
+      }
+    }
+  ]
+}

@@ -154,7 +154,7 @@ func TestSourceProvider_ImplementsResolver(t *testing.T) {
 	var _ iam.Resolver = (*SourceProvider)(nil)
 }
 
-func TestResourceTypeFromAnnotation(t *testing.T) {
+func TestResourceTypesFromAnnotation(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
@@ -211,13 +211,22 @@ package ec2`,
 package thing`,
 			want: "aws_thing_widget",
 		},
+		{
+			// A file names its resource under a deprecated name and its
+			// current one; both are returned, in source order.
+			name: "two annotations",
+			src: `// @SDKResource("aws_alb_listener", name="Listener")
+// @SDKResource("aws_lb_listener", name="Listener")
+package elbv2`,
+			want: "aws_alb_listener,aws_lb_listener",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resourceTypeFromAnnotation([]byte(tt.src))
+			got := strings.Join(resourceTypesFromAnnotation([]byte(tt.src)), ",")
 			if got != tt.want {
-				t.Errorf("resourceTypeFromAnnotation() = %q, want %q", got, tt.want)
+				t.Errorf("resourceTypesFromAnnotation() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -698,5 +707,66 @@ func TestSourceProvider_ParseErrorIsKept(t *testing.T) {
 	}
 	if _, err := p.Schemas(); err == nil || !strings.Contains(err.Error(), "service directory not found") {
 		t.Errorf("Schemas() = %v, want the parse error", err)
+	}
+}
+
+// TestParseFileEveryAnnotationName checks that a file declaring a resource
+// under two @SDKResource names, as elbv2/listener.go does with
+// aws_alb_listener and aws_lb_listener, yields a schema under each name.
+func TestParseFileEveryAnnotationName(t *testing.T) {
+	dir := t.TempDir()
+	svcDir := filepath.Join(dir, "internal", "service", "elbv2")
+	if err := os.MkdirAll(svcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	src := `package elbv2
+
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+)
+
+// @SDKResource("aws_alb_listener", name="Listener")
+// @SDKResource("aws_lb_listener", name="Listener")
+func resourceListener() *schema.Resource {
+	return &schema.Resource{}
+}
+
+func resourceListenerCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).ELBV2Client(ctx)
+	_, err := conn.CreateListener(ctx, &elasticloadbalancingv2.CreateListenerInput{})
+	if err != nil { return nil }
+	return nil
+}
+
+func resourceListenerDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).ELBV2Client(ctx)
+	_, err := conn.DeleteListener(ctx, &elasticloadbalancingv2.DeleteListenerInput{})
+	if err != nil { return nil }
+	return nil
+}
+`
+	if err := os.WriteFile(filepath.Join(svcDir, "listener.go"), []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewSourceProviderWithPath(dir)
+	if err := p.Ensure(); err != nil {
+		t.Fatalf("Ensure failed: %v", err)
+	}
+	for _, tfType := range []string{"aws_alb_listener", "aws_lb_listener"} {
+		schema, err := p.Resolve(tfType)
+		if err != nil {
+			t.Errorf("resolve %s: %v", tfType, err)
+			continue
+		}
+		if schema.TypeName != tfType {
+			t.Errorf("%s: TypeName = %q", tfType, schema.TypeName)
+		}
+		if got := schema.Actions("create"); !containsAction(got, "elasticloadbalancing:CreateListener") {
+			t.Errorf("%s create: expected elasticloadbalancing:CreateListener, got %v", tfType, got)
+		}
 	}
 }

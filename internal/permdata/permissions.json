@@ -17576,6 +17576,48 @@
         ]
       }
     },
+    "aws_lb": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:CreateLoadBalancer"},
+          {"action":"elasticloadbalancing:SetSecurityGroups","attribute":"enforce_security_group_inbound_rules_on_private_link_traffic"},
+          {"action":"elasticloadbalancing:SetSecurityGroups","changed":"enforce_security_group_inbound_rules_on_private_link_traffic"},
+          {"action":"elasticloadbalancing:SetSecurityGroups","changed":"security_groups"},
+          {"action":"elasticloadbalancing:DescribeLoadBalancers"},
+          {"action":"elasticloadbalancing:RemoveTags"},
+          {"action":"elasticloadbalancing:AddTags"},
+          {"action":"elasticloadbalancing:SetSubnets","changed":"subnet_mapping"},
+          {"action":"elasticloadbalancing:SetSubnets","changed":"subnets"},
+          {"action":"elasticloadbalancing:SetIpAddressType","changed":"ip_address_type"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:DescribeLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:DeleteLoadBalancer"},
+          {"action":"ec2:DescribeNetworkInterfaces"},
+          {"action":"ec2:DetachNetworkInterface"},
+          {"action":"ec2:DeleteNetworkInterface"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeLoadBalancers"},
+          {"action":"elasticloadbalancing:DescribeLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "update": [
+          {"action":"elasticloadbalancing:SetSecurityGroups","changed":"enforce_security_group_inbound_rules_on_private_link_traffic"},
+          {"action":"elasticloadbalancing:SetSecurityGroups","changed":"security_groups"},
+          {"action":"elasticloadbalancing:SetSubnets","changed":"subnet_mapping"},
+          {"action":"elasticloadbalancing:SetSubnets","changed":"subnets"},
+          {"action":"elasticloadbalancing:SetIpAddressType","changed":"ip_address_type"},
+          {"action":"elasticloadbalancing:ModifyLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:DescribeLoadBalancers"},
+          {"action":"elasticloadbalancing:DescribeLoadBalancerAttributes"},
+          {"action":"elasticloadbalancing:AddTags","attribute":"tags"},
+          {"action":"elasticloadbalancing:RemoveTags","attribute":"tags"}
+        ]
+      }
+    },
     "aws_lb_cookie_stickiness_policy": {
       "ops": {
         "create": [
@@ -17594,6 +17636,74 @@
         ]
       }
     },
+    "aws_lb_listener": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:CreateListener"},
+          {"action":"elasticloadbalancing:DescribeListeners"},
+          {"action":"elasticloadbalancing:RemoveTags"},
+          {"action":"elasticloadbalancing:AddTags"},
+          {"action":"elasticloadbalancing:DescribeListenerAttributes"},
+          {"action":"elasticloadbalancing:ModifyListenerAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:DeleteListener"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeListeners"},
+          {"action":"elasticloadbalancing:DescribeListenerAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "update": [
+          {"action":"elasticloadbalancing:ModifyListener"},
+          {"action":"elasticloadbalancing:ModifyListenerAttributes"},
+          {"action":"elasticloadbalancing:DescribeListeners"},
+          {"action":"elasticloadbalancing:DescribeListenerAttributes"},
+          {"action":"elasticloadbalancing:AddTags","attribute":"tags"},
+          {"action":"elasticloadbalancing:RemoveTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_lb_listener_certificate": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:AddListenerCertificates"},
+          {"action":"elasticloadbalancing:DescribeListenerCertificates"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:RemoveListenerCertificates"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeListenerCertificates"}
+        ]
+      }
+    },
+    "aws_lb_listener_rule": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:CreateRule"},
+          {"action":"elasticloadbalancing:DescribeRules"},
+          {"action":"elasticloadbalancing:RemoveTags"},
+          {"action":"elasticloadbalancing:AddTags"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:DeleteRule"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeRules"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "update": [
+          {"action":"elasticloadbalancing:SetRulePriorities","changed":"priority"},
+          {"action":"elasticloadbalancing:ModifyRule"},
+          {"action":"elasticloadbalancing:DescribeRules"},
+          {"action":"elasticloadbalancing:AddTags","attribute":"tags"},
+          {"action":"elasticloadbalancing:RemoveTags","attribute":"tags"}
+        ]
+      }
+    },
     "aws_lb_ssl_negotiation_policy": {
       "ops": {
         "create": [
@@ -17609,6 +17719,48 @@
         "read": [
           {"action":"elasticloadbalancing:DescribeLoadBalancerPolicies"},
           {"action":"elasticloadbalancing:DescribeLoadBalancers"}
+        ]
+      }
+    },
+    "aws_lb_target_group": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:CreateTargetGroup"},
+          {"action":"elasticloadbalancing:ModifyTargetGroupAttributes"},
+          {"action":"elasticloadbalancing:DescribeTargetGroups"},
+          {"action":"elasticloadbalancing:RemoveTags"},
+          {"action":"elasticloadbalancing:AddTags"},
+          {"action":"elasticloadbalancing:DescribeTargetGroupAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:DeleteTargetGroup"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeTargetGroups"},
+          {"action":"elasticloadbalancing:DescribeTargetGroupAttributes"},
+          {"action":"elasticloadbalancing:DescribeTags"}
+        ],
+        "update": [
+          {"action":"elasticloadbalancing:ModifyTargetGroup","changed":"health_check"},
+          {"action":"elasticloadbalancing:ModifyTargetGroupAttributes"},
+          {"action":"elasticloadbalancing:DescribeTargetGroups"},
+          {"action":"elasticloadbalancing:DescribeTargetGroupAttributes"},
+          {"action":"elasticloadbalancing:AddTags","attribute":"tags"},
+          {"action":"elasticloadbalancing:RemoveTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_lb_target_group_attachment": {
+      "ops": {
+        "create": [
+          {"action":"elasticloadbalancing:RegisterTargets"}
+        ],
+        "delete": [
+          {"action":"elasticloadbalancing:DeregisterTargets"}
+        ],
+        "read": [
+          {"action":"elasticloadbalancing:DescribeTargetHealth"}
         ]
       }
     },

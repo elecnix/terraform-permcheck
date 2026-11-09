@@ -1413,3 +1413,26 @@ func TestValidate_AnnotationPathUnchangedWhenRootIsWorkspace(t *testing.T) {
 		t.Errorf("annotation does not carry file=main.tf:\n%s", out)
 	}
 }
+
+// TestValidate_LBListenerForwardNeedsNoCognito runs the plan from issue #167:
+// an aws_lb_listener whose only action is forward. The provider never calls
+// Cognito for a listener, so a policy that grants the listener actions covers
+// the update. The type must resolve through the embedded table, which keys it
+// under both of its @SDKResource names, and not through the CloudFormation
+// registry, whose listener handler lists cognito-idp:DescribeUserPoolClient.
+func TestValidate_LBListenerForwardNeedsNoCognito(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := run([]string{"validate",
+			"--plan-file", "testdata/lb_listener_plan.json",
+			"--policy-file", "testdata/lb_listener_policy.json",
+			"--cloud", "aws",
+			"--format", "json",
+		})
+		if err != nil {
+			t.Errorf("expected no gaps, got %v", err)
+		}
+	})
+	if strings.Contains(out, "cognito-idp:") {
+		t.Errorf("report names a Cognito action for a forward listener:\n%s", out)
+	}
+}

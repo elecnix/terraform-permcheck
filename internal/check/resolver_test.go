@@ -2,6 +2,7 @@ package check
 
 import (
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/cloud"
@@ -93,5 +94,35 @@ func TestResolverFor_SharedPerSource(t *testing.T) {
 	}
 	if ResolverFor(SourceLive) == ResolverFor(SourceEmbedded) {
 		t.Error("live and embedded share one resolver")
+	}
+}
+
+// TestEmbedded_CurrentNamesOfAliasedTypes checks that the embedded table
+// holds each type a provider file declares under a second @SDKResource name,
+// such as aws_lb_listener beside aws_alb_listener, with the same schema as
+// its twin. A missing name falls through to the CloudFormation registry.
+func TestEmbedded_CurrentNamesOfAliasedTypes(t *testing.T) {
+	table := permdata.Embedded()
+	for current, alias := range map[string]string{
+		"aws_lb":                         "aws_alb",
+		"aws_lb_listener":                "aws_alb_listener",
+		"aws_lb_listener_certificate":    "aws_alb_listener_certificate",
+		"aws_lb_listener_rule":           "aws_alb_listener_rule",
+		"aws_lb_target_group":            "aws_alb_target_group",
+		"aws_lb_target_group_attachment": "aws_alb_target_group_attachment",
+	} {
+		got, err := table.Resolve(current)
+		if err != nil {
+			t.Errorf("embedded table does not resolve %s: %v", current, err)
+			continue
+		}
+		want, err := table.Resolve(alias)
+		if err != nil {
+			t.Errorf("embedded table does not resolve %s: %v", alias, err)
+			continue
+		}
+		if !reflect.DeepEqual(got.Ops, want.Ops) {
+			t.Errorf("%s ops = %v, want those of %s: %v", current, got.Ops, alias, want.Ops)
+		}
 	}
 }
