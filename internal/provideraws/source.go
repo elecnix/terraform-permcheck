@@ -418,7 +418,10 @@ var schemaGates = []schemaGate{
 	// certificate_body. certificate_body is not sensitive, unlike private_key,
 	// whose value the plan may withhold. private_key_wo is write-only, so a
 	// certificate imported through it has no certificate_body to key on, and
-	// its presence in the configuration gates the second path.
+	// its planned value is always null, so a presence gate on the plan state
+	// would never hold. Both paths are value guards: a value guard holds when
+	// the plan's configuration section sets the attribute, which a write-only
+	// attribute does.
 	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "certificate_body", ValueGuarded: true}},
 	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "private_key_wo", ValueGuarded: true}},
 }
