@@ -119,6 +119,12 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			},
 		},
 		{
+			// A StringLike grant limited to Lambda does not cover a role
+			// that an event target passes to EventBridge.
+			name: "StringLike passed-to-service", plan: "passedtoservice_like_plan.json", policy: "passedtoservice_like_policy.json",
+			present: []string{"aws_cloudwatch_event_target.run iam:PassRole"},
+		},
+		{
 			// A PassRole grant on role/myapp does not reach the role app.
 			name: "role ARN from path and name", plan: "passrole_name_plan.json", policy: "passrole_name_policy.json",
 			present: []string{"aws_lambda_function.f iam:PassRole"},

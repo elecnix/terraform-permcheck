@@ -161,8 +161,8 @@ type conditionOperator struct {
 	arn bool
 	// exact reports whether the operator compares whole strings with no
 	// wildcard (StringEquals). The other modelled operator, StringLike,
-	// supports wildcards anywhere, and no decidable test says two
-	// wildcard patterns are disjoint, so it never proves a mismatch.
+	// supports wildcards in the policy's pattern and proves a mismatch
+	// only against a literal plan value.
 	exact bool
 }
 
@@ -288,10 +288,21 @@ func matchValue(op conditionOperator, pattern, value string) conditionResult {
 		}
 		return condFails
 	default:
-		// StringLike supports * and ? anywhere, and no decidable test
-		// says two wildcard patterns are disjoint, so it can hold but
-		// never fail.
-		return condHolds
+		// StringLike supports * and ? in the policy's pattern. When the
+		// plan's value is a literal, matching is decidable: * matches any
+		// run of characters, ? one character, case-sensitively. A plan
+		// value that is itself a pattern cannot be decided.
+		if strings.ContainsAny(value, "*?") {
+			return condUnknown
+		}
+		may, decidable := globIntersect(pattern, value)
+		if !decidable {
+			return condUnknown
+		}
+		if may {
+			return condHolds
+		}
+		return condFails
 	}
 }
 

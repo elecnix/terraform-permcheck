@@ -53,3 +53,16 @@ func TestPassedToService_EventTargetNotCoveredByLambdaGrant(t *testing.T) {
 		t.Fatalf("a PassRole grant limited to Lambda must not cover an event target, got %+v", m)
 	}
 }
+
+func TestPassedToService_StringLikeLambdaGrantDoesNotCoverEventTarget(t *testing.T) {
+	rc := &plan.ResourceChange{
+		Type: "aws_cloudwatch_event_target", Name: "example", Change: "create",
+		AttributeValues: map[string]string{"role_arn": exampleRoleARN},
+	}
+	doc := mustPolicy(t, passRoleGrant(t, "StringLike", "lambda.amazonaws.com"))
+	for _, strict := range []bool{false, true} {
+		if m := impliedMissing(rc, doc, newChangeSet([]*plan.ResourceChange{rc}), strict); !hasAction(m, "iam:PassRole") {
+			t.Errorf("strict=%v: a StringLike PassRole grant limited to Lambda must not cover an event target, got %+v", strict, m)
+		}
+	}
+}

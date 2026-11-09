@@ -1,0 +1,3 @@
+{"resource_changes":[
+{"address":"aws_cloudwatch_event_target.run","mode":"managed","type":"aws_cloudwatch_event_target","name":"run","change":{"actions":["create"],"before":null,"after":{"rule":"nightly","target_id":"run","arn":"arn:aws:states:us-east-1:123456789012:stateMachine:job","role_arn":"arn:aws:iam::123456789012:role/example-events-role"},"after_unknown":{}}}
+]}

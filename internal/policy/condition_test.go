@@ -138,24 +138,59 @@ func TestMatchCondition_StringOperators(t *testing.T) {
 			want:      condFails,
 		},
 		{
-			// A wildcard pattern cannot be shown to be disjoint from
-			// anything, so StringLike never proves a mismatch.
 			name:      "StringLike matching",
 			condition: `{"StringLike":{"lambda:FunctionArn":"arn:aws:lambda:us-east-1:111122223333:function:example-*"}}`,
 			context:   functionContext,
 			want:      condHolds,
 		},
 		{
-			name:      "StringLike never proves a mismatch",
+			name:      "StringLike provably excluding a literal",
 			condition: `{"StringLike":{"lambda:FunctionArn":"arn:aws:lambda:us-east-1:111122223333:function:other-*"}}`,
 			context:   functionContext,
-			want:      condHolds,
+			want:      condFails,
 		},
 		{
 			name:      "StringLike with a plain value that differs",
 			condition: `{"StringLike":{"lambda:FunctionArn":"other"}}`,
 			context:   Conditions{"lambda:FunctionArn": "example-new-consumer"},
+			want:      condFails,
+		},
+		{
+			name:      "StringLike lambda service against an events literal",
+			condition: `{"StringLike":{"iam:PassedToService":"lambda.amazonaws.com"}}`,
+			context:   Conditions{"iam:PassedToService": "events.amazonaws.com"},
+			want:      condFails,
+		},
+		{
+			name:      "StringLike service wildcard holds",
+			condition: `{"StringLike":{"iam:PassedToService":"*.amazonaws.com"}}`,
+			context:   Conditions{"iam:PassedToService": "events.amazonaws.com"},
 			want:      condHolds,
+		},
+		{
+			name:      "StringLike question mark matches one character",
+			condition: `{"StringLike":{"iam:PassedToService":"event?.amazonaws.com"}}`,
+			context:   Conditions{"iam:PassedToService": "events.amazonaws.com"},
+			want:      condHolds,
+		},
+		{
+			name:      "StringLike question mark does not match two characters",
+			condition: `{"StringLike":{"iam:PassedToService":"event?.amazonaws.com"}}`,
+			context:   Conditions{"iam:PassedToService": "eventss.amazonaws.com"},
+			want:      condFails,
+		},
+		{
+			name:      "StringLike is case-sensitive",
+			condition: `{"StringLike":{"iam:PassedToService":"Events.amazonaws.com"}}`,
+			context:   Conditions{"iam:PassedToService": "events.amazonaws.com"},
+			want:      condFails,
+		},
+		{
+			// The plan value is itself a pattern, so the tool cannot decide.
+			name:      "StringLike against a plan pattern is unknown",
+			condition: `{"StringLike":{"lambda:FunctionArn":"arn:aws:lambda:us-east-1:111122223333:function:other-*"}}`,
+			context:   Conditions{"lambda:FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:*"},
+			want:      condUnknown,
 		},
 	}
 	for _, tt := range tests {
