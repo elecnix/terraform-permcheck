@@ -203,16 +203,10 @@ func operationRequirements(schema *Schema, op string) []Requirement {
 // is a finding of its own that names the action it depends on.
 func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document, dedicated bool, inPlan map[string]bool, filter FilterConfig) []MissingAction {
 	var missing []MissingAction
-	groups := pathsByAction(reqs)
-	direct := make(map[string]bool, len(groups))
-	for _, g := range groups {
-		// Only an action the plan requires is reported on its own. One whose
-		// gates all fail is not, so a dependency on it must still be.
-		if needed, _, _ := evaluateGates(withHiddenGates(rc.Type, g.action, g.gates()), rc); needed {
-			direct[g.action] = true
-		}
-	}
-	for _, paths := range groups {
+	// classify decides whether the plan reports an action on its own: some
+	// path's gate holds, no sub-resource owns it, and the filter keeps its
+	// class. It returns the class and the gate attribute the report shows.
+	classify := func(paths actionPaths) (class Class, gateAttr string, kept bool) {
 		action := paths.action
 		// An action is needed when the gate of any path that reaches it
 		// holds. A gate holds when its presence test and its change test
@@ -222,13 +216,13 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		gates := withHiddenGates(rc.Type, action, paths.gates())
 		needed, gateAttr, bestEffort := evaluateGates(gates, rc)
 		if !needed {
-			continue
+			return 0, "", false
 		}
 
 		// A sub-resource in the plan that owns the action reports it.
 		d := decide(rc.Type, action, bestEffort, dedicated, inPlan)
 		if d.absorbedBy != "" {
-			continue
+			return 0, "", false
 		}
 		// An optional feature the plan sets is required for this apply.
 		if d.class == ClassOptional && !bestEffort && featureUsed(action, gates, rc) {
@@ -236,14 +230,34 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		}
 
 		// Filter by class
-		class := d.class
+		class = d.class
 		if filter.ExcludeDataPlane && class == ClassDataPlane {
-			continue
+			return 0, "", false
 		}
 		if filter.ExcludeOptional && class == ClassOptional {
-			continue
+			return 0, "", false
 		}
 		if filter.ExcludeConditional && gateAttr != "" {
+			return 0, "", false
+		}
+		return class, gateAttr, true
+	}
+
+	groups := pathsByAction(reqs)
+	// direct holds the actions the report shows on their own. A dependency on
+	// one of them is its finding to make. A dependency on an action the plan
+	// lists but does not report, because its gate fails or the filter drops
+	// it, is still reported with its parent.
+	direct := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		if _, _, kept := classify(g); kept {
+			direct[g.action] = true
+		}
+	}
+	for _, paths := range groups {
+		action := paths.action
+		class, gateAttr, kept := classify(paths)
+		if !kept {
 			continue
 		}
 

@@ -137,3 +137,43 @@ func TestDependentActions_UnrequiredListingDoesNotSuppressDependency(t *testing.
 		t.Errorf("want %s reported as a dependency, got %+v", listByVault, got)
 	}
 }
+
+// A dependent action the type lists, but the conditional filter drops, is not
+// reported on its own, so the parent reports it.
+func TestDependentActions_ConditionalFilterDoesNotHideDependency(t *testing.T) {
+	reqs := []targeted{
+		{Requirement: Requirement{Action: listByResource}},
+		{Requirement: Requirement{Action: listByVault, Gate: Gate{Attribute: "used"}}},
+	}
+	rc := dependentChange()
+	rc.Attributes = map[string]bool{"used": true}
+	got := checkChange(rc, reqs, grantActions(listByResource), false, nil, FilterConfig{ExcludeConditional: true})
+	if len(got) != 1 || got[0].Action != listByVault || got[0].DependsOn != listByResource {
+		t.Errorf("want %s reported as a dependency, got %+v", listByVault, got)
+	}
+}
+
+// The same holds when the class filter drops the directly listed action,
+// whose class the filter excludes.
+func TestDependentActions_ClassFilterDoesNotHideDependency(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		filter FilterConfig
+		class  Class
+	}{
+		{"data-plane", FilterConfig{ExcludeDataPlane: true}, ClassDataPlane},
+		{"optional", FilterConfig{ExcludeOptional: true}, ClassOptional},
+	} {
+		parent, dep := "x:Parent", "x:Dependent"
+		saved := dependentActions
+		dependentActions = map[string][]dependentAction{parent: {{action: dep, evidence: "test"}}}
+		ruleIndex[dep] = rule{class: c.class}
+		reqs := []targeted{{Requirement: Requirement{Action: parent}}, {Requirement: Requirement{Action: dep}}}
+		got := checkChange(dependentChange(), reqs, grantActions(parent), false, nil, c.filter)
+		delete(ruleIndex, dep)
+		dependentActions = saved
+		if len(got) != 1 || got[0].Action != dep || got[0].DependsOn != parent {
+			t.Errorf("%s: want %s reported as a dependency, got %+v", c.name, dep, got)
+		}
+	}
+}
