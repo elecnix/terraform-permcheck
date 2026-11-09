@@ -64,13 +64,16 @@ type JSONExcluded struct {
 // need and need_resource instead of resource_type, resource_name and change.
 // module_address is absent for a resource in the root module.
 type JSONMissing struct {
-	ModuleAddress      string `json:"module_address,omitempty"`
-	ResourceType       string `json:"resource_type,omitempty"`
-	ResourceName       string `json:"resource_name,omitempty"`
-	Change             string `json:"change,omitempty"`
-	Need               string `json:"need,omitempty"`
-	NeedResource       string `json:"need_resource,omitempty"`
-	MissingAction      string `json:"missing_action"`
+	ModuleAddress string `json:"module_address,omitempty"`
+	ResourceType  string `json:"resource_type,omitempty"`
+	ResourceName  string `json:"resource_name,omitempty"`
+	Change        string `json:"change,omitempty"`
+	Need          string `json:"need,omitempty"`
+	NeedResource  string `json:"need_resource,omitempty"`
+	MissingAction string `json:"missing_action"`
+	// DependsOn names the action AWS requires missing_action with, for a
+	// dependent action. It is absent for an action required on its own.
+	DependsOn          string `json:"depends_on,omitempty"`
 	Class              string `json:"class"`
 	ConditionAttribute string `json:"condition_attribute,omitempty"`
 	// Reason is the reason the declared need asked for the action, as the
@@ -139,6 +142,7 @@ func (r *Report) json() string {
 				Need:               f.Need,
 				NeedResource:       f.NeedResource,
 				MissingAction:      f.Action,
+				DependsOn:          f.DependsOn,
 				Class:              classTag(f.Class),
 				ConditionAttribute: f.ConditionAttribute,
 				Reason:             f.Reason,

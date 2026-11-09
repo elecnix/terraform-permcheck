@@ -900,3 +900,23 @@ func TestFormatJSON_UnverifiedCondition(t *testing.T) {
 		t.Errorf("unverified = %v, want condition", res.Missing[0]["unverified"])
 	}
 }
+
+// TestFormat_DependentActionNamesParent verifies every format names the
+// action a dependent action is required with.
+func TestFormat_DependentActionNamesParent(t *testing.T) {
+	missing := []iam.MissingAction{{
+		Action: "backup:ListRecoveryPointsByBackupVault", Service: "backup", Class: iam.ClassManagement,
+		Need: "ListBackups", DependsOn: "backup:ListRecoveryPointsByResource",
+	}}
+	const want = `needs "ListBackups", required with backup:ListRecoveryPointsByResource`
+
+	if got := formatMissing(missing, nil); !strings.Contains(got, "→ "+want) {
+		t.Errorf("text:\n%s", got)
+	}
+	if got := formatGitHubAnnotations(missing, nil); !strings.Contains(got, "needed by: "+want) {
+		t.Errorf("annotations:\n%s", got)
+	}
+	if got := formatJSON(missing, nil, 0, "resource changes", nil); !strings.Contains(got, `"depends_on": "backup:ListRecoveryPointsByResource"`) {
+		t.Errorf("json:\n%s", got)
+	}
+}

@@ -95,6 +95,10 @@ type MissingAction struct {
 	// a terraform resource change, and then the resource fields name the
 	// source instead.
 	Reason string
+	// DependsOn names the action that makes AWS check Action, when Action is
+	// a dependent action (see dependentActions): the finding reads "needed
+	// because DependsOn is required". Empty for an action required on its own.
+	DependsOn string
 	// Unresolved marks a resource change whose type no schema source knows.
 	// The tool has no permission data for it, so Action is empty and the
 	// change was not checked.
@@ -194,10 +198,17 @@ func operationRequirements(schema *Schema, op string) []Requirement {
 
 // checkChange returns a finding for each action of reqs that resource change
 // rc needs and the policy does not grant, after the filter. dedicated and
-// inPlan feed decide.
+// inPlan feed decide. An action with dependent actions (see
+// dependentActions) also needs them, and each one the policy does not grant
+// is a finding of its own that names the action it depends on.
 func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document, dedicated bool, inPlan map[string]bool, filter FilterConfig) []MissingAction {
 	var missing []MissingAction
-	for _, paths := range pathsByAction(reqs) {
+	groups := pathsByAction(reqs)
+	direct := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		direct[g.action] = true
+	}
+	for _, paths := range groups {
 		action := paths.action
 		// An action is needed when the gate of any path that reaches it
 		// holds. A gate holds when its presence test and its change test
@@ -220,14 +231,6 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 			d.class = ClassManagement
 		}
 
-		// Action coverage, resource-scoped when the target ARN is derivable
-		// from the plan, and condition-scoped when the plan shows the
-		// value of a condition key the policy uses.
-		verdict := paths.verdict(rc, doc, filter.StrictResources)
-		if verdict.Verdict == policy.Covered {
-			continue
-		}
-
 		// Filter by class
 		class := d.class
 		if filter.ExcludeDataPlane && class == ClassDataPlane {
@@ -240,9 +243,35 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 			continue
 		}
 
-		m := newFinding(action, class, verdict).on(rc)
-		m.ConditionAttribute = gateAttr
-		missing = append(missing, m)
+		// Action coverage, resource-scoped when the target ARN is derivable
+		// from the plan, and condition-scoped when the plan shows the
+		// value of a condition key the policy uses.
+		if verdict := paths.verdict(rc, doc, filter.StrictResources); verdict.Verdict != policy.Covered {
+			m := newFinding(action, class, verdict).on(rc)
+			m.ConditionAttribute = gateAttr
+			missing = append(missing, m)
+		}
+
+		// The dependent actions share the action's gate, class and filter,
+		// whether or not the action itself is granted. One the plan
+		// requires on its own is reported on its own.
+		for _, p := range paths.paths {
+			if !p.holds(rc) {
+				continue
+			}
+			for _, dep := range dependenciesOf(p.Requirement) {
+				if direct[dep.Action] {
+					continue
+				}
+				direct[dep.Action] = true
+				if verdict := dependencyVerdict(dep.Action, doc, filter.StrictResources); verdict.Verdict != policy.Covered {
+					m := newFinding(dep.Action, class, verdict).on(rc)
+					m.ConditionAttribute = gateAttr
+					m.DependsOn = dep.dependsOn
+					missing = append(missing, m)
+				}
+			}
+		}
 	}
 	return missing
 }

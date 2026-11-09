@@ -141,6 +141,29 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 				}
 			}
 		}
+
+		// A dependent action (see dependentActions) is checked once per need,
+		// and not at all when the need lists it, which reports it on its own.
+		// Its findings follow those of the need's own actions.
+		listed := make(map[string]bool, len(n.Actions))
+		for _, action := range n.Actions {
+			listed[action] = true
+		}
+		for _, action := range n.Actions {
+			for _, dep := range dependentActions[action] {
+				if listed[dep.action] {
+					continue
+				}
+				listed[dep.action] = true
+				if res := dependencyVerdict(dep.action, doc, strict); res.Verdict != policy.Covered {
+					m := newFinding(dep.action, ClassManagement, res)
+					m.Need = n.Sid
+					m.Reason = n.Reason
+					m.DependsOn = action
+					missing = append(missing, m)
+				}
+			}
+		}
 	}
 	return missing
 }

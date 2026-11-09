@@ -217,6 +217,24 @@ provider source, so PermCheck adds them explicitly:
   `[conditional: resource_arn]`. Use `--only-required` to suppress that
   over-approximation.
 
+### Dependent actions
+
+AWS authorizes a few actions only when the caller also holds a second action.
+`backup:ListRecoveryPointsByResource` fails with an "Insufficient privileges"
+error unless the caller also holds `backup:ListRecoveryPointsByBackupVault`,
+even with the first action granted on `*`. The Service Authorization Reference
+calls these pairs "dependent actions", but neither its machine-readable form
+nor its HTML pages list them, so PermCheck keeps a hand-curated table in
+`internal/iam/dependent.go`. Each row cites its evidence.
+
+Wherever PermCheck requires an action, from a resource type or from a declared
+need, it also requires that action's dependent actions, under the same gate and
+class. The finding names the action it depends on (`required with <action>` in
+the text and annotation formats, `depends_on` in JSON). The dependency acts on
+a resource the plan does not name, so it follows the rules of an action with an
+unknown target: a grant limited to some resources covers it, or is unverified
+under `--strict-resources`.
+
 ### Resource-scoped grants
 
 Some IAM grants are scoped to a specific resource ARN rather than the whole
