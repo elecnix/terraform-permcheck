@@ -122,3 +122,18 @@ func TestDependentActions_TableIsWellFormed(t *testing.T) {
 		}
 	}
 }
+
+// A dependent action the type lists only behind a gate that does not hold is
+// not required on its own, so the parent still pulls it in.
+func TestDependentActions_UnrequiredListingDoesNotSuppressDependency(t *testing.T) {
+	reqs := []targeted{
+		{Requirement: Requirement{Action: listByResource}},
+		{Requirement: Requirement{Action: listByVault, Gate: Gate{Attribute: "unset"}}},
+	}
+	rc := dependentChange()
+	rc.Attributes = map[string]bool{}
+	got := checkChange(rc, reqs, grantActions(listByResource), false, nil, FilterConfig{})
+	if len(got) != 1 || got[0].Action != listByVault || got[0].DependsOn != listByResource {
+		t.Errorf("want %s reported as a dependency, got %+v", listByVault, got)
+	}
+}

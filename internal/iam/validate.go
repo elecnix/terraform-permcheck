@@ -206,7 +206,11 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 	groups := pathsByAction(reqs)
 	direct := make(map[string]bool, len(groups))
 	for _, g := range groups {
-		direct[g.action] = true
+		// Only an action the plan requires is reported on its own. One whose
+		// gates all fail is not, so a dependency on it must still be.
+		if needed, _, _ := evaluateGates(withHiddenGates(rc.Type, g.action, g.gates()), rc); needed {
+			direct[g.action] = true
+		}
 	}
 	for _, paths := range groups {
 		action := paths.action
