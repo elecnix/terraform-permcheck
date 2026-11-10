@@ -323,7 +323,17 @@ that principal. The list may exclude it when it contains:
   principal's name while the account is unknown;
 - a role session ARN for the principal's role;
 - the principal's account, or an account PermCheck can't compare with the
-  principal's.
+  principal's;
+- an entry with a wildcard (`*` or `?`) that may match the principal's ARN,
+  a session ARN for its role, or its account, such as
+  `arn:aws:iam::444455556666:role/*` for a role in account `444455556666`.
+
+The [Principal element](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html)
+page says a wildcard can't match part of a principal name or ARN, but the
+NotPrincipal page doesn't say how AWS treats such an entry. PermCheck matches
+the entry as a pattern with the existing ARN matcher and counts a possible
+match as an exclusion. Otherwise a wildcard that spares the principal would
+turn a granted need into a false Missing verdict.
 
 The list also may exclude the principal when PermCheck can't compare it at
 all, such as a principal created with `name_prefix` whose name is unknown at
@@ -741,7 +751,9 @@ terraform writes a value, and hand-written otherwise.
   and an ARN with a name match and an unknown account. `NotPrincipal` cases:
   a Deny whose list holds another role only (definite), the principal's role
   and account (not definite), a name match with an unknown account (not
-  definite), another role while the principal has a boundary (definite), and
+  definite), a wildcard entry `arn:aws:iam::444455556666:role/*` that may
+  match the principal (not definite), a wildcard in another account
+  (definite), another role while the principal has a boundary (definite), and
   an Allow (dropped).
 - **Boundaries**: a boundary that allows, that provably doesn't, that has
   unknown text, and a resource policy that grants the role ARN under a
