@@ -280,9 +280,20 @@ func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
 		if tfType == "" {
 			tfType = resourceTypeFromFile(serviceName, name)
 		}
+		// A resource names its operations by suffix (resourceVaultCreate)
+		// or binds them in its schema.Resource literal. Only a literal that
+		// binds a create function makes a file without a ...Create or
+		// ...Delete function a resource; a data source binds only a read.
+		// A create bound to a method (h.Upsert) names no function to follow,
+		// so such a file stays unresolved rather than get an empty entry.
 		resourceName := resourceNameFromFile(parsed[name])
-		if tfType == "" || resourceName == "" {
+		if tfType == "" {
 			continue
+		}
+		if resourceName == "" {
+			if create := operationBindings(parsed[name])["create"]; len(create) == 0 || create[0] == "" {
+				continue
+			}
 		}
 		found = append(found, resourceFile{
 			pkg:        pkg,

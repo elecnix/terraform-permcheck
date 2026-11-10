@@ -62,6 +62,38 @@
         ]
       }
     },
+    "aws_account_primary_contact": {
+      "ops": {
+        "create": [
+          {"action":"account:PutContactInformation"},
+          {"action":"account:GetContactInformation"}
+        ],
+        "read": [
+          {"action":"account:GetContactInformation"}
+        ],
+        "update": [
+          {"action":"account:PutContactInformation"},
+          {"action":"account:GetContactInformation"}
+        ]
+      }
+    },
+    "aws_account_region": {
+      "ops": {
+        "create": [
+          {"action":"account:EnableRegion","attribute":"enabled"},
+          {"action":"account:DisableRegion"},
+          {"action":"account:GetRegionOptStatus"}
+        ],
+        "read": [
+          {"action":"account:GetRegionOptStatus"}
+        ],
+        "update": [
+          {"action":"account:EnableRegion","attribute":"enabled"},
+          {"action":"account:DisableRegion"},
+          {"action":"account:GetRegionOptStatus"}
+        ]
+      }
+    },
     "aws_acm_certificate": {
       "ops": {
         "create": [
@@ -2902,6 +2934,21 @@
         ]
       }
     },
+    "aws_backup_global_settings": {
+      "ops": {
+        "create": [
+          {"action":"backup:UpdateGlobalSettings"},
+          {"action":"backup:DescribeGlobalSettings"}
+        ],
+        "read": [
+          {"action":"backup:DescribeGlobalSettings"}
+        ],
+        "update": [
+          {"action":"backup:UpdateGlobalSettings"},
+          {"action":"backup:DescribeGlobalSettings"}
+        ]
+      }
+    },
     "aws_backup_logically_air_gapped_vault": {
       "ops": {
         "create": [
@@ -2944,6 +2991,21 @@
           {"action":"backup:GetBackupPlan"},
           {"action":"backup:TagResource","attribute":"tags"},
           {"action":"backup:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_backup_region_settings": {
+      "ops": {
+        "create": [
+          {"action":"backup:UpdateRegionSettings"},
+          {"action":"backup:DescribeRegionSettings"}
+        ],
+        "read": [
+          {"action":"backup:DescribeRegionSettings"}
+        ],
+        "update": [
+          {"action":"backup:UpdateRegionSettings"},
+          {"action":"backup:DescribeRegionSettings"}
         ]
       }
     },
@@ -5202,6 +5264,21 @@
         ]
       }
     },
+    "aws_cloudwatch_log_destination_policy": {
+      "ops": {
+        "create": [
+          {"action":"logs:PutDestinationPolicy"},
+          {"action":"logs:DescribeDestinations"}
+        ],
+        "read": [
+          {"action":"logs:DescribeDestinations"}
+        ],
+        "update": [
+          {"action":"logs:PutDestinationPolicy"},
+          {"action":"logs:DescribeDestinations"}
+        ]
+      }
+    },
     "aws_cloudwatch_log_group": {
       "ops": {
         "create": [
@@ -7273,6 +7350,23 @@
         ]
       }
     },
+    "aws_datapipeline_pipeline_definition": {
+      "ops": {
+        "create": [
+          {"action":"datapipeline:PutPipelineDefinition"},
+          {"action":"datapipeline:ActivatePipeline"},
+          {"action":"datapipeline:GetPipelineDefinition"}
+        ],
+        "read": [
+          {"action":"datapipeline:GetPipelineDefinition"}
+        ],
+        "update": [
+          {"action":"datapipeline:PutPipelineDefinition"},
+          {"action":"datapipeline:ActivatePipeline"},
+          {"action":"datapipeline:GetPipelineDefinition"}
+        ]
+      }
+    },
     "aws_datasync_agent": {
       "ops": {
         "create": [
@@ -8022,6 +8116,21 @@
         ]
       }
     },
+    "aws_db_proxy_default_target_group": {
+      "ops": {
+        "create": [
+          {"action":"rds:ModifyDBProxyTargetGroup"},
+          {"action":"rds:DescribeDBProxyTargetGroups"}
+        ],
+        "read": [
+          {"action":"rds:DescribeDBProxyTargetGroups"}
+        ],
+        "update": [
+          {"action":"rds:ModifyDBProxyTargetGroup"},
+          {"action":"rds:DescribeDBProxyTargetGroups"}
+        ]
+      }
+    },
     "aws_db_proxy_endpoint": {
       "ops": {
         "create": [
@@ -8400,6 +8509,21 @@
         ],
         "read": [
           {"action":"detective:ListOrganizationAdminAccount"}
+        ]
+      }
+    },
+    "aws_detective_organization_configuration": {
+      "ops": {
+        "create": [
+          {"action":"detective:UpdateOrganizationConfiguration"},
+          {"action":"detective:DescribeOrganizationConfiguration"}
+        ],
+        "read": [
+          {"action":"detective:DescribeOrganizationConfiguration"}
+        ],
+        "update": [
+          {"action":"detective:UpdateOrganizationConfiguration"},
+          {"action":"detective:DescribeOrganizationConfiguration"}
         ]
       }
     },
@@ -10191,6 +10315,23 @@
           {"action":"ec2:DescribeHosts"},
           {"action":"ec2:CreateTags","attribute":"tags"},
           {"action":"ec2:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_ec2_image_block_public_access": {
+      "ops": {
+        "create": [
+          {"action":"ec2:EnableImageBlockPublicAccess"},
+          {"action":"ec2:DisableImageBlockPublicAccess"},
+          {"action":"ec2:GetImageBlockPublicAccessState"}
+        ],
+        "read": [
+          {"action":"ec2:GetImageBlockPublicAccessState"}
+        ],
+        "update": [
+          {"action":"ec2:EnableImageBlockPublicAccess"},
+          {"action":"ec2:DisableImageBlockPublicAccess"},
+          {"action":"ec2:GetImageBlockPublicAccessState"}
         ]
       }
     },
@@ -14168,6 +14309,23 @@
         ]
       }
     },
+    "aws_grafana_workspace_saml_configuration": {
+      "ops": {
+        "create": [
+          {"action":"grafana:UpdateWorkspaceAuthentication"},
+          {"action":"grafana:DescribeWorkspace"},
+          {"action":"grafana:DescribeWorkspaceAuthentication"}
+        ],
+        "read": [
+          {"action":"grafana:DescribeWorkspaceAuthentication"}
+        ],
+        "update": [
+          {"action":"grafana:UpdateWorkspaceAuthentication"},
+          {"action":"grafana:DescribeWorkspace"},
+          {"action":"grafana:DescribeWorkspaceAuthentication"}
+        ]
+      }
+    },
     "aws_grafana_workspace_service_account": {
       "ops": {
         "create": [
@@ -14215,6 +14373,21 @@
           {"action":"guardduty:GetDetector"},
           {"action":"guardduty:TagResource","attribute":"tags"},
           {"action":"guardduty:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_guardduty_detector_feature": {
+      "ops": {
+        "create": [
+          {"action":"guardduty:UpdateDetector"},
+          {"action":"guardduty:GetDetector"}
+        ],
+        "read": [
+          {"action":"guardduty:GetDetector"}
+        ],
+        "update": [
+          {"action":"guardduty:UpdateDetector"},
+          {"action":"guardduty:GetDetector"}
         ]
       }
     },
@@ -14353,6 +14526,36 @@
         ],
         "read": [
           {"action":"guardduty:ListOrganizationAdminAccounts"}
+        ]
+      }
+    },
+    "aws_guardduty_organization_configuration": {
+      "ops": {
+        "create": [
+          {"action":"guardduty:UpdateOrganizationConfiguration"},
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
+        ],
+        "read": [
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
+        ],
+        "update": [
+          {"action":"guardduty:UpdateOrganizationConfiguration"},
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
+        ]
+      }
+    },
+    "aws_guardduty_organization_configuration_feature": {
+      "ops": {
+        "create": [
+          {"action":"guardduty:UpdateOrganizationConfiguration"},
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
+        ],
+        "read": [
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
+        ],
+        "update": [
+          {"action":"guardduty:UpdateOrganizationConfiguration"},
+          {"action":"guardduty:DescribeOrganizationConfiguration"}
         ]
       }
     },
@@ -14814,6 +15017,21 @@
         "update": [
           {"action":"iam:UpdateSAMLProvider"},
           {"action":"iam:GetSAMLProvider"}
+        ]
+      }
+    },
+    "aws_iam_security_token_service_preferences": {
+      "ops": {
+        "create": [
+          {"action":"iam:SetSecurityTokenServicePreferences"},
+          {"action":"iam:GetAccountSummary"}
+        ],
+        "read": [
+          {"action":"iam:GetAccountSummary"}
+        ],
+        "update": [
+          {"action":"iam:SetSecurityTokenServicePreferences"},
+          {"action":"iam:GetAccountSummary"}
         ]
       }
     },
@@ -15775,6 +15993,51 @@
           {"action":"iot:DescribeDomainConfiguration"},
           {"action":"iot:TagResource","attribute":"tags"},
           {"action":"iot:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_iot_event_configurations": {
+      "ops": {
+        "create": [
+          {"action":"iot:UpdateEventConfigurations"},
+          {"action":"iot:DescribeEventConfigurations"}
+        ],
+        "read": [
+          {"action":"iot:DescribeEventConfigurations"}
+        ],
+        "update": [
+          {"action":"iot:UpdateEventConfigurations"},
+          {"action":"iot:DescribeEventConfigurations"}
+        ]
+      }
+    },
+    "aws_iot_indexing_configuration": {
+      "ops": {
+        "create": [
+          {"action":"iot:UpdateIndexingConfiguration"},
+          {"action":"iot:GetIndexingConfiguration"}
+        ],
+        "read": [
+          {"action":"iot:GetIndexingConfiguration"}
+        ],
+        "update": [
+          {"action":"iot:UpdateIndexingConfiguration"},
+          {"action":"iot:GetIndexingConfiguration"}
+        ]
+      }
+    },
+    "aws_iot_logging_options": {
+      "ops": {
+        "create": [
+          {"action":"iot:SetV2LoggingOptions"},
+          {"action":"iot:GetV2LoggingOptions"}
+        ],
+        "read": [
+          {"action":"iot:GetV2LoggingOptions"}
+        ],
+        "update": [
+          {"action":"iot:SetV2LoggingOptions"},
+          {"action":"iot:GetV2LoggingOptions"}
         ]
       }
     },
@@ -20407,6 +20670,21 @@
         ]
       }
     },
+    "aws_oam_sink_policy": {
+      "ops": {
+        "create": [
+          {"action":"oam:PutSinkPolicy"},
+          {"action":"oam:GetSinkPolicy"}
+        ],
+        "read": [
+          {"action":"oam:GetSinkPolicy"}
+        ],
+        "update": [
+          {"action":"oam:PutSinkPolicy"},
+          {"action":"oam:GetSinkPolicy"}
+        ]
+      }
+    },
     "aws_opensearch_authorize_vpc_endpoint_access": {
       "ops": {
         "create": [
@@ -20723,6 +21001,21 @@
           {"action":"opsworks:StartInstance","attribute":"state"},
           {"action":"opsworks:DescribeInstances"},
           {"action":"opsworks:StopInstance","attribute":"state"}
+        ]
+      }
+    },
+    "aws_opsworks_permission": {
+      "ops": {
+        "create": [
+          {"action":"opsworks:SetPermission"},
+          {"action":"opsworks:DescribePermissions"}
+        ],
+        "read": [
+          {"action":"opsworks:DescribePermissions"}
+        ],
+        "update": [
+          {"action":"opsworks:SetPermission"},
+          {"action":"opsworks:DescribePermissions"}
         ]
       }
     },
@@ -25748,6 +26041,23 @@
         ]
       }
     },
+    "aws_sagemaker_servicecatalog_portfolio_status": {
+      "ops": {
+        "create": [
+          {"action":"sagemaker:EnableSagemakerServicecatalogPortfolio"},
+          {"action":"sagemaker:DisableSagemakerServicecatalogPortfolio"},
+          {"action":"sagemaker:GetSagemakerServicecatalogPortfolioStatus"}
+        ],
+        "read": [
+          {"action":"sagemaker:GetSagemakerServicecatalogPortfolioStatus"}
+        ],
+        "update": [
+          {"action":"sagemaker:EnableSagemakerServicecatalogPortfolio"},
+          {"action":"sagemaker:DisableSagemakerServicecatalogPortfolio"},
+          {"action":"sagemaker:GetSagemakerServicecatalogPortfolioStatus"}
+        ]
+      }
+    },
     "aws_sagemaker_space": {
       "ops": {
         "create": [
@@ -26353,6 +26663,21 @@
         ],
         "read": [
           {"action":"securityhub:ListEnabledProductsForImport"}
+        ]
+      }
+    },
+    "aws_securityhub_standards_control": {
+      "ops": {
+        "create": [
+          {"action":"securityhub:UpdateStandardsControl"},
+          {"action":"securityhub:DescribeStandardsControls"}
+        ],
+        "read": [
+          {"action":"securityhub:DescribeStandardsControls"}
+        ],
+        "update": [
+          {"action":"securityhub:UpdateStandardsControl"},
+          {"action":"securityhub:DescribeStandardsControls"}
         ]
       }
     },
@@ -27628,6 +27953,20 @@
           {"action":"shield:DescribeProtectionGroup"},
           {"action":"shield:TagResource","attribute":"tags"},
           {"action":"shield:UntagResource","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_shield_protection_health_check_association": {
+      "ops": {
+        "create": [
+          {"action":"shield:AssociateHealthCheck"},
+          {"action":"shield:DescribeProtection"}
+        ],
+        "delete": [
+          {"action":"shield:DisassociateHealthCheck"}
+        ],
+        "read": [
+          {"action":"shield:DescribeProtection"}
         ]
       }
     },
@@ -30658,6 +30997,20 @@
         ]
       }
     },
+    "aws_vpn_gateway_route_propagation": {
+      "ops": {
+        "create": [
+          {"action":"ec2:EnableVgwRoutePropagation"},
+          {"action":"ec2:DescribeRouteTables"}
+        ],
+        "delete": [
+          {"action":"ec2:DisableVgwRoutePropagation"}
+        ],
+        "read": [
+          {"action":"ec2:DescribeRouteTables"}
+        ]
+      }
+    },
     "aws_waf_byte_match_set": {
       "ops": {
         "create": [
@@ -31495,6 +31848,21 @@
           {"action":"workspaces:DescribeWorkspaces"},
           {"action":"workspaces:CreateTags","attribute":"tags"},
           {"action":"workspaces:DeleteTags","attribute":"tags"}
+        ]
+      }
+    },
+    "aws_xray_encryption_config": {
+      "ops": {
+        "create": [
+          {"action":"xray:PutEncryptionConfig"},
+          {"action":"xray:GetEncryptionConfig"}
+        ],
+        "read": [
+          {"action":"xray:GetEncryptionConfig"}
+        ],
+        "update": [
+          {"action":"xray:PutEncryptionConfig"},
+          {"action":"xray:GetEncryptionConfig"}
         ]
       }
     },
