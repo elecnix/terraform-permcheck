@@ -682,7 +682,7 @@ print to stdout.
 
 ### Embedded permissions table
 
-The binary embeds the permissions of every terraform-provider-aws resource type at a pinned tag, `v5.90.0`. The table is `internal/permdata/permissions.json`. For each resource type it lists, per operation, each IAM action and the attribute tests that guard the provider's call. It also marks the operations whose parse missed calls, and PermCheck adds CloudFormation permissions to those. A default run reads this table, so it doesn't need git, network access to GitHub, or a provider clone.
+The binary embeds the permissions of every terraform-provider-aws resource type at a pinned tag, `v6.72.0`. The table is `internal/permdata/permissions.json`. For each resource type it lists, per operation, each IAM action and the attribute tests that guard the provider's call. It also marks the operations whose parse missed calls, and PermCheck adds CloudFormation permissions to those. A default run reads this table, so it doesn't need git, network access to GitHub, or a provider clone.
 
 To bump the provider version, change `DefaultProviderRef` in `internal/provideraws/source.go`, then regenerate the table and commit it:
 

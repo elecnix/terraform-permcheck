@@ -273,18 +273,14 @@ func TestValidate_S3SubresourcesAbsorbParentSchemaNames(t *testing.T) {
 			got[m.Action] = true
 		}
 	}
+	// aws_s3_bucket_abac and aws_s3_bucket_metadata_configuration (provider
+	// 6.x) take the ABAC and metadata table calls, so only the bucket listing
+	// and the tag calls stay on the parent.
 	want := []string{
-		"s3:CreateBucketMetadataTableConfiguration",
-		"s3:DeleteBucketMetadataTableConfiguration",
-		"s3:GetBucketMetadataTableConfiguration",
 		"s3:ListBucket",
-		"s3:PutBucketAbac",
 		"s3:PutBucketTagging",
 		"s3:TagResource",
 		"s3:UntagResource",
-		"s3:UpdateBucketMetadataAnnotationTableConfiguration",
-		"s3:UpdateBucketMetadataInventoryTableConfiguration",
-		"s3:UpdateBucketMetadataJournalTableConfiguration",
 	}
 	if strings.Join(sortedKeys(got), ",") != strings.Join(want, ",") {
 		t.Errorf("parent actions left = %v, want %v", sortedKeys(got), want)

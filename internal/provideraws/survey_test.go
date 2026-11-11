@@ -8,9 +8,11 @@ import (
 )
 
 // maxIncompleteOperations bounds how many operations across the provider the
-// parser may leave incomplete. At v5.90.0 three remain, all creates that only
-// wait for or adopt something that already exists (aws_acm_certificate_validation,
-// aws_default_vpc_dhcp_options, aws_ses_domain_identity_verification).
+// parser may leave incomplete. At v6.72.0 four remain, all creates: three
+// only wait for or adopt something that already exists
+// (aws_acm_certificate_validation, aws_default_vpc_dhcp_options,
+// aws_ses_domain_identity_verification), and aws_s3_object_copy, incomplete
+// at v5.90.0 too.
 const maxIncompleteOperations = 5
 
 // TestSourceProvider_FewIncompleteOperations guards against a parser pattern

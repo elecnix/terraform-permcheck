@@ -42,6 +42,7 @@ var serviceClasses = map[string]Class{
 
 // The aws_s3_bucket_* types that own a bucket feature.
 const (
+	s3ABAC               = "aws_s3_bucket_abac"
 	s3Accelerate         = "aws_s3_bucket_accelerate_configuration"
 	s3ACL                = "aws_s3_bucket_acl"
 	s3Analytics          = "aws_s3_bucket_analytics_configuration"
@@ -51,6 +52,7 @@ const (
 	s3Inventory          = "aws_s3_bucket_inventory"
 	s3Lifecycle          = "aws_s3_bucket_lifecycle_configuration"
 	s3Logging            = "aws_s3_bucket_logging"
+	s3Metadata           = "aws_s3_bucket_metadata_configuration"
 	s3Metric             = "aws_s3_bucket_metric"
 	s3Notification       = "aws_s3_bucket_notification"
 	s3ObjectLock         = "aws_s3_bucket_object_lock_configuration"
@@ -88,6 +90,9 @@ var rules = []rule{
 	{action: "s3:GetObjectMetadata", class: ClassDataPlane},
 	{action: "s3:PutObject", class: ClassDataPlane},
 	{action: "s3:PutObjectAcl", class: ClassDataPlane},
+	{action: "s3:GetObjectTagging", class: ClassDataPlane},
+	{action: "s3:PutObjectTagging", class: ClassDataPlane},
+	{action: "s3:DeleteObjectTagging", class: ClassDataPlane},
 	{action: "s3:DeleteObject", class: ClassDataPlane},
 	{action: "s3:AbortMultipartUpload", class: ClassDataPlane},
 	// Listing the versions to delete when force_destroy empties a bucket
@@ -220,15 +225,16 @@ var rules = []rule{
 	optionalS3("s3:PutBucketRequestPayment", s3RequestPayment),
 	optionalS3("s3:GetBucketRequestPayment", s3RequestPayment),
 	// Attribute-based access control
-	optionalS3("s3:PutBucketAbac", ""),
-	optionalS3("s3:GetBucketAbac", ""),
-	// Metadata tables
-	optionalS3("s3:CreateBucketMetadataTableConfiguration", ""),
-	optionalS3("s3:GetBucketMetadataTableConfiguration", ""),
-	optionalS3("s3:DeleteBucketMetadataTableConfiguration", ""),
-	optionalS3("s3:UpdateBucketMetadataJournalTableConfiguration", ""),
-	optionalS3("s3:UpdateBucketMetadataInventoryTableConfiguration", ""),
-	optionalS3("s3:UpdateBucketMetadataAnnotationTableConfiguration", ""),
+	optionalS3("s3:PutBucketAbac", s3ABAC),
+	optionalS3("s3:GetBucketAbac", s3ABAC),
+	// Metadata tables. The provider does not configure the annotation table,
+	// but it is part of the metadata configuration the sub-resource owns.
+	optionalS3("s3:CreateBucketMetadataTableConfiguration", s3Metadata),
+	optionalS3("s3:GetBucketMetadataTableConfiguration", s3Metadata),
+	optionalS3("s3:DeleteBucketMetadataTableConfiguration", s3Metadata),
+	optionalS3("s3:UpdateBucketMetadataJournalTableConfiguration", s3Metadata),
+	optionalS3("s3:UpdateBucketMetadataInventoryTableConfiguration", s3Metadata),
+	optionalS3("s3:UpdateBucketMetadataAnnotationTableConfiguration", s3Metadata),
 	// The bucket ACL stays [required] on aws_s3_bucket, which writes it on
 	// create, but aws_s3_bucket_acl takes it over when the plan has one.
 	{action: "s3:PutBucketAcl", class: ClassManagement, ownedBy: s3ACL},

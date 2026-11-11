@@ -3,7 +3,7 @@
 package provideraws
 
 // namesAttrConsts maps each attribute name constant of the provider's
-// names package (names/attr_consts_gen.go at v5.90.0) to the attribute it
+// names package (names/attr_consts_gen.go at v6.72.0) to the attribute it
 // spells, so a guard such as d.HasChange(names.AttrKMSKeyID) names kms_key_id.
 // Regenerate it with UPDATE_NAMES_ATTRS=1 go test -run TestNamesAttrConsts ./internal/provideraws/
 var namesAttrConsts = map[string]string{
@@ -133,6 +133,7 @@ var namesAttrConsts = map[string]string{
 	"AttrNamespace":                  "namespace",
 	"AttrNetworkConfiguration":       "network_configuration",
 	"AttrNetworkInterfaceID":         "network_interface_id",
+	"AttrOutpostARN":                 "outpost_arn",
 	"AttrOwner":                      "owner",
 	"AttrOwnerAccountID":             "owner_account_id",
 	"AttrOwnerID":                    "owner_id",

@@ -47,8 +47,9 @@ const referenceIndex = "https://servicereference.us-east-1.amazonaws.com/"
 // boto3Overrides names the Boto3 client of a package where neither the AWS CLI
 // command nor the package name, with or without dashes, matches it.
 var boto3Overrides = map[string]string{
-	"configservice": "config", // CLI command configservice, Boto3 client config
-	"simpledb":      "sdb",    // AWS SDK for Go v1 package
+	"configservice":        "config",  // CLI command configservice, Boto3 client config
+	"directoryservicedata": "ds-data", // no CLI command in the names data
+	"simpledb":             "sdb",     // AWS SDK for Go v1 package
 }
 
 // prefixOverrides gives the IAM prefix of an accessor or package that the

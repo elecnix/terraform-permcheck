@@ -80,6 +80,9 @@ func TestParamTypeToService_SDKPackagesWhoseNameIsNotThePrefix(t *testing.T) {
 		{"cloudwatchlogs", "logs"},
 		{"cloudcontrol", "cloudformation"},
 		{"resourcegroupstaggingapi", "tag"},
+		// Added in provider 6.x. Its Boto3 client is ds-data, which neither
+		// the package name nor the names data spells.
+		{"directoryservicedata", "ds-data"},
 		// API Gateway v2 keeps a client key of its own, folded to the
 		// apigateway prefix when its actions are named.
 		{"apigatewayv2", "apigatewayv2"},

@@ -42,6 +42,7 @@ arc-region-switch
 arc-zonal-shift
 arsenal
 artifact
+assurance
 athena
 auditmanager
 autoscaling
@@ -100,7 +101,6 @@ codeguru-profiler
 codeguru-reviewer
 codeguru-security
 codepipeline
-codestar
 codestar-connections
 codestar-notifications
 codewhisperer
@@ -115,6 +115,7 @@ connect
 connect-campaigns
 consoleapp
 consolidatedbilling
+continuum
 controlcatalog
 controltower
 cost-optimization-hub
