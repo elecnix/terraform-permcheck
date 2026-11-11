@@ -344,13 +344,31 @@ func (r resourceFile) schema() *iam.Schema {
 		// unconditionally on every resource Read for @Tags-annotated
 		// resources, and Create returns Read — so it's needed on both
 		// read and create without any attribute gating.
-		addUnconditionalActions(schema, "read", tagActions.List)
-		addUnconditionalActions(schema, "create", tagActions.List)
+		//
+		// The interceptor skips it when the operation's function sets the
+		// tags itself, as a read that takes them from its API response does.
+		for _, op := range []string{"read", "create"} {
+			if !r.setsTagsOut(op) {
+				addUnconditionalActions(schema, op, tagActions.List)
+			}
+		}
 	}
 
 	applyCorrections(schema)
 	applySchemaGates(schema)
 	return schema
+}
+
+// setsTagsOut reports whether the function bound to op sets the resource's
+// tags from the service API on every run, so the tag interceptor does not list
+// them.
+func (r resourceFile) setsTagsOut(op string) bool {
+	for _, fn := range r.funcs[op] {
+		if r.pkg.idx.setsTagsOut(fn) {
+			return true
+		}
+	}
+	return false
 }
 
 // schemaCorrection records an action that the parser includes unconditionally

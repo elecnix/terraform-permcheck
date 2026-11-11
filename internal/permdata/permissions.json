@@ -8,15 +8,13 @@
         "create": [
           {"action":"access-analyzer:CreateAnalyzer"},
           {"action":"access-analyzer:GetAnalyzer"},
-          {"action":"access-analyzer:TagResource","attribute":"tags"},
-          {"action":"access-analyzer:ListTagsForResource"}
+          {"action":"access-analyzer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"access-analyzer:DeleteAnalyzer"}
         ],
         "read": [
-          {"action":"access-analyzer:GetAnalyzer"},
-          {"action":"access-analyzer:ListTagsForResource"}
+          {"action":"access-analyzer:GetAnalyzer"}
         ],
         "update": [
           {"action":"access-analyzer:GetAnalyzer"},
@@ -451,8 +449,7 @@
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribeImages"},
           {"action":"ec2:EnableImageDeprecation","attribute":"deprecation_time"},
-          {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetInstanceUefiData"}
         ],
         "delete": [
           {"action":"ec2:DeregisterImage"},
@@ -461,8 +458,7 @@
         ],
         "read": [
           {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:DescribeImages"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeImages"}
         ],
         "update": [
           {"action":"ec2:ModifyImageAttribute","changed":"description"},
@@ -483,8 +479,7 @@
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribeImages"},
           {"action":"ec2:EnableImageDeprecation","attribute":"deprecation_time"},
-          {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetInstanceUefiData"}
         ],
         "delete": [
           {"action":"ec2:DeregisterImage"},
@@ -493,8 +488,7 @@
         ],
         "read": [
           {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:DescribeImages"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeImages"}
         ],
         "update": [
           {"action":"ec2:ModifyImageAttribute","changed":"description"},
@@ -514,8 +508,7 @@
           {"action":"ec2:DescribeImages"},
           {"action":"ec2:EnableImageDeprecation","attribute":"deprecation_time"},
           {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeregisterImage"},
@@ -524,8 +517,7 @@
         ],
         "read": [
           {"action":"ec2:GetInstanceUefiData"},
-          {"action":"ec2:DescribeImages"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeImages"}
         ],
         "update": [
           {"action":"ec2:ModifyImageAttribute","changed":"description"},
@@ -557,15 +549,13 @@
         "create": [
           {"action":"amplify:CreateApp"},
           {"action":"amplify:GetApp"},
-          {"action":"amplify:TagResource","attribute":"tags"},
-          {"action":"amplify:ListTagsForResource"}
+          {"action":"amplify:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"amplify:DeleteApp"}
         ],
         "read": [
-          {"action":"amplify:GetApp"},
-          {"action":"amplify:ListTagsForResource"}
+          {"action":"amplify:GetApp"}
         ],
         "update": [
           {"action":"amplify:UpdateApp"},
@@ -594,15 +584,13 @@
         "create": [
           {"action":"amplify:CreateBranch"},
           {"action":"amplify:GetBranch"},
-          {"action":"amplify:TagResource","attribute":"tags"},
-          {"action":"amplify:ListTagsForResource"}
+          {"action":"amplify:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"amplify:DeleteBranch"}
         ],
         "read": [
-          {"action":"amplify:GetBranch"},
-          {"action":"amplify:ListTagsForResource"}
+          {"action":"amplify:GetBranch"}
         ],
         "update": [
           {"action":"amplify:UpdateBranch"},
@@ -1784,16 +1772,14 @@
         "create": [
           {"action":"appflow:CreateFlow"},
           {"action":"appflow:DescribeFlow"},
-          {"action":"appflow:TagResource","attribute":"tags"},
-          {"action":"appflow:ListTagsForResource"}
+          {"action":"appflow:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"appflow:DeleteFlow"},
           {"action":"appflow:DescribeFlow"}
         ],
         "read": [
-          {"action":"appflow:DescribeFlow"},
-          {"action":"appflow:ListTagsForResource"}
+          {"action":"appflow:DescribeFlow"}
         ],
         "update": [
           {"action":"appflow:UpdateFlow"},
@@ -1808,15 +1794,13 @@
         "create": [
           {"action":"app-integrations:CreateDataIntegration"},
           {"action":"app-integrations:GetDataIntegration"},
-          {"action":"app-integrations:TagResource","attribute":"tags"},
-          {"action":"app-integrations:ListTagsForResource"}
+          {"action":"app-integrations:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"app-integrations:DeleteDataIntegration"}
         ],
         "read": [
-          {"action":"app-integrations:GetDataIntegration"},
-          {"action":"app-integrations:ListTagsForResource"}
+          {"action":"app-integrations:GetDataIntegration"}
         ],
         "update": [
           {"action":"app-integrations:UpdateDataIntegration","changed":"description"},
@@ -1832,15 +1816,13 @@
         "create": [
           {"action":"app-integrations:CreateEventIntegration"},
           {"action":"app-integrations:GetEventIntegration"},
-          {"action":"app-integrations:TagResource","attribute":"tags"},
-          {"action":"app-integrations:ListTagsForResource"}
+          {"action":"app-integrations:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"app-integrations:DeleteEventIntegration"}
         ],
         "read": [
-          {"action":"app-integrations:GetEventIntegration"},
-          {"action":"app-integrations:ListTagsForResource"}
+          {"action":"app-integrations:GetEventIntegration"}
         ],
         "update": [
           {"action":"app-integrations:UpdateEventIntegration","changed":"description"},
@@ -2533,15 +2515,13 @@
           {"action":"appsync:StartSchemaCreation","attribute":"schema"},
           {"action":"appsync:GetSchemaCreationStatus","attribute":"schema"},
           {"action":"appsync:GetGraphqlApi"},
-          {"action":"appsync:TagResource","attribute":"tags"},
-          {"action":"appsync:ListTagsForResource"}
+          {"action":"appsync:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"appsync:DeleteGraphqlApi"}
         ],
         "read": [
-          {"action":"appsync:GetGraphqlApi"},
-          {"action":"appsync:ListTagsForResource"}
+          {"action":"appsync:GetGraphqlApi"}
         ],
         "update": [
           {"action":"appsync:UpdateGraphqlApi"},
@@ -2825,8 +2805,7 @@
           {"action":"auditmanager:DeleteAssessment"}
         ],
         "read": [
-          {"action":"auditmanager:GetAssessment"},
-          {"action":"auditmanager:ListTagsForResource"}
+          {"action":"auditmanager:GetAssessment"}
         ],
         "update": [
           {"action":"auditmanager:UpdateAssessment","changed":"assessment_reports_destination"},
@@ -2876,8 +2855,7 @@
           {"action":"auditmanager:DeleteControl"}
         ],
         "read": [
-          {"action":"auditmanager:GetControl"},
-          {"action":"auditmanager:ListTagsForResource"}
+          {"action":"auditmanager:GetControl"}
         ],
         "update": [
           {"action":"auditmanager:UpdateControl","changed":"action_plan_instructions"},
@@ -2902,8 +2880,7 @@
           {"action":"auditmanager:DeleteAssessmentFramework"}
         ],
         "read": [
-          {"action":"auditmanager:GetAssessmentFramework"},
-          {"action":"auditmanager:ListTagsForResource"}
+          {"action":"auditmanager:GetAssessmentFramework"}
         ],
         "update": [
           {"action":"auditmanager:UpdateAssessmentFramework","changed":"control_sets"},
@@ -3404,8 +3381,7 @@
           {"action":"batch:CreateComputeEnvironment"},
           {"action":"batch:UpdateComputeEnvironment","attribute":"update_policy","value_guarded":true},
           {"action":"batch:DescribeComputeEnvironments"},
-          {"action":"batch:TagResource","attribute":"tags"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"batch:UpdateComputeEnvironment"},
@@ -3413,8 +3389,7 @@
           {"action":"batch:DescribeComputeEnvironments"}
         ],
         "read": [
-          {"action":"batch:DescribeComputeEnvironments"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:DescribeComputeEnvironments"}
         ],
         "update": [
           {"action":"batch:UpdateComputeEnvironment"},
@@ -3429,16 +3404,14 @@
         "create": [
           {"action":"batch:RegisterJobDefinition"},
           {"action":"batch:DescribeJobDefinitions"},
-          {"action":"batch:TagResource","attribute":"tags"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"batch:DeregisterJobDefinition"},
           {"action":"batch:DescribeJobDefinitions"}
         ],
         "read": [
-          {"action":"batch:DescribeJobDefinitions"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:DescribeJobDefinitions"}
         ],
         "update": [
           {"action":"batch:RegisterJobDefinition"},
@@ -3463,8 +3436,7 @@
           {"action":"batch:DescribeJobQueues"}
         ],
         "read": [
-          {"action":"batch:DescribeJobQueues"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:DescribeJobQueues"}
         ],
         "update": [
           {"action":"batch:UpdateJobQueue"},
@@ -3479,15 +3451,13 @@
         "create": [
           {"action":"batch:CreateSchedulingPolicy"},
           {"action":"batch:DescribeSchedulingPolicies"},
-          {"action":"batch:TagResource","attribute":"tags"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"batch:DeleteSchedulingPolicy"}
         ],
         "read": [
-          {"action":"batch:DescribeSchedulingPolicies"},
-          {"action":"batch:ListTagsForResource"}
+          {"action":"batch:DescribeSchedulingPolicies"}
         ],
         "update": [
           {"action":"batch:UpdateSchedulingPolicy","changed":"fair_share_policy"},
@@ -4682,8 +4652,7 @@
           {"action":"chatbot:DescribeSlackChannelConfigurations"}
         ],
         "read": [
-          {"action":"chatbot:DescribeSlackChannelConfigurations"},
-          {"action":"chatbot:ListTagsForResource"}
+          {"action":"chatbot:DescribeSlackChannelConfigurations"}
         ],
         "update": [
           {"action":"chatbot:UpdateSlackChannelConfiguration"},
@@ -4706,8 +4675,7 @@
           {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"}
         ],
         "read": [
-          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"},
-          {"action":"chatbot:ListTagsForResource"}
+          {"action":"chatbot:ListMicrosoftTeamsChannelConfigurations"}
         ],
         "update": [
           {"action":"chatbot:UpdateMicrosoftTeamsChannelConfiguration"},
@@ -5757,16 +5725,14 @@
         "create": [
           {"action":"cloudhsm:CreateCluster"},
           {"action":"cloudhsm:DescribeClusters"},
-          {"action":"cloudhsm:TagResource","attribute":"tags"},
-          {"action":"cloudhsm:ListTags"}
+          {"action":"cloudhsm:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"cloudhsm:DeleteCluster"},
           {"action":"cloudhsm:DescribeClusters"}
         ],
         "read": [
-          {"action":"cloudhsm:DescribeClusters"},
-          {"action":"cloudhsm:ListTags"}
+          {"action":"cloudhsm:DescribeClusters"}
         ],
         "update": [
           {"action":"cloudhsm:DescribeClusters"},
@@ -7264,8 +7230,7 @@
           {"action":"codeguru-profiler:DeleteProfilingGroup"}
         ],
         "read": [
-          {"action":"codeguru-profiler:DescribeProfilingGroup"},
-          {"action":"codeguru-profiler:ListTagsForResource"}
+          {"action":"codeguru-profiler:DescribeProfilingGroup"}
         ],
         "update": [
           {"action":"codeguru-profiler:UpdateProfilingGroup","changed":"agent_orchestration_config"},
@@ -7347,15 +7312,13 @@
         "create": [
           {"action":"codepipeline:PutWebhook"},
           {"action":"codepipeline:ListWebhooks"},
-          {"action":"codepipeline:TagResource","attribute":"tags"},
-          {"action":"codepipeline:ListTagsForResource"}
+          {"action":"codepipeline:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"codepipeline:DeleteWebhook"}
         ],
         "read": [
-          {"action":"codepipeline:ListWebhooks"},
-          {"action":"codepipeline:ListTagsForResource"}
+          {"action":"codepipeline:ListWebhooks"}
         ],
         "update": [
           {"action":"codepipeline:PutWebhook"},
@@ -7411,16 +7374,14 @@
         "create": [
           {"action":"codestar-notifications:CreateNotificationRule"},
           {"action":"codestar-notifications:DescribeNotificationRule"},
-          {"action":"codestar-notifications:TagResource","attribute":"tags"},
-          {"action":"codestar-notifications:ListTagsForResource"}
+          {"action":"codestar-notifications:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"codestar-notifications:DeleteNotificationRule"},
           {"action":"codestar-notifications:DeleteTarget"}
         ],
         "read": [
-          {"action":"codestar-notifications:DescribeNotificationRule"},
-          {"action":"codestar-notifications:ListTagsForResource"}
+          {"action":"codestar-notifications:DescribeNotificationRule"}
         ],
         "update": [
           {"action":"codestar-notifications:UpdateNotificationRule"},
@@ -7436,15 +7397,13 @@
         "create": [
           {"action":"cognito-identity:CreateIdentityPool"},
           {"action":"cognito-identity:DescribeIdentityPool"},
-          {"action":"cognito-identity:TagResource","attribute":"tags"},
-          {"action":"cognito-identity:ListTagsForResource"}
+          {"action":"cognito-identity:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"cognito-identity:DeleteIdentityPool"}
         ],
         "read": [
-          {"action":"cognito-identity:DescribeIdentityPool"},
-          {"action":"cognito-identity:ListTagsForResource"}
+          {"action":"cognito-identity:DescribeIdentityPool"}
         ],
         "update": [
           {"action":"cognito-identity:UpdateIdentityPool"},
@@ -7660,16 +7619,14 @@
           {"action":"cognito-idp:SetUserPoolMfaConfig"},
           {"action":"cognito-idp:DescribeUserPool"},
           {"action":"cognito-idp:GetUserPoolMfaConfig"},
-          {"action":"cognito-idp:TagResource","attribute":"tags"},
-          {"action":"cognito-idp:ListTagsForResource"}
+          {"action":"cognito-idp:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"cognito-idp:DeleteUserPool"}
         ],
         "read": [
           {"action":"cognito-idp:DescribeUserPool"},
-          {"action":"cognito-idp:GetUserPoolMfaConfig"},
-          {"action":"cognito-idp:ListTagsForResource"}
+          {"action":"cognito-idp:GetUserPoolMfaConfig"}
         ],
         "update": [
           {"action":"cognito-idp:SetUserPoolMfaConfig","changed":"email_mfa_configuration"},
@@ -8649,16 +8606,14 @@
         "create": [
           {"action":"ec2:CreateCustomerGateway"},
           {"action":"ec2:DescribeCustomerGateways"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteCustomerGateway"},
           {"action":"ec2:DescribeCustomerGateways"}
         ],
         "read": [
-          {"action":"ec2:DescribeCustomerGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeCustomerGateways"}
         ],
         "update": [
           {"action":"ec2:DescribeCustomerGateways"},
@@ -8672,15 +8627,13 @@
         "create": [
           {"action":"profile:CreateDomain"},
           {"action":"profile:GetDomain"},
-          {"action":"profile:TagResource","attribute":"tags"},
-          {"action":"profile:ListTagsForResource"}
+          {"action":"profile:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"profile:DeleteDomain"}
         ],
         "read": [
-          {"action":"profile:GetDomain"},
-          {"action":"profile:ListTagsForResource"}
+          {"action":"profile:GetDomain"}
         ],
         "update": [
           {"action":"profile:UpdateDomain"},
@@ -8713,15 +8666,13 @@
         "create": [
           {"action":"dataexchange:CreateDataSet"},
           {"action":"dataexchange:GetDataSet"},
-          {"action":"dataexchange:TagResource","attribute":"tags"},
-          {"action":"dataexchange:ListTagsForResource"}
+          {"action":"dataexchange:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"dataexchange:DeleteDataSet"}
         ],
         "read": [
-          {"action":"dataexchange:GetDataSet"},
-          {"action":"dataexchange:ListTagsForResource"}
+          {"action":"dataexchange:GetDataSet"}
         ],
         "update": [
           {"action":"dataexchange:UpdateDataSet"},
@@ -8752,15 +8703,13 @@
         "create": [
           {"action":"dataexchange:CreateRevision"},
           {"action":"dataexchange:GetRevision"},
-          {"action":"dataexchange:TagResource","attribute":"tags"},
-          {"action":"dataexchange:ListTagsForResource"}
+          {"action":"dataexchange:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"dataexchange:DeleteRevision"}
         ],
         "read": [
-          {"action":"dataexchange:GetRevision"},
-          {"action":"dataexchange:ListTagsForResource"}
+          {"action":"dataexchange:GetRevision"}
         ],
         "update": [
           {"action":"dataexchange:UpdateRevision"},
@@ -8787,8 +8736,7 @@
           {"action":"dataexchange:UpdateRevision"}
         ],
         "read": [
-          {"action":"dataexchange:GetRevision"},
-          {"action":"dataexchange:ListTagsForResource"}
+          {"action":"dataexchange:GetRevision"}
         ],
         "update": [
           {"action":"dataexchange:UpdateRevision"},
@@ -9155,8 +9103,7 @@
           {"action":"datazone:GetDomain"}
         ],
         "read": [
-          {"action":"datazone:GetDomain"},
-          {"action":"datazone:ListTagsForResource"}
+          {"action":"datazone:GetDomain"}
         ],
         "update": [
           {"action":"datazone:UpdateDomain"},
@@ -9393,16 +9340,14 @@
           {"action":"rds:ModifyDBClusterSnapshotAttribute","attribute":"shared_accounts","value_guarded":true},
           {"action":"rds:DescribeDBClusterSnapshots"},
           {"action":"rds:DescribeDBClusterSnapshotAttributes"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:DeleteDBClusterSnapshot"}
         ],
         "read": [
           {"action":"rds:DescribeDBClusterSnapshots"},
-          {"action":"rds:DescribeDBClusterSnapshotAttributes"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBClusterSnapshotAttributes"}
         ],
         "update": [
           {"action":"rds:ModifyDBClusterSnapshotAttribute","changed":"shared_accounts"},
@@ -9451,8 +9396,7 @@
           {"action":"rds:CreateDBInstanceReadReplica","attribute":"replicate_source_db"},
           {"action":"rds:DescribeDBInstances"},
           {"action":"rds:DescribeEvents","attribute":"warning_event_categories"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:DeleteDBInstance"},
@@ -9460,8 +9404,7 @@
           {"action":"rds:DescribeDBInstances"}
         ],
         "read": [
-          {"action":"rds:DescribeDBInstances"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBInstances"}
         ],
         "update": [
           {"action":"rds:PromoteReadReplica","changed":"replicate_source_db"},
@@ -9645,16 +9588,14 @@
           {"action":"rds:ModifyDBSnapshotAttribute","attribute":"shared_accounts","value_guarded":true},
           {"action":"rds:DescribeDBSnapshots"},
           {"action":"rds:DescribeDBSnapshotAttributes"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:DeleteDBSnapshot"}
         ],
         "read": [
           {"action":"rds:DescribeDBSnapshots"},
-          {"action":"rds:DescribeDBSnapshotAttributes"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBSnapshotAttributes"}
         ],
         "update": [
           {"action":"rds:ModifyDBSnapshotAttribute","changed":"shared_accounts"},
@@ -9724,12 +9665,10 @@
           {"action":"ec2:DeleteNetworkAclEntry"},
           {"action":"ec2:CreateNetworkAclEntry","attribute":"egress","value_guarded":true},
           {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress","value_guarded":true},
-          {"action":"ec2:ReplaceNetworkAclAssociation","attribute":"subnet_ids","value_guarded":true},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:ReplaceNetworkAclAssociation","attribute":"subnet_ids","value_guarded":true}
         ],
         "read": [
-          {"action":"ec2:DescribeNetworkAcls"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkAcls"}
         ],
         "update": [
           {"action":"ec2:DeleteNetworkAclEntry","changed":"ingress"},
@@ -9753,16 +9692,14 @@
           {"action":"ec2:CreateRoute","attribute":"route","value_guarded":true},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
-          {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInterfaces"}
         ],
         "import": [
           {"action":"ec2:DescribeRouteTables"}
         ],
         "read": [
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInterfaces"}
         ],
         "update": [
           {"action":"ec2:DisableVgwRoutePropagation","changed":"propagating_vgws"},
@@ -9787,12 +9724,10 @@
           {"action":"ec2:RevokeSecurityGroupEgress"},
           {"action":"ec2:DescribeSecurityGroupRules"},
           {"action":"ec2:AuthorizeSecurityGroupEgress"},
-          {"action":"ec2:AuthorizeSecurityGroupIngress"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:AuthorizeSecurityGroupIngress"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroups"}
         ],
         "update": [
           {"action":"ec2:DescribeSecurityGroups"},
@@ -9814,8 +9749,7 @@
           {"action":"ec2:DisassociateSubnetCidrBlock"},
           {"action":"ec2:AssociateSubnetCidrBlock"},
           {"action":"ec2:DeleteTags"},
-          {"action":"ec2:CreateTags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSubnet","attribute":"force_destroy"},
@@ -9828,8 +9762,7 @@
           {"action":"ec2:GetIpamPoolAllocations","attribute":"force_destroy"}
         ],
         "read": [
-          {"action":"ec2:DescribeSubnets"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSubnets"}
         ],
         "update": [
           {"action":"ec2:ModifySubnetAttribute","changed":"customer_owned_ipv4_pool"},
@@ -9862,8 +9795,7 @@
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroups"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpc","attribute":"force_destroy"},
@@ -9879,8 +9811,7 @@
           {"action":"ec2:DescribeVpcAttribute"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroups"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcAttribute","changed":"enable_dns_hostnames"},
@@ -9910,12 +9841,10 @@
       "ops": {
         "create": [
           {"action":"ec2:DescribeDhcpOptions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "read": [
-          {"action":"ec2:DescribeDhcpOptions"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeDhcpOptions"}
         ],
         "update": [
           {"action":"ec2:DescribeDhcpOptions"},
@@ -10153,8 +10082,7 @@
           {"action":"aidevops:DeleteAgentSpace"}
         ],
         "read": [
-          {"action":"aidevops:GetAgentSpace"},
-          {"action":"aidevops:ListTagsForResource"}
+          {"action":"aidevops:GetAgentSpace"}
         ],
         "update": [
           {"action":"aidevops:UpdateAgentSpace"},
@@ -10501,15 +10429,13 @@
         "create": [
           {"action":"dlm:CreateLifecyclePolicy"},
           {"action":"dlm:GetLifecyclePolicy"},
-          {"action":"dlm:TagResource","attribute":"tags"},
-          {"action":"dlm:ListTagsForResource"}
+          {"action":"dlm:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"dlm:DeleteLifecyclePolicy"}
         ],
         "read": [
-          {"action":"dlm:GetLifecyclePolicy"},
-          {"action":"dlm:ListTagsForResource"}
+          {"action":"dlm:GetLifecyclePolicy"}
         ],
         "update": [
           {"action":"dlm:UpdateLifecyclePolicy"},
@@ -11144,16 +11070,14 @@
         "create": [
           {"action":"directconnect:CreateDirectConnectGateway"},
           {"action":"directconnect:DescribeDirectConnectGateways"},
-          {"action":"directconnect:TagResource","attribute":"tags"},
-          {"action":"directconnect:DescribeTags"}
+          {"action":"directconnect:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"directconnect:DeleteDirectConnectGateway"},
           {"action":"directconnect:DescribeDirectConnectGateways"}
         ],
         "read": [
-          {"action":"directconnect:DescribeDirectConnectGateways"},
-          {"action":"directconnect:DescribeTags"}
+          {"action":"directconnect:DescribeDirectConnectGateways"}
         ],
         "update": [
           {"action":"directconnect:UpdateDirectConnectGateway","changed":"name"},
@@ -11795,15 +11719,13 @@
           {"action":"ec2:ModifySnapshotTier","attribute":"storage_tier"},
           {"action":"ec2:DescribeSnapshots"},
           {"action":"ec2:DescribeSnapshotTierStatus","attribute":"storage_tier"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSnapshot"}
         ],
         "read": [
-          {"action":"ec2:DescribeSnapshots"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSnapshots"}
         ],
         "update": [
           {"action":"ec2:ModifySnapshotTier","changed":"storage_tier"},
@@ -11840,15 +11762,13 @@
           {"action":"ec2:ModifySnapshotTier","attribute":"storage_tier"},
           {"action":"ec2:DescribeSnapshots"},
           {"action":"ec2:DescribeSnapshotTierStatus","attribute":"storage_tier"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSnapshot"}
         ],
         "read": [
-          {"action":"ec2:DescribeSnapshots"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSnapshots"}
         ],
         "update": [
           {"action":"ec2:ModifySnapshotTier","changed":"storage_tier"},
@@ -11869,15 +11789,13 @@
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribeSnapshotTierStatus","attribute":"storage_tier"},
-          {"action":"ec2:DescribeSnapshots"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSnapshots"}
         ],
         "delete": [
           {"action":"ec2:DeleteSnapshot"}
         ],
         "read": [
-          {"action":"ec2:DescribeSnapshots"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSnapshots"}
         ],
         "update": [
           {"action":"ec2:ModifySnapshotTier","changed":"storage_tier"},
@@ -12021,16 +11939,14 @@
         "create": [
           {"action":"ec2:CreateCapacityReservation"},
           {"action":"ec2:DescribeCapacityReservations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:CancelCapacityReservation"},
           {"action":"ec2:DescribeCapacityReservations"}
         ],
         "read": [
-          {"action":"ec2:DescribeCapacityReservations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeCapacityReservations"}
         ],
         "update": [
           {"action":"ec2:ModifyCapacityReservation"},
@@ -12045,16 +11961,14 @@
         "create": [
           {"action":"ec2:CreateCarrierGateway"},
           {"action":"ec2:DescribeCarrierGateways"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteCarrierGateway"},
           {"action":"ec2:DescribeCarrierGateways"}
         ],
         "read": [
-          {"action":"ec2:DescribeCarrierGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeCarrierGateways"}
         ],
         "update": [
           {"action":"ec2:DescribeCarrierGateways"},
@@ -12084,16 +11998,14 @@
           {"action":"ec2:CreateClientVpnEndpoint"},
           {"action":"ec2:DescribeClientVpnEndpoints"},
           {"action":"ec2:DescribeTransitGatewayAttachments"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteClientVpnEndpoint"},
           {"action":"ec2:DescribeClientVpnEndpoints"}
         ],
         "read": [
-          {"action":"ec2:DescribeClientVpnEndpoints"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeClientVpnEndpoints"}
         ],
         "update": [
           {"action":"ec2:ModifyClientVpnEndpoint"},
@@ -12153,16 +12065,14 @@
         "create": [
           {"action":"ec2:CreateFleet"},
           {"action":"ec2:DescribeFleets"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteFleets"},
           {"action":"ec2:DescribeFleets"}
         ],
         "read": [
-          {"action":"ec2:DescribeFleets"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeFleets"}
         ],
         "update": [
           {"action":"ec2:ModifyFleet"},
@@ -12177,16 +12087,14 @@
         "create": [
           {"action":"ec2:AllocateHosts"},
           {"action":"ec2:DescribeHosts"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:ReleaseHosts"},
           {"action":"ec2:DescribeHosts"}
         ],
         "read": [
-          {"action":"ec2:DescribeHosts"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeHosts"}
         ],
         "update": [
           {"action":"ec2:ModifyHosts"},
@@ -12226,8 +12134,7 @@
           {"action":"ec2:DescribeInstanceConnectEndpoints"}
         ],
         "read": [
-          {"action":"ec2:DescribeInstanceConnectEndpoints"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeInstanceConnectEndpoints"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -12298,8 +12205,7 @@
           {"action":"ec2:DescribeLocalGatewayRouteTables"}
         ],
         "read": [
-          {"action":"ec2:DescribeLocalGatewayRouteTables"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeLocalGatewayRouteTables"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -12320,8 +12226,7 @@
           {"action":"ec2:DescribeLocalGatewayRouteTableVirtualInterfaceGroupAssociations"}
         ],
         "read": [
-          {"action":"ec2:DescribeLocalGatewayRouteTableVirtualInterfaceGroupAssociations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeLocalGatewayRouteTableVirtualInterfaceGroupAssociations"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -12334,16 +12239,14 @@
         "create": [
           {"action":"ec2:CreateLocalGatewayRouteTableVpcAssociation"},
           {"action":"ec2:DescribeLocalGatewayRouteTableVpcAssociations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteLocalGatewayRouteTableVpcAssociation"},
           {"action":"ec2:DescribeLocalGatewayRouteTableVpcAssociations"}
         ],
         "read": [
-          {"action":"ec2:DescribeLocalGatewayRouteTableVpcAssociations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeLocalGatewayRouteTableVpcAssociations"}
         ],
         "update": [
           {"action":"ec2:DescribeLocalGatewayRouteTableVpcAssociations"},
@@ -12358,8 +12261,7 @@
           {"action":"ec2:CreateManagedPrefixList"},
           {"action":"ec2:DescribeManagedPrefixLists"},
           {"action":"ec2:GetManagedPrefixListEntries"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteManagedPrefixList"},
@@ -12367,8 +12269,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeManagedPrefixLists"},
-          {"action":"ec2:GetManagedPrefixListEntries"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetManagedPrefixListEntries"}
         ],
         "update": [
           {"action":"ec2:ModifyManagedPrefixList"},
@@ -12421,15 +12322,13 @@
         "create": [
           {"action":"ec2:StartNetworkInsightsAnalysis"},
           {"action":"ec2:DescribeNetworkInsightsAnalyses"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteNetworkInsightsAnalysis"}
         ],
         "read": [
-          {"action":"ec2:DescribeNetworkInsightsAnalyses"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInsightsAnalyses"}
         ],
         "update": [
           {"action":"ec2:DescribeNetworkInsightsAnalyses"},
@@ -12443,15 +12342,13 @@
         "create": [
           {"action":"ec2:CreateNetworkInsightsPath"},
           {"action":"ec2:DescribeNetworkInsightsPaths"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteNetworkInsightsPath"}
         ],
         "read": [
-          {"action":"ec2:DescribeNetworkInsightsPaths"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInsightsPaths"}
         ],
         "update": [
           {"action":"ec2:DescribeNetworkInsightsPaths"},
@@ -12465,16 +12362,14 @@
         "create": [
           {"action":"ec2:CreateSecondaryNetwork"},
           {"action":"ec2:DescribeSecondaryNetworks"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSecondaryNetwork"},
           {"action":"ec2:DescribeSecondaryNetworks"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecondaryNetworks"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecondaryNetworks"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -12487,16 +12382,14 @@
         "create": [
           {"action":"ec2:CreateSecondarySubnet"},
           {"action":"ec2:DescribeSecondarySubnets"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSecondarySubnet"},
           {"action":"ec2:DescribeSecondarySubnets"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecondarySubnets"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecondarySubnets"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -12566,15 +12459,13 @@
           {"action":"ec2:CreateTrafficMirrorFilter"},
           {"action":"ec2:ModifyTrafficMirrorFilterNetworkServices","attribute":"network_services","value_guarded":true},
           {"action":"ec2:DescribeTrafficMirrorFilters"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTrafficMirrorFilter"}
         ],
         "read": [
-          {"action":"ec2:DescribeTrafficMirrorFilters"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTrafficMirrorFilters"}
         ],
         "update": [
           {"action":"ec2:ModifyTrafficMirrorFilterNetworkServices","changed":"network_services"},
@@ -12607,15 +12498,13 @@
         "create": [
           {"action":"ec2:CreateTrafficMirrorSession"},
           {"action":"ec2:DescribeTrafficMirrorSessions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTrafficMirrorSession"}
         ],
         "read": [
-          {"action":"ec2:DescribeTrafficMirrorSessions"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTrafficMirrorSessions"}
         ],
         "update": [
           {"action":"ec2:ModifyTrafficMirrorSession"},
@@ -12630,15 +12519,13 @@
         "create": [
           {"action":"ec2:CreateTrafficMirrorTarget"},
           {"action":"ec2:DescribeTrafficMirrorTargets"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTrafficMirrorTarget"}
         ],
         "read": [
-          {"action":"ec2:DescribeTrafficMirrorTargets"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTrafficMirrorTargets"}
         ],
         "update": [
           {"action":"ec2:DescribeTrafficMirrorTargets"},
@@ -12653,16 +12540,14 @@
           {"action":"ec2:CreateTransitGateway"},
           {"action":"ec2:ModifyTransitGateway","attribute":"encryption_support"},
           {"action":"ec2:DescribeTransitGateways"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGateway"},
           {"action":"ec2:DescribeTransitGateways"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGateways"}
         ],
         "update": [
           {"action":"ec2:ModifyTransitGateway"},
@@ -12685,8 +12570,7 @@
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation"},
           {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayConnect"},
@@ -12697,8 +12581,7 @@
           {"action":"ec2:DescribeTransitGateways"},
           {"action":"ec2:DescribeTransitGatewayAttachments"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations"},
-          {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGateways"},
@@ -12724,16 +12607,14 @@
         "create": [
           {"action":"ec2:CreateTransitGatewayConnectPeer"},
           {"action":"ec2:DescribeTransitGatewayConnectPeers"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayConnectPeer"},
           {"action":"ec2:DescribeTransitGatewayConnectPeers"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayConnectPeers"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayConnectPeers"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayConnectPeers"},
@@ -12793,8 +12674,7 @@
           {"action":"ec2:DescribeTransitGatewayMeteringPolicies"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayMeteringPolicies"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayMeteringPolicies"}
         ],
         "update": [
           {"action":"ec2:ModifyTransitGatewayMeteringPolicy","changed":"middlebox_attachment_ids"},
@@ -12822,8 +12702,7 @@
         "create": [
           {"action":"ec2:CreateTransitGatewayMulticastDomain"},
           {"action":"ec2:DescribeTransitGatewayMulticastDomains"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayMulticastDomain"},
@@ -12835,8 +12714,7 @@
           {"action":"ec2:DescribeTransitGatewayMulticastDomains"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayMulticastDomains"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayMulticastDomains"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayMulticastDomains"},
@@ -12895,16 +12773,14 @@
         "create": [
           {"action":"ec2:CreateTransitGatewayPeeringAttachment"},
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayPeeringAttachment"},
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayPeeringAttachments"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
@@ -12920,8 +12796,7 @@
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
-          {"action":"ec2:DescribeTransitGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGateways"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayPeeringAttachment"},
@@ -12929,8 +12804,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
-          {"action":"ec2:DescribeTransitGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGateways"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayPeeringAttachments"},
@@ -12945,16 +12819,14 @@
         "create": [
           {"action":"ec2:CreateTransitGatewayPolicyTable"},
           {"action":"ec2:DescribeTransitGatewayPolicyTables"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayPolicyTable"},
           {"action":"ec2:DescribeTransitGatewayPolicyTables"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayPolicyTables"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayPolicyTables"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayPolicyTables"},
@@ -13036,16 +12908,14 @@
         "create": [
           {"action":"ec2:CreateTransitGatewayRouteTable"},
           {"action":"ec2:DescribeTransitGatewayRouteTables"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayRouteTable"},
           {"action":"ec2:DescribeTransitGatewayRouteTables"}
         ],
         "read": [
-          {"action":"ec2:DescribeTransitGatewayRouteTables"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayRouteTables"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGatewayRouteTables"},
@@ -13098,8 +12968,7 @@
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation"},
           {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayVpcAttachment"},
@@ -13109,8 +12978,7 @@
           {"action":"ec2:DescribeTransitGatewayVpcAttachments"},
           {"action":"ec2:DescribeTransitGateways"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations"},
-          {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations"}
         ],
         "update": [
           {"action":"ec2:ModifyTransitGatewayVpcAttachment","changed":"appliance_mode_support"},
@@ -13155,8 +13023,7 @@
           {"action":"ec2:DisassociateTransitGatewayRouteTable"},
           {"action":"ec2:EnableTransitGatewayRouteTablePropagation"},
           {"action":"ec2:DisableTransitGatewayRouteTablePropagation"},
-          {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations"}
         ],
         "delete": [
           {"action":"ec2:DeleteTransitGatewayVpcAttachment"},
@@ -13166,8 +13033,7 @@
           {"action":"ec2:DescribeTransitGatewayVpcAttachments"},
           {"action":"ec2:DescribeTransitGateways"},
           {"action":"ec2:GetTransitGatewayRouteTableAssociations"},
-          {"action":"ec2:GetTransitGatewayRouteTablePropagations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetTransitGatewayRouteTablePropagations"}
         ],
         "update": [
           {"action":"ec2:DescribeTransitGateways","changed":"transit_gateway_default_route_table_association"},
@@ -13433,16 +13299,14 @@
           {"action":"ecs:CreateCapacityProvider"},
           {"action":"ecs:UntagResource"},
           {"action":"ecs:TagResource"},
-          {"action":"ecs:DescribeCapacityProviders"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeCapacityProviders"}
         ],
         "delete": [
           {"action":"ecs:DeleteCapacityProvider"},
           {"action":"ecs:DescribeCapacityProviders"}
         ],
         "read": [
-          {"action":"ecs:DescribeCapacityProviders"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeCapacityProviders"}
         ],
         "update": [
           {"action":"ecs:UpdateCapacityProvider"},
@@ -13458,16 +13322,14 @@
           {"action":"ecs:CreateCluster"},
           {"action":"ecs:DescribeClusters"},
           {"action":"ecs:UntagResource"},
-          {"action":"ecs:TagResource"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:TagResource"}
         ],
         "delete": [
           {"action":"ecs:DeleteCluster"},
           {"action":"ecs:DescribeClusters"}
         ],
         "read": [
-          {"action":"ecs:DescribeClusters"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeClusters"}
         ],
         "update": [
           {"action":"ecs:UpdateCluster","changed":"configuration"},
@@ -13567,8 +13429,7 @@
         ],
         "read": [
           {"action":"ecs:DescribeExpressGatewayService"},
-          {"action":"ec2:DescribeSecurityGroups","best_effort":true},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ec2:DescribeSecurityGroups","best_effort":true}
         ],
         "update": [
           {"action":"ecs:UpdateExpressGatewayService"},
@@ -13589,8 +13450,7 @@
           {"action":"ecs:StopServiceDeployment","attribute":"wait_for_steady_state"},
           {"action":"ecs:DescribeServiceDeployments","attribute":"wait_for_steady_state"},
           {"action":"ecs:UntagResource"},
-          {"action":"ecs:TagResource"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:TagResource"}
         ],
         "delete": [
           {"action":"ecs:UpdateService"},
@@ -13598,8 +13458,7 @@
           {"action":"ecs:DescribeServices"}
         ],
         "read": [
-          {"action":"ecs:DescribeServices"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeServices"}
         ],
         "update": [
           {"action":"ecs:UpdateService"},
@@ -13639,15 +13498,13 @@
           {"action":"ecs:RegisterTaskDefinition"},
           {"action":"ecs:UntagResource"},
           {"action":"ecs:TagResource"},
-          {"action":"ecs:DescribeTaskDefinition"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeTaskDefinition"}
         ],
         "delete": [
           {"action":"ecs:DeregisterTaskDefinition"}
         ],
         "read": [
-          {"action":"ecs:DescribeTaskDefinition"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeTaskDefinition"}
         ],
         "update": [
           {"action":"ecs:DescribeTaskDefinition"},
@@ -13662,16 +13519,14 @@
           {"action":"ecs:CreateTaskSet"},
           {"action":"ecs:DescribeTaskSets"},
           {"action":"ecs:UntagResource"},
-          {"action":"ecs:TagResource"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:TagResource"}
         ],
         "delete": [
           {"action":"ecs:DeleteTaskSet"},
           {"action":"ecs:DescribeTaskSets"}
         ],
         "read": [
-          {"action":"ecs:DescribeTaskSets"},
-          {"action":"ecs:ListTagsForResource"}
+          {"action":"ecs:DescribeTaskSets"}
         ],
         "update": [
           {"action":"ecs:UpdateTaskSet"},
@@ -13686,16 +13541,14 @@
         "create": [
           {"action":"elasticfilesystem:CreateAccessPoint"},
           {"action":"elasticfilesystem:DescribeAccessPoints"},
-          {"action":"elasticfilesystem:TagResource","attribute":"tags"},
-          {"action":"elasticfilesystem:DescribeTags"}
+          {"action":"elasticfilesystem:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"elasticfilesystem:DeleteAccessPoint"},
           {"action":"elasticfilesystem:DescribeAccessPoints"}
         ],
         "read": [
-          {"action":"elasticfilesystem:DescribeAccessPoints"},
-          {"action":"elasticfilesystem:DescribeTags"}
+          {"action":"elasticfilesystem:DescribeAccessPoints"}
         ],
         "update": [
           {"action":"elasticfilesystem:DescribeAccessPoints"},
@@ -13731,8 +13584,7 @@
           {"action":"elasticfilesystem:UpdateFileSystemProtection","attribute":"protection","value_guarded":true},
           {"action":"elasticfilesystem:DescribeFileSystems"},
           {"action":"elasticfilesystem:DescribeLifecycleConfiguration"},
-          {"action":"elasticfilesystem:TagResource","attribute":"tags"},
-          {"action":"elasticfilesystem:DescribeTags"}
+          {"action":"elasticfilesystem:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"elasticfilesystem:DeleteFileSystem"},
@@ -13740,8 +13592,7 @@
         ],
         "read": [
           {"action":"elasticfilesystem:DescribeLifecycleConfiguration"},
-          {"action":"elasticfilesystem:DescribeFileSystems"},
-          {"action":"elasticfilesystem:DescribeTags"}
+          {"action":"elasticfilesystem:DescribeFileSystems"}
         ],
         "update": [
           {"action":"elasticfilesystem:UpdateFileSystem","changed":"provisioned_throughput_in_mibps"},
@@ -13816,15 +13667,13 @@
         "create": [
           {"action":"ec2:CreateEgressOnlyInternetGateway"},
           {"action":"ec2:DescribeEgressOnlyInternetGateways"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteEgressOnlyInternetGateway"}
         ],
         "read": [
-          {"action":"ec2:DescribeEgressOnlyInternetGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeEgressOnlyInternetGateways"}
         ],
         "update": [
           {"action":"ec2:DescribeEgressOnlyInternetGateways"},
@@ -13840,8 +13689,7 @@
           {"action":"ec2:DescribeAddresses"},
           {"action":"ec2:AssociateAddress"},
           {"action":"ec2:DescribeAddressesAttribute"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:ReleaseAddress"},
@@ -13850,8 +13698,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeAddresses"},
-          {"action":"ec2:DescribeAddressesAttribute"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeAddressesAttribute"}
         ],
         "update": [
           {"action":"ec2:DisassociateAddress","changed":"associate_with_private_ip"},
@@ -13984,8 +13831,7 @@
           {"action":"eks:DescribeCapability"}
         ],
         "read": [
-          {"action":"eks:DescribeCapability"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:DescribeCapability"}
         ],
         "update": [
           {"action":"eks:UpdateCapability"},
@@ -14067,16 +13913,14 @@
         "create": [
           {"action":"eks:CreateFargateProfile"},
           {"action":"eks:DescribeFargateProfile"},
-          {"action":"eks:TagResource","attribute":"tags"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"eks:DeleteFargateProfile"},
           {"action":"eks:DescribeFargateProfile"}
         ],
         "read": [
-          {"action":"eks:DescribeFargateProfile"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:DescribeFargateProfile"}
         ],
         "update": [
           {"action":"eks:DescribeFargateProfile"},
@@ -14090,16 +13934,14 @@
         "create": [
           {"action":"eks:AssociateIdentityProviderConfig"},
           {"action":"eks:DescribeIdentityProviderConfig"},
-          {"action":"eks:TagResource","attribute":"tags"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"eks:DisassociateIdentityProviderConfig"},
           {"action":"eks:DescribeIdentityProviderConfig"}
         ],
         "read": [
-          {"action":"eks:DescribeIdentityProviderConfig"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:DescribeIdentityProviderConfig"}
         ],
         "update": [
           {"action":"eks:DescribeIdentityProviderConfig"},
@@ -14160,8 +14002,7 @@
           {"action":"eks:DeletePodIdentityAssociation"}
         ],
         "read": [
-          {"action":"eks:DescribePodIdentityAssociation"},
-          {"action":"eks:ListTagsForResource"}
+          {"action":"eks:DescribePodIdentityAssociation"}
         ],
         "update": [
           {"action":"eks:UpdatePodIdentityAssociation","changed":"disable_session_tags"},
@@ -14916,15 +14757,13 @@
         "create": [
           {"action":"emr-containers:CreateJobTemplate"},
           {"action":"emr-containers:DescribeJobTemplate"},
-          {"action":"emr-containers:TagResource","attribute":"tags"},
-          {"action":"emr-containers:ListTagsForResource"}
+          {"action":"emr-containers:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"emr-containers:DeleteJobTemplate"}
         ],
         "read": [
-          {"action":"emr-containers:DescribeJobTemplate"},
-          {"action":"emr-containers:ListTagsForResource"}
+          {"action":"emr-containers:DescribeJobTemplate"}
         ],
         "update": [
           {"action":"emr-containers:TagResource","attribute":"tags"},
@@ -14937,16 +14776,14 @@
         "create": [
           {"action":"emr-containers:CreateVirtualCluster"},
           {"action":"emr-containers:DescribeVirtualCluster"},
-          {"action":"emr-containers:TagResource","attribute":"tags"},
-          {"action":"emr-containers:ListTagsForResource"}
+          {"action":"emr-containers:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"emr-containers:DeleteVirtualCluster"},
           {"action":"emr-containers:DescribeVirtualCluster"}
         ],
         "read": [
-          {"action":"emr-containers:DescribeVirtualCluster"},
-          {"action":"emr-containers:ListTagsForResource"}
+          {"action":"emr-containers:DescribeVirtualCluster"}
         ],
         "update": [
           {"action":"emr-containers:DescribeVirtualCluster"},
@@ -14960,16 +14797,14 @@
         "create": [
           {"action":"emr-serverless:CreateApplication"},
           {"action":"emr-serverless:GetApplication"},
-          {"action":"emr-serverless:TagResource","attribute":"tags"},
-          {"action":"emr-serverless:ListTagsForResource"}
+          {"action":"emr-serverless:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"emr-serverless:DeleteApplication"},
           {"action":"emr-serverless:GetApplication"}
         ],
         "read": [
-          {"action":"emr-serverless:GetApplication"},
-          {"action":"emr-serverless:ListTagsForResource"}
+          {"action":"emr-serverless:GetApplication"}
         ],
         "update": [
           {"action":"emr-serverless:UpdateApplication"},
@@ -15387,16 +15222,14 @@
         "create": [
           {"action":"fsx:CreateBackup"},
           {"action":"fsx:DescribeBackups"},
-          {"action":"fsx:TagResource","attribute":"tags"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"fsx:DeleteBackup"},
           {"action":"fsx:DescribeBackups"}
         ],
         "read": [
-          {"action":"fsx:DescribeBackups"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:DescribeBackups"}
         ],
         "update": [
           {"action":"fsx:DescribeBackups"},
@@ -15410,16 +15243,14 @@
         "create": [
           {"action":"fsx:CreateDataRepositoryAssociation"},
           {"action":"fsx:DescribeDataRepositoryAssociations"},
-          {"action":"fsx:TagResource","attribute":"tags"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"fsx:DeleteDataRepositoryAssociation"},
           {"action":"fsx:DescribeDataRepositoryAssociations"}
         ],
         "read": [
-          {"action":"fsx:DescribeDataRepositoryAssociations"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:DescribeDataRepositoryAssociations"}
         ],
         "update": [
           {"action":"fsx:UpdateDataRepositoryAssociation"},
@@ -15462,16 +15293,14 @@
           {"action":"fsx:CreateFileSystemFromBackup","attribute":"backup_id"},
           {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:TagResource","attribute":"tags"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"fsx:DeleteFileSystem"},
           {"action":"fsx:DescribeFileSystems"}
         ],
         "read": [
-          {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:DescribeFileSystems"}
         ],
         "update": [
           {"action":"fsx:UpdateFileSystem"},
@@ -15486,16 +15315,14 @@
         "create": [
           {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:TagResource","attribute":"tags"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"fsx:DeleteFileSystem"},
           {"action":"fsx:DescribeFileSystems"}
         ],
         "read": [
-          {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:DescribeFileSystems"}
         ],
         "update": [
           {"action":"fsx:UpdateFileSystem"},
@@ -15651,16 +15478,14 @@
           {"action":"fsx:CreateFileSystemFromBackup","attribute":"backup_id"},
           {"action":"fsx:CreateFileSystem"},
           {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:TagResource","attribute":"tags"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"fsx:DeleteFileSystem"},
           {"action":"fsx:DescribeFileSystems"}
         ],
         "read": [
-          {"action":"fsx:DescribeFileSystems"},
-          {"action":"fsx:ListTagsForResource"}
+          {"action":"fsx:DescribeFileSystems"}
         ],
         "update": [
           {"action":"fsx:AssociateFileSystemAliases","changed":"aliases"},
@@ -16564,8 +16389,7 @@
           {"action":"grafana:CreateWorkspace"},
           {"action":"grafana:DescribeWorkspace"},
           {"action":"grafana:DescribeWorkspaceConfiguration"},
-          {"action":"grafana:TagResource","attribute":"tags"},
-          {"action":"grafana:ListTagsForResource"}
+          {"action":"grafana:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"grafana:DeleteWorkspace"},
@@ -16573,8 +16397,7 @@
         ],
         "read": [
           {"action":"grafana:DescribeWorkspaceConfiguration"},
-          {"action":"grafana:DescribeWorkspace"},
-          {"action":"grafana:ListTagsForResource"}
+          {"action":"grafana:DescribeWorkspace"}
         ],
         "update": [
           {"action":"grafana:UpdateWorkspace"},
@@ -16646,15 +16469,13 @@
         "create": [
           {"action":"guardduty:CreateDetector"},
           {"action":"guardduty:GetDetector"},
-          {"action":"guardduty:TagResource","attribute":"tags"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"guardduty:DeleteDetector"}
         ],
         "read": [
-          {"action":"guardduty:GetDetector"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:GetDetector"}
         ],
         "update": [
           {"action":"guardduty:UpdateDetector"},
@@ -16684,15 +16505,13 @@
         "create": [
           {"action":"guardduty:CreateFilter"},
           {"action":"guardduty:GetFilter"},
-          {"action":"guardduty:TagResource","attribute":"tags"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"guardduty:DeleteFilter"}
         ],
         "read": [
-          {"action":"guardduty:GetFilter"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:GetFilter"}
         ],
         "update": [
           {"action":"guardduty:UpdateFilter","changed":"action"},
@@ -16725,16 +16544,14 @@
         "create": [
           {"action":"guardduty:CreateIPSet"},
           {"action":"guardduty:GetIPSet"},
-          {"action":"guardduty:TagResource","attribute":"tags"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"guardduty:DeleteIPSet"},
           {"action":"guardduty:GetIPSet"}
         ],
         "read": [
-          {"action":"guardduty:GetIPSet"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:GetIPSet"}
         ],
         "update": [
           {"action":"guardduty:UpdateIPSet"},
@@ -16850,15 +16667,13 @@
         "create": [
           {"action":"guardduty:CreatePublishingDestination"},
           {"action":"guardduty:DescribePublishingDestination"},
-          {"action":"guardduty:TagResource","attribute":"tags"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"guardduty:DeletePublishingDestination"}
         ],
         "read": [
-          {"action":"guardduty:DescribePublishingDestination"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:DescribePublishingDestination"}
         ],
         "update": [
           {"action":"guardduty:UpdatePublishingDestination"},
@@ -16873,16 +16688,14 @@
         "create": [
           {"action":"guardduty:CreateThreatIntelSet"},
           {"action":"guardduty:GetThreatIntelSet"},
-          {"action":"guardduty:TagResource","attribute":"tags"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"guardduty:DeleteThreatIntelSet"},
           {"action":"guardduty:GetThreatIntelSet"}
         ],
         "read": [
-          {"action":"guardduty:GetThreatIntelSet"},
-          {"action":"guardduty:ListTagsForResource"}
+          {"action":"guardduty:GetThreatIntelSet"}
         ],
         "update": [
           {"action":"guardduty:UpdateThreatIntelSet"},
@@ -17053,8 +16866,7 @@
           {"action":"iam:UntagInstanceProfile"},
           {"action":"iam:TagInstanceProfile"},
           {"action":"iam:GetRole"},
-          {"action":"iam:RemoveRoleFromInstanceProfile"},
-          {"action":"iam:ListInstanceProfileTags"}
+          {"action":"iam:RemoveRoleFromInstanceProfile"}
         ],
         "delete": [
           {"action":"iam:DeleteInstanceProfile"},
@@ -17063,8 +16875,7 @@
         "read": [
           {"action":"iam:GetInstanceProfile"},
           {"action":"iam:GetRole"},
-          {"action":"iam:RemoveRoleFromInstanceProfile"},
-          {"action":"iam:ListInstanceProfileTags"}
+          {"action":"iam:RemoveRoleFromInstanceProfile"}
         ],
         "update": [
           {"action":"iam:RemoveRoleFromInstanceProfile"},
@@ -17082,15 +16893,13 @@
           {"action":"iam:CreateOpenIDConnectProvider"},
           {"action":"iam:UntagOpenIDConnectProvider"},
           {"action":"iam:TagOpenIDConnectProvider"},
-          {"action":"iam:GetOpenIDConnectProvider"},
-          {"action":"iam:ListOpenIDConnectProviderTags"}
+          {"action":"iam:GetOpenIDConnectProvider"}
         ],
         "delete": [
           {"action":"iam:DeleteOpenIDConnectProvider"}
         ],
         "read": [
-          {"action":"iam:GetOpenIDConnectProvider"},
-          {"action":"iam:ListOpenIDConnectProviderTags"}
+          {"action":"iam:GetOpenIDConnectProvider"}
         ],
         "update": [
           {"action":"iam:UpdateOpenIDConnectProviderThumbprint","changed":"thumbprint_list"},
@@ -17148,8 +16957,7 @@
           {"action":"iam:UntagPolicy"},
           {"action":"iam:TagPolicy"},
           {"action":"iam:GetPolicy"},
-          {"action":"iam:GetPolicyVersion"},
-          {"action":"iam:ListPolicyTags"}
+          {"action":"iam:GetPolicyVersion"}
         ],
         "delete": [
           {"action":"iam:DeletePolicy"},
@@ -17158,8 +16966,7 @@
         ],
         "read": [
           {"action":"iam:GetPolicy"},
-          {"action":"iam:GetPolicyVersion"},
-          {"action":"iam:ListPolicyTags"}
+          {"action":"iam:GetPolicyVersion"}
         ],
         "update": [
           {"action":"iam:CreatePolicyVersion"},
@@ -17216,8 +17023,7 @@
           {"action":"iam:UntagRole"},
           {"action":"iam:TagRole"},
           {"action":"iam:GetRole"},
-          {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
-          {"action":"iam:ListRoleTags"}
+          {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true}
         ],
         "delete": [
           {"action":"iam:DeleteRole"},
@@ -17231,8 +17037,7 @@
           {"action":"iam:GetRole"},
           {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
           {"action":"iam:ListRolePolicies"},
-          {"action":"iam:ListAttachedRolePolicies"},
-          {"action":"iam:ListRoleTags"}
+          {"action":"iam:ListAttachedRolePolicies"}
         ],
         "update": [
           {"action":"iam:UpdateAssumeRolePolicy","changed":"assume_role_policy"},
@@ -17325,15 +17130,13 @@
           {"action":"iam:CreateSAMLProvider"},
           {"action":"iam:UntagSAMLProvider"},
           {"action":"iam:TagSAMLProvider"},
-          {"action":"iam:GetSAMLProvider"},
-          {"action":"iam:ListSAMLProviderTags"}
+          {"action":"iam:GetSAMLProvider"}
         ],
         "delete": [
           {"action":"iam:DeleteSAMLProvider"}
         ],
         "read": [
-          {"action":"iam:GetSAMLProvider"},
-          {"action":"iam:ListSAMLProviderTags"}
+          {"action":"iam:GetSAMLProvider"}
         ],
         "update": [
           {"action":"iam:UpdateSAMLProvider"},
@@ -17364,15 +17167,13 @@
           {"action":"iam:UploadServerCertificate"},
           {"action":"iam:UntagServerCertificate"},
           {"action":"iam:TagServerCertificate"},
-          {"action":"iam:GetServerCertificate"},
-          {"action":"iam:ListServerCertificateTags"}
+          {"action":"iam:GetServerCertificate"}
         ],
         "delete": [
           {"action":"iam:DeleteServerCertificate"}
         ],
         "read": [
-          {"action":"iam:GetServerCertificate"},
-          {"action":"iam:ListServerCertificateTags"}
+          {"action":"iam:GetServerCertificate"}
         ],
         "update": [
           {"action":"iam:UpdateServerCertificate","changed":"name"},
@@ -17390,16 +17191,14 @@
           {"action":"iam:CreateServiceLinkedRole"},
           {"action":"iam:UntagRole"},
           {"action":"iam:TagRole"},
-          {"action":"iam:GetRole"},
-          {"action":"iam:ListRoleTags"}
+          {"action":"iam:GetRole"}
         ],
         "delete": [
           {"action":"iam:DeleteServiceLinkedRole"},
           {"action":"iam:GetServiceLinkedRoleDeletionStatus"}
         ],
         "read": [
-          {"action":"iam:GetRole"},
-          {"action":"iam:ListRoleTags"}
+          {"action":"iam:GetRole"}
         ],
         "update": [
           {"action":"iam:UpdateRole"},
@@ -17453,8 +17252,7 @@
           {"action":"iam:CreateUser"},
           {"action":"iam:UntagUser"},
           {"action":"iam:TagUser"},
-          {"action":"iam:GetUser"},
-          {"action":"iam:ListUserTags"}
+          {"action":"iam:GetUser"}
         ],
         "delete": [
           {"action":"iam:DeleteUser"},
@@ -17479,8 +17277,7 @@
           {"action":"iam:ListServiceSpecificCredentials","attribute":"force_destroy"}
         ],
         "read": [
-          {"action":"iam:GetUser"},
-          {"action":"iam:ListUserTags"}
+          {"action":"iam:GetUser"}
         ],
         "update": [
           {"action":"iam:UpdateUser","changed":"name"},
@@ -17691,15 +17488,13 @@
         "create": [
           {"action":"imagebuilder:CreateComponent"},
           {"action":"imagebuilder:GetComponent"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteComponent"}
         ],
         "read": [
-          {"action":"imagebuilder:GetComponent"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetComponent"}
         ],
         "update": [
           {"action":"imagebuilder:GetComponent"},
@@ -17713,15 +17508,13 @@
         "create": [
           {"action":"imagebuilder:CreateContainerRecipe"},
           {"action":"imagebuilder:GetContainerRecipe"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteContainerRecipe"}
         ],
         "read": [
-          {"action":"imagebuilder:GetContainerRecipe"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetContainerRecipe"}
         ],
         "update": [
           {"action":"imagebuilder:GetContainerRecipe"},
@@ -17735,15 +17528,13 @@
         "create": [
           {"action":"imagebuilder:CreateDistributionConfiguration"},
           {"action":"imagebuilder:GetDistributionConfiguration"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteDistributionConfiguration"}
         ],
         "read": [
-          {"action":"imagebuilder:GetDistributionConfiguration"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetDistributionConfiguration"}
         ],
         "update": [
           {"action":"imagebuilder:UpdateDistributionConfiguration","changed":"description"},
@@ -17759,15 +17550,13 @@
         "create": [
           {"action":"imagebuilder:CreateImage"},
           {"action":"imagebuilder:GetImage"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteImage"}
         ],
         "read": [
-          {"action":"imagebuilder:GetImage"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetImage"}
         ],
         "update": [
           {"action":"imagebuilder:GetImage"},
@@ -17781,15 +17570,13 @@
         "create": [
           {"action":"imagebuilder:CreateImagePipeline"},
           {"action":"imagebuilder:GetImagePipeline"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteImagePipeline"}
         ],
         "read": [
-          {"action":"imagebuilder:GetImagePipeline"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetImagePipeline"}
         ],
         "update": [
           {"action":"imagebuilder:UpdateImagePipeline"},
@@ -17804,15 +17591,13 @@
         "create": [
           {"action":"imagebuilder:CreateImageRecipe"},
           {"action":"imagebuilder:GetImageRecipe"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteImageRecipe"}
         ],
         "read": [
-          {"action":"imagebuilder:GetImageRecipe"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetImageRecipe"}
         ],
         "update": [
           {"action":"imagebuilder:GetImageRecipe"},
@@ -17826,15 +17611,13 @@
         "create": [
           {"action":"imagebuilder:CreateInfrastructureConfiguration"},
           {"action":"imagebuilder:GetInfrastructureConfiguration"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteInfrastructureConfiguration"}
         ],
         "read": [
-          {"action":"imagebuilder:GetInfrastructureConfiguration"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetInfrastructureConfiguration"}
         ],
         "update": [
           {"action":"imagebuilder:UpdateInfrastructureConfiguration","changed":"description"},
@@ -17867,8 +17650,7 @@
           {"action":"imagebuilder:DeleteLifecyclePolicy"}
         ],
         "read": [
-          {"action":"imagebuilder:GetLifecyclePolicy"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetLifecyclePolicy"}
         ],
         "update": [
           {"action":"imagebuilder:UpdateLifecyclePolicy","changed":"description"},
@@ -17887,15 +17669,13 @@
         "create": [
           {"action":"imagebuilder:CreateWorkflow"},
           {"action":"imagebuilder:GetWorkflow"},
-          {"action":"imagebuilder:TagResource","attribute":"tags"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"imagebuilder:DeleteWorkflow"}
         ],
         "read": [
-          {"action":"imagebuilder:GetWorkflow"},
-          {"action":"imagebuilder:ListTagsForResource"}
+          {"action":"imagebuilder:GetWorkflow"}
         ],
         "update": [
           {"action":"imagebuilder:GetWorkflow"},
@@ -17951,8 +17731,7 @@
           {"action":"inspector2:DeleteFilter"}
         ],
         "read": [
-          {"action":"inspector2:ListFilters"},
-          {"action":"inspector2:ListTagsForResource"}
+          {"action":"inspector2:ListFilters"}
         ],
         "update": [
           {"action":"inspector2:UpdateFilter","changed":"action"},
@@ -18254,8 +18033,7 @@
           {"action":"internetmonitor:CreateMonitor"},
           {"action":"internetmonitor:UpdateMonitor","attribute":"status"},
           {"action":"internetmonitor:GetMonitor"},
-          {"action":"internetmonitor:TagResource","attribute":"tags"},
-          {"action":"internetmonitor:ListTagsForResource"}
+          {"action":"internetmonitor:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"internetmonitor:UpdateMonitor"},
@@ -18263,8 +18041,7 @@
           {"action":"internetmonitor:GetMonitor"}
         ],
         "read": [
-          {"action":"internetmonitor:GetMonitor"},
-          {"action":"internetmonitor:ListTagsForResource"}
+          {"action":"internetmonitor:GetMonitor"}
         ],
         "update": [
           {"action":"internetmonitor:UpdateMonitor"},
@@ -18979,15 +18756,13 @@
         "create": [
           {"action":"ec2:ImportKeyPair"},
           {"action":"ec2:DescribeKeyPairs"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteKeyPair"}
         ],
         "read": [
-          {"action":"ec2:DescribeKeyPairs"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeKeyPairs"}
         ],
         "update": [
           {"action":"ec2:DescribeKeyPairs"},
@@ -20230,8 +20005,7 @@
           {"action":"ec2:DescribeInstanceTypes"},
           {"action":"ec2:DescribeLaunchTemplates"},
           {"action":"ec2:DescribeLaunchTemplateVersions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteLaunchTemplate"}
@@ -20239,8 +20013,7 @@
         "read": [
           {"action":"ec2:DescribeLaunchTemplates"},
           {"action":"ec2:DescribeLaunchTemplateVersions"},
-          {"action":"ec2:DescribeInstanceTypes"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeInstanceTypes"}
         ],
         "update": [
           {"action":"ec2:CreateLaunchTemplateVersion"},
@@ -21303,15 +21076,13 @@
         "create": [
           {"action":"geo:CreateMap"},
           {"action":"geo:DescribeMap"},
-          {"action":"geo:TagResource","attribute":"tags"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"geo:DeleteMap"}
         ],
         "read": [
-          {"action":"geo:DescribeMap"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:DescribeMap"}
         ],
         "update": [
           {"action":"geo:UpdateMap","changed":"description"},
@@ -21326,15 +21097,13 @@
         "create": [
           {"action":"geo:CreatePlaceIndex"},
           {"action":"geo:DescribePlaceIndex"},
-          {"action":"geo:TagResource","attribute":"tags"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"geo:DeletePlaceIndex"}
         ],
         "read": [
-          {"action":"geo:DescribePlaceIndex"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:DescribePlaceIndex"}
         ],
         "update": [
           {"action":"geo:UpdatePlaceIndex","changed":"data_source_configuration"},
@@ -21373,15 +21142,13 @@
         "create": [
           {"action":"geo:CreateTracker"},
           {"action":"geo:DescribeTracker"},
-          {"action":"geo:TagResource","attribute":"tags"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"geo:DeleteTracker"}
         ],
         "read": [
-          {"action":"geo:DescribeTracker"},
-          {"action":"geo:ListTagsForResource"}
+          {"action":"geo:DescribeTracker"}
         ],
         "update": [
           {"action":"geo:UpdateTracker","changed":"description"},
@@ -21533,15 +21300,13 @@
         "create": [
           {"action":"macie2:CreateClassificationJob"},
           {"action":"macie2:DescribeClassificationJob"},
-          {"action":"macie2:TagResource","attribute":"tags"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"macie2:UpdateClassificationJob"}
         ],
         "read": [
-          {"action":"macie2:DescribeClassificationJob"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:DescribeClassificationJob"}
         ],
         "update": [
           {"action":"macie2:UpdateClassificationJob","changed":"job_status"},
@@ -21556,15 +21321,13 @@
         "create": [
           {"action":"macie2:CreateCustomDataIdentifier"},
           {"action":"macie2:GetCustomDataIdentifier"},
-          {"action":"macie2:TagResource","attribute":"tags"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"macie2:DeleteCustomDataIdentifier"}
         ],
         "read": [
-          {"action":"macie2:GetCustomDataIdentifier"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:GetCustomDataIdentifier"}
         ],
         "update": [
           {"action":"macie2:GetCustomDataIdentifier"},
@@ -21578,15 +21341,13 @@
         "create": [
           {"action":"macie2:CreateFindingsFilter"},
           {"action":"macie2:GetFindingsFilter"},
-          {"action":"macie2:TagResource","attribute":"tags"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"macie2:DeleteFindingsFilter"}
         ],
         "read": [
-          {"action":"macie2:GetFindingsFilter"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:GetFindingsFilter"}
         ],
         "update": [
           {"action":"macie2:UpdateFindingsFilter"},
@@ -21618,15 +21379,13 @@
           {"action":"macie2:CreateInvitations","attribute":"invite"},
           {"action":"macie2:ListMembers","attribute":"invite"},
           {"action":"macie2:GetMember"},
-          {"action":"macie2:TagResource","attribute":"tags"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"macie2:DeleteMember"}
         ],
         "read": [
-          {"action":"macie2:GetMember"},
-          {"action":"macie2:ListTagsForResource"}
+          {"action":"macie2:GetMember"}
         ],
         "update": [
           {"action":"macie2:DisassociateMember","changed":"invite"},
@@ -21831,16 +21590,14 @@
         "create": [
           {"action":"mediapackage:CreateChannel"},
           {"action":"mediapackage:DescribeChannel"},
-          {"action":"mediapackage:TagResource","attribute":"tags"},
-          {"action":"mediapackage:ListTagsForResource"}
+          {"action":"mediapackage:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"mediapackage:DeleteChannel"},
           {"action":"mediapackage:DescribeChannel"}
         ],
         "read": [
-          {"action":"mediapackage:DescribeChannel"},
-          {"action":"mediapackage:ListTagsForResource"}
+          {"action":"mediapackage:DescribeChannel"}
         ],
         "update": [
           {"action":"mediapackage:UpdateChannel"},
@@ -21862,8 +21619,7 @@
           {"action":"mediapackagev2:GetChannelGroup"}
         ],
         "read": [
-          {"action":"mediapackagev2:GetChannelGroup"},
-          {"action":"mediapackagev2:ListTagsForResource"}
+          {"action":"mediapackagev2:GetChannelGroup"}
         ],
         "update": [
           {"action":"mediapackagev2:UpdateChannelGroup"},
@@ -22217,8 +21973,7 @@
           {"action":"mq:UpdateBroker","attribute":"resource_share_arns","value_guarded":true},
           {"action":"mq:DescribeSharedResources"},
           {"action":"mq:DescribeUser"},
-          {"action":"mq:CreateTags","attribute":"tags"},
-          {"action":"mq:ListTags"}
+          {"action":"mq:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"mq:DeleteBroker"},
@@ -22227,8 +21982,7 @@
         "read": [
           {"action":"mq:DescribeBroker"},
           {"action":"mq:DescribeSharedResources"},
-          {"action":"mq:DescribeUser"},
-          {"action":"mq:ListTags"}
+          {"action":"mq:DescribeUser"}
         ],
         "update": [
           {"action":"mq:UpdateBroker","changed":"security_groups"},
@@ -22258,16 +22012,14 @@
           {"action":"mq:UpdateConfiguration","attribute":"data"},
           {"action":"mq:DescribeConfigurationRevision"},
           {"action":"mq:DescribeConfiguration"},
-          {"action":"mq:CreateTags","attribute":"tags"},
-          {"action":"mq:ListTags"}
+          {"action":"mq:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"mq:DeleteConfiguration"}
         ],
         "read": [
           {"action":"mq:DescribeConfigurationRevision"},
-          {"action":"mq:DescribeConfiguration"},
-          {"action":"mq:ListTags"}
+          {"action":"mq:DescribeConfiguration"}
         ],
         "update": [
           {"action":"mq:UpdateConfiguration","changed":"data"},
@@ -22292,8 +22044,7 @@
           {"action":"kafka:DescribeChannel"}
         ],
         "read": [
-          {"action":"kafka:DescribeChannel"},
-          {"action":"kafka:ListTagsForResource"}
+          {"action":"kafka:DescribeChannel"}
         ],
         "update": [
           {"action":"kafka:UpdateChannel"},
@@ -22407,16 +22158,14 @@
         "create": [
           {"action":"kafka:CreateReplicator"},
           {"action":"kafka:DescribeReplicator"},
-          {"action":"kafka:TagResource","attribute":"tags"},
-          {"action":"kafka:ListTagsForResource"}
+          {"action":"kafka:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"kafka:DeleteReplicator"},
           {"action":"kafka:DescribeReplicator"}
         ],
         "read": [
-          {"action":"kafka:DescribeReplicator"},
-          {"action":"kafka:ListTagsForResource"}
+          {"action":"kafka:DescribeReplicator"}
         ],
         "update": [
           {"action":"kafka:UpdateReplicationInfo"},
@@ -22508,16 +22257,14 @@
         "create": [
           {"action":"kafka:CreateVpcConnection"},
           {"action":"kafka:DescribeVpcConnection"},
-          {"action":"kafka:TagResource","attribute":"tags"},
-          {"action":"kafka:ListTagsForResource"}
+          {"action":"kafka:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"kafka:DeleteVpcConnection"},
           {"action":"kafka:DescribeVpcConnection"}
         ],
         "read": [
-          {"action":"kafka:DescribeVpcConnection"},
-          {"action":"kafka:ListTagsForResource"}
+          {"action":"kafka:DescribeVpcConnection"}
         ],
         "update": [
           {"action":"kafka:DescribeVpcConnection"},
@@ -22624,16 +22371,14 @@
         "create": [
           {"action":"ec2:CreateNatGateway"},
           {"action":"ec2:DescribeNatGateways"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteNatGateway"},
           {"action":"ec2:DescribeNatGateways"}
         ],
         "read": [
-          {"action":"ec2:DescribeNatGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNatGateways"}
         ],
         "update": [
           {"action":"ec2:AssignPrivateNatGatewayAddress","changed":"secondary_private_ip_addresses"},
@@ -22951,8 +22696,7 @@
           {"action":"ec2:CreateNetworkAclEntry","attribute":"ingress","value_guarded":true},
           {"action":"ec2:ReplaceNetworkAclAssociation","attribute":"subnet_ids","value_guarded":true},
           {"action":"ec2:DescribeNetworkAcls"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteNetworkAcl"},
@@ -22960,8 +22704,7 @@
           {"action":"ec2:ReplaceNetworkAclAssociation"}
         ],
         "read": [
-          {"action":"ec2:DescribeNetworkAcls"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkAcls"}
         ],
         "update": [
           {"action":"ec2:DeleteNetworkAclEntry","changed":"ingress"},
@@ -23121,8 +22864,7 @@
           {"action":"network-firewall:DescribeContainerAssociation"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeContainerAssociation"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeContainerAssociation"}
         ],
         "update": [
           {"action":"network-firewall:UpdateContainerAssociation"},
@@ -23137,16 +22879,14 @@
         "create": [
           {"action":"network-firewall:CreateFirewall"},
           {"action":"network-firewall:DescribeFirewall"},
-          {"action":"network-firewall:TagResource","attribute":"tags"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"network-firewall:DeleteFirewall"},
           {"action":"network-firewall:DescribeFirewall"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeFirewall"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeFirewall"}
         ],
         "update": [
           {"action":"network-firewall:UpdateFirewallDeleteProtection","changed":"delete_protection"},
@@ -23172,16 +22912,14 @@
         "create": [
           {"action":"network-firewall:CreateFirewallPolicy"},
           {"action":"network-firewall:DescribeFirewallPolicy"},
-          {"action":"network-firewall:TagResource","attribute":"tags"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"network-firewall:DeleteFirewallPolicy"},
           {"action":"network-firewall:DescribeFirewallPolicy"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeFirewallPolicy"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeFirewallPolicy"}
         ],
         "update": [
           {"action":"network-firewall:UpdateFirewallPolicy","changed":"description"},
@@ -23250,16 +22988,14 @@
         "create": [
           {"action":"network-firewall:CreateRuleGroup"},
           {"action":"network-firewall:DescribeRuleGroup"},
-          {"action":"network-firewall:TagResource","attribute":"tags"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"network-firewall:DeleteRuleGroup"},
           {"action":"network-firewall:DescribeRuleGroup"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeRuleGroup"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeRuleGroup"}
         ],
         "update": [
           {"action":"network-firewall:UpdateRuleGroup","changed":"description"},
@@ -23286,8 +23022,7 @@
           {"action":"network-firewall:DescribeTLSInspectionConfiguration"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeTLSInspectionConfiguration"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeTLSInspectionConfiguration"}
         ],
         "update": [
           {"action":"network-firewall:UpdateTLSInspectionConfiguration","changed":"description"},
@@ -23314,8 +23049,7 @@
           {"action":"network-firewall:DescribeVpcEndpointAssociation"}
         ],
         "read": [
-          {"action":"network-firewall:DescribeVpcEndpointAssociation"},
-          {"action":"network-firewall:ListTagsForResource"}
+          {"action":"network-firewall:DescribeVpcEndpointAssociation"}
         ],
         "update": [
           {"action":"network-firewall:TagResource","attribute":"tags"},
@@ -23336,8 +23070,7 @@
           {"action":"networkflowmonitor:GetMonitor"}
         ],
         "read": [
-          {"action":"networkflowmonitor:GetMonitor"},
-          {"action":"networkflowmonitor:ListTagsForResource"}
+          {"action":"networkflowmonitor:GetMonitor"}
         ],
         "update": [
           {"action":"networkflowmonitor:UpdateMonitor"},
@@ -23360,8 +23093,7 @@
           {"action":"networkflowmonitor:GetScope"}
         ],
         "read": [
-          {"action":"networkflowmonitor:GetScope"},
-          {"action":"networkflowmonitor:ListTagsForResource"}
+          {"action":"networkflowmonitor:GetScope"}
         ],
         "update": [
           {"action":"networkflowmonitor:UpdateScope"},
@@ -23415,8 +23147,7 @@
           {"action":"networkmanager:CreateConnectAttachment"},
           {"action":"networkmanager:GetConnectAttachment"},
           {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteAttachment"},
@@ -23424,8 +23155,7 @@
         ],
         "read": [
           {"action":"networkmanager:GetConnectAttachment"},
-          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"}
         ],
         "update": [
           {"action":"networkmanager:GetConnectAttachment"},
@@ -23440,16 +23170,14 @@
         "create": [
           {"action":"networkmanager:CreateConnectPeer"},
           {"action":"networkmanager:GetConnectPeer"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteConnectPeer"},
           {"action":"networkmanager:GetConnectPeer"}
         ],
         "read": [
-          {"action":"networkmanager:GetConnectPeer"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetConnectPeer"}
         ],
         "update": [
           {"action":"networkmanager:GetConnectPeer"},
@@ -23463,16 +23191,14 @@
         "create": [
           {"action":"networkmanager:CreateConnection"},
           {"action":"networkmanager:GetConnections"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteConnection"},
           {"action":"networkmanager:GetConnections"}
         ],
         "read": [
-          {"action":"networkmanager:GetConnections"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetConnections"}
         ],
         "update": [
           {"action":"networkmanager:UpdateConnection"},
@@ -23487,16 +23213,14 @@
         "create": [
           {"action":"networkmanager:CreateCoreNetwork"},
           {"action":"networkmanager:GetCoreNetwork"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteCoreNetwork"},
           {"action":"networkmanager:GetCoreNetwork"}
         ],
         "read": [
-          {"action":"networkmanager:GetCoreNetwork"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetCoreNetwork"}
         ],
         "update": [
           {"action":"networkmanager:UpdateCoreNetwork","changed":"description"},
@@ -23549,16 +23273,14 @@
         "create": [
           {"action":"networkmanager:CreateDevice"},
           {"action":"networkmanager:GetDevices"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteDevice"},
           {"action":"networkmanager:GetDevices"}
         ],
         "read": [
-          {"action":"networkmanager:GetDevices"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetDevices"}
         ],
         "update": [
           {"action":"networkmanager:UpdateDevice"},
@@ -23583,8 +23305,7 @@
         ],
         "read": [
           {"action":"networkmanager:GetDirectConnectGatewayAttachment"},
-          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"}
         ],
         "update": [
           {"action":"networkmanager:UpdateDirectConnectGatewayAttachment","changed":"edge_locations"},
@@ -23599,8 +23320,7 @@
         "create": [
           {"action":"networkmanager:CreateGlobalNetwork"},
           {"action":"networkmanager:DescribeGlobalNetworks"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteGlobalNetwork"},
@@ -23613,8 +23333,7 @@
           {"action":"networkmanager:DescribeGlobalNetworks"}
         ],
         "read": [
-          {"action":"networkmanager:DescribeGlobalNetworks"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:DescribeGlobalNetworks"}
         ],
         "update": [
           {"action":"networkmanager:UpdateGlobalNetwork"},
@@ -23629,16 +23348,14 @@
         "create": [
           {"action":"networkmanager:CreateLink"},
           {"action":"networkmanager:GetLinks"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteLink"},
           {"action":"networkmanager:GetLinks"}
         ],
         "read": [
-          {"action":"networkmanager:GetLinks"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetLinks"}
         ],
         "update": [
           {"action":"networkmanager:UpdateLink"},
@@ -23683,16 +23400,14 @@
         "create": [
           {"action":"networkmanager:CreateSite"},
           {"action":"networkmanager:GetSites"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteSite"},
           {"action":"networkmanager:GetSites"}
         ],
         "read": [
-          {"action":"networkmanager:GetSites"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetSites"}
         ],
         "update": [
           {"action":"networkmanager:UpdateSite"},
@@ -23708,8 +23423,7 @@
           {"action":"networkmanager:CreateSiteToSiteVpnAttachment"},
           {"action":"networkmanager:GetSiteToSiteVpnAttachment"},
           {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteAttachment"},
@@ -23717,8 +23431,7 @@
         ],
         "read": [
           {"action":"networkmanager:GetSiteToSiteVpnAttachment"},
-          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"}
         ],
         "update": [
           {"action":"networkmanager:PutAttachmentRoutingPolicyLabel","changed":"routing_policy_label"},
@@ -23750,16 +23463,14 @@
         "create": [
           {"action":"networkmanager:CreateTransitGatewayPeering"},
           {"action":"networkmanager:GetTransitGatewayPeering"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeletePeering"},
           {"action":"networkmanager:GetTransitGatewayPeering"}
         ],
         "read": [
-          {"action":"networkmanager:GetTransitGatewayPeering"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:GetTransitGatewayPeering"}
         ],
         "update": [
           {"action":"networkmanager:GetTransitGatewayPeering"},
@@ -23789,8 +23500,7 @@
           {"action":"networkmanager:CreateTransitGatewayRouteTableAttachment"},
           {"action":"networkmanager:GetTransitGatewayRouteTableAttachment"},
           {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:DeleteAttachment"},
@@ -23798,8 +23508,7 @@
         ],
         "read": [
           {"action":"networkmanager:GetTransitGatewayRouteTableAttachment"},
-          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"}
         ],
         "update": [
           {"action":"networkmanager:GetTransitGatewayRouteTableAttachment"},
@@ -23815,8 +23524,7 @@
           {"action":"networkmanager:CreateVpcAttachment"},
           {"action":"networkmanager:GetVpcAttachment"},
           {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:TagResource","attribute":"tags"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"networkmanager:RejectAttachment"},
@@ -23825,8 +23533,7 @@
         ],
         "read": [
           {"action":"networkmanager:GetVpcAttachment"},
-          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"},
-          {"action":"networkmanager:ListTagsForResource"}
+          {"action":"networkmanager:ListAttachmentRoutingPolicyAssociations"}
         ],
         "update": [
           {"action":"networkmanager:UpdateVpcAttachment"},
@@ -23852,8 +23559,7 @@
           {"action":"networkmonitor:GetMonitor"}
         ],
         "read": [
-          {"action":"networkmonitor:GetMonitor"},
-          {"action":"networkmonitor:ListTagsForResource"}
+          {"action":"networkmonitor:GetMonitor"}
         ],
         "update": [
           {"action":"networkmonitor:UpdateMonitor","changed":"aggregation_period"},
@@ -23876,8 +23582,7 @@
           {"action":"networkmonitor:GetProbe"}
         ],
         "read": [
-          {"action":"networkmonitor:GetProbe"},
-          {"action":"networkmonitor:ListTagsForResource"}
+          {"action":"networkmonitor:GetProbe"}
         ],
         "update": [
           {"action":"networkmonitor:UpdateProbe","changed":"destination"},
@@ -24277,8 +23982,7 @@
           {"action":"observabilityadmin:GetTelemetryPipeline"}
         ],
         "read": [
-          {"action":"observabilityadmin:GetTelemetryPipeline"},
-          {"action":"observabilityadmin:ListTagsForResource"}
+          {"action":"observabilityadmin:GetTelemetryPipeline"}
         ],
         "update": [
           {"action":"observabilityadmin:UpdateTelemetryPipeline"},
@@ -25052,8 +24756,7 @@
         "create": [
           {"action":"osis:CreatePipeline"},
           {"action":"osis:GetPipeline"},
-          {"action":"osis:TagResource","attribute":"tags"},
-          {"action":"osis:ListTagsForResource"}
+          {"action":"osis:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"osis:DeletePipeline"},
@@ -25611,16 +25314,14 @@
         "create": [
           {"action":"ec2:CreatePlacementGroup"},
           {"action":"ec2:DescribePlacementGroups"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeletePlacementGroup"},
           {"action":"ec2:DescribePlacementGroups"}
         ],
         "read": [
-          {"action":"ec2:DescribePlacementGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribePlacementGroups"}
         ],
         "update": [
           {"action":"ec2:DescribePlacementGroups"},
@@ -25684,8 +25385,7 @@
           {"action":"aps:DescribeAnomalyDetector"}
         ],
         "read": [
-          {"action":"aps:DescribeAnomalyDetector"},
-          {"action":"aps:ListTagsForResource"}
+          {"action":"aps:DescribeAnomalyDetector"}
         ],
         "update": [
           {"action":"aps:PutAnomalyDetector"},
@@ -25740,16 +25440,14 @@
         "create": [
           {"action":"aps:CreateRuleGroupsNamespace"},
           {"action":"aps:DescribeRuleGroupsNamespace"},
-          {"action":"aps:TagResource","attribute":"tags"},
-          {"action":"aps:ListTagsForResource"}
+          {"action":"aps:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"aps:DeleteRuleGroupsNamespace"},
           {"action":"aps:DescribeRuleGroupsNamespace"}
         ],
         "read": [
-          {"action":"aps:DescribeRuleGroupsNamespace"},
-          {"action":"aps:ListTagsForResource"}
+          {"action":"aps:DescribeRuleGroupsNamespace"}
         ],
         "update": [
           {"action":"aps:PutRuleGroupsNamespace"},
@@ -26754,8 +26452,7 @@
           {"action":"rds:DescribeDBInstances"},
           {"action":"rds:DescribeEvents","attribute":"warning_event_categories"},
           {"action":"rds:DescribeDBClusters"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:DeleteDBInstance"},
@@ -26765,8 +26462,7 @@
         ],
         "read": [
           {"action":"rds:DescribeDBInstances"},
-          {"action":"rds:DescribeDBClusters"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBClusters"}
         ],
         "update": [
           {"action":"rds:ModifyDBInstance"},
@@ -26851,16 +26547,14 @@
         "create": [
           {"action":"rds:CreateCustomDBEngineVersion"},
           {"action":"rds:DescribeDBEngineVersions"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:DeleteCustomDBEngineVersion"},
           {"action":"rds:DescribeDBEngineVersions"}
         ],
         "read": [
-          {"action":"rds:DescribeDBEngineVersions"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBEngineVersions"}
         ],
         "update": [
           {"action":"rds:ModifyCustomDBEngineVersion"},
@@ -26890,8 +26584,7 @@
         "create": [
           {"action":"rds:CreateGlobalCluster"},
           {"action":"rds:DescribeGlobalClusters"},
-          {"action":"rds:AddTagsToResource","attribute":"tags"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"rds:RemoveFromGlobalCluster","attribute":"force_destroy"},
@@ -26899,8 +26592,7 @@
           {"action":"rds:DescribeGlobalClusters"}
         ],
         "read": [
-          {"action":"rds:DescribeGlobalClusters"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeGlobalClusters"}
         ],
         "update": [
           {"action":"rds:ModifyGlobalCluster"},
@@ -26942,8 +26634,7 @@
           {"action":"rds:DescribeIntegrations"}
         ],
         "read": [
-          {"action":"rds:DescribeIntegrations"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeIntegrations"}
         ],
         "update": [
           {"action":"rds:ModifyIntegration","changed":"data_filter"},
@@ -26989,8 +26680,7 @@
           {"action":"rds:DescribeDBClusters"}
         ],
         "read": [
-          {"action":"rds:DescribeDBShardGroups"},
-          {"action":"rds:ListTagsForResource"}
+          {"action":"rds:DescribeDBShardGroups"}
         ],
         "update": [
           {"action":"rds:ModifyDBShardGroup","changed":"compute_redundancy"},
@@ -27059,16 +26749,14 @@
           {"action":"redshift:CreateCluster"},
           {"action":"redshift:ModifyCluster"},
           {"action":"redshift:DescribeClusters"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteCluster"},
           {"action":"redshift:DescribeClusters"}
         ],
         "read": [
-          {"action":"redshift:DescribeClusters"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeClusters"}
         ],
         "update": [
           {"action":"redshift:ModifyCluster"},
@@ -27106,16 +26794,14 @@
         "create": [
           {"action":"redshift:CreateClusterSnapshot"},
           {"action":"redshift:DescribeClusterSnapshots"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteClusterSnapshot"},
           {"action":"redshift:DescribeClusterSnapshots"}
         ],
         "read": [
-          {"action":"redshift:DescribeClusterSnapshots"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeClusterSnapshots"}
         ],
         "update": [
           {"action":"redshift:ModifyClusterSnapshot"},
@@ -27194,15 +26880,13 @@
         "create": [
           {"action":"redshift:CreateEventSubscription"},
           {"action":"redshift:DescribeEventSubscriptions"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteEventSubscription"}
         ],
         "read": [
-          {"action":"redshift:DescribeEventSubscriptions"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeEventSubscriptions"}
         ],
         "update": [
           {"action":"redshift:ModifyEventSubscription"},
@@ -27217,15 +26901,13 @@
         "create": [
           {"action":"redshift:CreateHsmClientCertificate"},
           {"action":"redshift:DescribeHsmClientCertificates"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteHsmClientCertificate"}
         ],
         "read": [
-          {"action":"redshift:DescribeHsmClientCertificates"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeHsmClientCertificates"}
         ],
         "update": [
           {"action":"redshift:DescribeHsmClientCertificates"},
@@ -27239,15 +26921,13 @@
         "create": [
           {"action":"redshift:CreateHsmConfiguration"},
           {"action":"redshift:DescribeHsmConfigurations"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteHsmConfiguration"}
         ],
         "read": [
-          {"action":"redshift:DescribeHsmConfigurations"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeHsmConfigurations"}
         ],
         "update": [
           {"action":"redshift:DescribeHsmConfigurations"},
@@ -27267,8 +26947,7 @@
           {"action":"redshift:DeleteRedshiftIdcApplication"}
         ],
         "read": [
-          {"action":"redshift:DescribeRedshiftIdcApplications"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeRedshiftIdcApplications"}
         ],
         "update": [
           {"action":"redshift:ModifyRedshiftIdcApplication"},
@@ -27290,8 +26969,7 @@
           {"action":"redshift:DescribeIntegrations"}
         ],
         "read": [
-          {"action":"redshift:DescribeIntegrations"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeIntegrations"}
         ],
         "update": [
           {"action":"redshift:ModifyIntegration","changed":"description"},
@@ -27347,16 +27025,14 @@
           {"action":"redshift:ModifyClusterParameterGroup","attribute":"parameter","value_guarded":true},
           {"action":"redshift:DescribeClusterParameterGroups"},
           {"action":"redshift:DescribeClusterParameters"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteClusterParameterGroup"}
         ],
         "read": [
           {"action":"redshift:DescribeClusterParameterGroups"},
-          {"action":"redshift:DescribeClusterParameters"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeClusterParameters"}
         ],
         "update": [
           {"action":"redshift:ModifyClusterParameterGroup","changed":"parameter"},
@@ -27437,16 +27113,14 @@
         "create": [
           {"action":"redshift:CreateSnapshotCopyGrant"},
           {"action":"redshift:DescribeSnapshotCopyGrants"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteSnapshotCopyGrant"},
           {"action":"redshift:DescribeSnapshotCopyGrants"}
         ],
         "read": [
-          {"action":"redshift:DescribeSnapshotCopyGrants"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeSnapshotCopyGrants"}
         ],
         "update": [
           {"action":"redshift:DescribeSnapshotCopyGrants"},
@@ -27460,8 +27134,7 @@
         "create": [
           {"action":"redshift:CreateSnapshotSchedule"},
           {"action":"redshift:DescribeSnapshotSchedules"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteSnapshotSchedule"},
@@ -27469,8 +27142,7 @@
           {"action":"redshift:DescribeSnapshotSchedules","attribute":"force_destroy"}
         ],
         "read": [
-          {"action":"redshift:DescribeSnapshotSchedules"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeSnapshotSchedules"}
         ],
         "update": [
           {"action":"redshift:ModifySnapshotSchedule","changed":"definitions"},
@@ -27500,15 +27172,13 @@
         "create": [
           {"action":"redshift:CreateClusterSubnetGroup"},
           {"action":"redshift:DescribeClusterSubnetGroups"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteClusterSubnetGroup"}
         ],
         "read": [
-          {"action":"redshift:DescribeClusterSubnetGroups"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeClusterSubnetGroups"}
         ],
         "update": [
           {"action":"redshift:ModifyClusterSubnetGroup","changed":"description"},
@@ -27524,15 +27194,13 @@
         "create": [
           {"action":"redshift:CreateUsageLimit"},
           {"action":"redshift:DescribeUsageLimits"},
-          {"action":"redshift:CreateTags","attribute":"tags"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"redshift:DeleteUsageLimit"}
         ],
         "read": [
-          {"action":"redshift:DescribeUsageLimits"},
-          {"action":"redshift:DescribeTags"}
+          {"action":"redshift:DescribeUsageLimits"}
         ],
         "update": [
           {"action":"redshift:ModifyUsageLimit"},
@@ -27924,8 +27592,7 @@
           {"action":"resource-explorer-2:GetIndex"}
         ],
         "read": [
-          {"action":"resource-explorer-2:GetIndex"},
-          {"action":"resource-explorer-2:ListTagsForResource"}
+          {"action":"resource-explorer-2:GetIndex"}
         ],
         "update": [
           {"action":"resource-explorer-2:UpdateIndexType","changed":"type"},
@@ -27948,8 +27615,7 @@
         ],
         "read": [
           {"action":"resource-explorer-2:GetView"},
-          {"action":"resource-explorer-2:GetDefaultView"},
-          {"action":"resource-explorer-2:ListTagsForResource"}
+          {"action":"resource-explorer-2:GetDefaultView"}
         ],
         "update": [
           {"action":"resource-explorer-2:UpdateView","changed":"filters"},
@@ -29010,8 +28676,7 @@
           {"action":"ec2:EnableVgwRoutePropagation","attribute":"propagating_vgws","value_guarded":true},
           {"action":"ec2:CreateRoute","attribute":"route","value_guarded":true},
           {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteRouteTable"},
@@ -29020,8 +28685,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInterfaces"}
         ],
         "update": [
           {"action":"ec2:DisableVgwRoutePropagation","changed":"propagating_vgws"},
@@ -29161,7 +28825,9 @@
           {"action":"s3:DeleteBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketVersioning","changed":"versioning"},
-          {"action":"s3:PutBucketAcl"},
+          {"action":"s3:PutBucketAcl","changed":"acl"},
+          {"action":"s3:PutBucketAcl","changed":"grant"},
+          {"action":"s3:PutBucketAcl","attribute":"grant","value_guarded":true},
           {"action":"s3:PutBucketLogging","changed":"logging"},
           {"action":"s3:PutLifecycleConfiguration","changed":"lifecycle_rule"},
           {"action":"s3:PutAccelerateConfiguration","changed":"acceleration_status"},
@@ -29216,7 +28882,9 @@
           {"action":"s3:DeleteBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketWebsite","changed":"website"},
           {"action":"s3:PutBucketVersioning","changed":"versioning"},
-          {"action":"s3:PutBucketAcl"},
+          {"action":"s3:PutBucketAcl","changed":"acl"},
+          {"action":"s3:PutBucketAcl","changed":"grant"},
+          {"action":"s3:PutBucketAcl","attribute":"grant","value_guarded":true},
           {"action":"s3:PutBucketLogging","changed":"logging"},
           {"action":"s3:PutLifecycleConfiguration","changed":"lifecycle_rule"},
           {"action":"s3:PutAccelerateConfiguration","changed":"acceleration_status"},
@@ -31523,8 +31191,7 @@
           {"action":"ec2:RevokeSecurityGroupIngress"},
           {"action":"ec2:AuthorizeSecurityGroupEgress"},
           {"action":"ec2:AuthorizeSecurityGroupIngress"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSecurityGroup"},
@@ -31537,8 +31204,7 @@
           {"action":"ec2:DescribeSecurityGroups"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroups"}
         ],
         "update": [
           {"action":"ec2:DescribeSecurityGroups"},
@@ -33041,8 +32707,7 @@
           {"action":"ses:DeleteTenant"}
         ],
         "read": [
-          {"action":"ses:GetTenant"},
-          {"action":"ses:ListTagsForResource"}
+          {"action":"ses:GetTenant"}
         ],
         "update": [
           {"action":"ses:TagResource","attribute":"tags"},
@@ -33297,15 +32962,13 @@
         "create": [
           {"action":"signer:PutSigningProfile"},
           {"action":"signer:GetSigningProfile"},
-          {"action":"signer:TagResource","attribute":"tags"},
-          {"action":"signer:ListTagsForResource"}
+          {"action":"signer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"signer:CancelSigningProfile"}
         ],
         "read": [
-          {"action":"signer:GetSigningProfile"},
-          {"action":"signer:ListTagsForResource"}
+          {"action":"signer:GetSigningProfile"}
         ],
         "update": [
           {"action":"signer:GetSigningProfile"},
@@ -33482,8 +33145,7 @@
           {"action":"ec2:DescribeImages"},
           {"action":"ec2:DescribeSpotFleetRequests"},
           {"action":"ec2:DescribeSpotFleetRequestHistory","attribute":"wait_for_fulfillment","best_effort":true},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:CancelSpotFleetRequests"},
@@ -33491,8 +33153,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeSpotFleetRequests"},
-          {"action":"ec2:DescribeImages"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeImages"}
         ],
         "update": [
           {"action":"ec2:ModifySpotFleetRequest"},
@@ -33516,8 +33177,7 @@
           {"action":"ec2:DescribeVolumes"},
           {"action":"ec2:DescribeVpcs"},
           {"action":"ec2:GetPasswordData","attribute":"get_password_data"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:CancelSpotInstanceRequests"},
@@ -33529,8 +33189,7 @@
           {"action":"ec2:DescribeInstances"},
           {"action":"ec2:DescribeVolumes"},
           {"action":"ec2:DescribeVpcs"},
-          {"action":"ec2:GetPasswordData","attribute":"get_password_data"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetPasswordData","attribute":"get_password_data"}
         ],
         "update": [
           {"action":"ec2:DescribeSpotInstanceRequests"},
@@ -33686,8 +33345,7 @@
           {"action":"ssm:DescribeDocument"},
           {"action":"ssm:GetDocument"},
           {"action":"ssm:DescribeDocumentPermission"},
-          {"action":"ssm:AddTagsToResource","attribute":"tags"},
-          {"action":"ssm:ListTagsForResource"}
+          {"action":"ssm:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"ssm:ModifyDocumentPermission","attribute":"permissions","value_guarded":true},
@@ -33697,8 +33355,7 @@
         "read": [
           {"action":"ssm:DescribeDocument"},
           {"action":"ssm:GetDocument"},
-          {"action":"ssm:DescribeDocumentPermission"},
-          {"action":"ssm:ListTagsForResource"}
+          {"action":"ssm:DescribeDocumentPermission"}
         ],
         "update": [
           {"action":"ssm:ModifyDocumentPermission","changed":"permissions"},
@@ -34017,8 +33674,7 @@
           {"action":"ssm-quicksetup:GetConfigurationManager"}
         ],
         "read": [
-          {"action":"ssm-quicksetup:GetConfigurationManager"},
-          {"action":"ssm-quicksetup:ListTagsForResource"}
+          {"action":"ssm-quicksetup:GetConfigurationManager"}
         ],
         "update": [
           {"action":"ssm-quicksetup:UpdateConfigurationManager","changed":"description"},
@@ -34354,16 +34010,14 @@
         "create": [
           {"action":"storagegateway:AssociateFileSystem"},
           {"action":"storagegateway:DescribeFileSystemAssociations"},
-          {"action":"storagegateway:AddTagsToResource","attribute":"tags"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"storagegateway:DisassociateFileSystem"},
           {"action":"storagegateway:DescribeFileSystemAssociations"}
         ],
         "read": [
-          {"action":"storagegateway:DescribeFileSystemAssociations"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:DescribeFileSystemAssociations"}
         ],
         "update": [
           {"action":"storagegateway:UpdateFileSystemAssociation"},
@@ -34389,8 +34043,7 @@
           {"action":"storagegateway:ListGateways","best_effort":true},
           {"action":"storagegateway:DescribeBandwidthRateLimit"},
           {"action":"storagegateway:DescribeMaintenanceStartTime"},
-          {"action":"storagegateway:AddTagsToResource","attribute":"tags"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"storagegateway:DeleteGateway"}
@@ -34400,8 +34053,7 @@
           {"action":"storagegateway:ListGateways","best_effort":true},
           {"action":"storagegateway:DescribeSMBSettings"},
           {"action":"storagegateway:DescribeBandwidthRateLimit"},
-          {"action":"storagegateway:DescribeMaintenanceStartTime"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:DescribeMaintenanceStartTime"}
         ],
         "update": [
           {"action":"storagegateway:UpdateGatewayInformation","changed":"cloudwatch_log_group_arn"},
@@ -34431,16 +34083,14 @@
         "create": [
           {"action":"storagegateway:CreateNFSFileShare"},
           {"action":"storagegateway:DescribeNFSFileShares"},
-          {"action":"storagegateway:AddTagsToResource","attribute":"tags"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"storagegateway:DeleteFileShare"},
           {"action":"storagegateway:DescribeNFSFileShares"}
         ],
         "read": [
-          {"action":"storagegateway:DescribeNFSFileShares"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:DescribeNFSFileShares"}
         ],
         "update": [
           {"action":"storagegateway:UpdateNFSFileShare"},
@@ -34455,16 +34105,14 @@
         "create": [
           {"action":"storagegateway:CreateSMBFileShare"},
           {"action":"storagegateway:DescribeSMBFileShares"},
-          {"action":"storagegateway:AddTagsToResource","attribute":"tags"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:AddTagsToResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"storagegateway:DeleteFileShare"},
           {"action":"storagegateway:DescribeSMBFileShares"}
         ],
         "read": [
-          {"action":"storagegateway:DescribeSMBFileShares"},
-          {"action":"storagegateway:ListTagsForResource"}
+          {"action":"storagegateway:DescribeSMBFileShares"}
         ],
         "update": [
           {"action":"storagegateway:UpdateSMBFileShare"},
@@ -34550,8 +34198,7 @@
           {"action":"ec2:ModifySubnetAttribute"},
           {"action":"ec2:DisassociateSubnetCidrBlock"},
           {"action":"ec2:AssociateSubnetCidrBlock"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteSubnet"},
@@ -34564,8 +34211,7 @@
           {"action":"ec2:GetIpamPoolAllocations"}
         ],
         "read": [
-          {"action":"ec2:DescribeSubnets"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSubnets"}
         ],
         "update": [
           {"action":"ec2:ModifySubnetAttribute","changed":"customer_owned_ipv4_pool"},
@@ -34614,8 +34260,7 @@
           {"action":"synthetics:GetCanary"},
           {"action":"synthetics:DeleteCanary"},
           {"action":"synthetics:StartCanary","attribute":"start_canary"},
-          {"action":"synthetics:TagResource","attribute":"tags"},
-          {"action":"synthetics:ListTagsForResource"}
+          {"action":"synthetics:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"synthetics:DeleteCanary"},
@@ -34623,8 +34268,7 @@
           {"action":"synthetics:GetCanary"}
         ],
         "read": [
-          {"action":"synthetics:GetCanary"},
-          {"action":"synthetics:ListTagsForResource"}
+          {"action":"synthetics:GetCanary"}
         ],
         "update": [
           {"action":"synthetics:UpdateCanary"},
@@ -34642,15 +34286,13 @@
         "create": [
           {"action":"synthetics:CreateGroup"},
           {"action":"synthetics:GetGroup"},
-          {"action":"synthetics:TagResource","attribute":"tags"},
-          {"action":"synthetics:ListTagsForResource"}
+          {"action":"synthetics:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"synthetics:DeleteGroup"}
         ],
         "read": [
-          {"action":"synthetics:GetGroup"},
-          {"action":"synthetics:ListTagsForResource"}
+          {"action":"synthetics:GetGroup"}
         ],
         "update": [
           {"action":"synthetics:GetGroup"},
@@ -34907,15 +34549,13 @@
         "create": [
           {"action":"transfer:CreateAgreement"},
           {"action":"transfer:DescribeAgreement"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteAgreement"}
         ],
         "read": [
-          {"action":"transfer:DescribeAgreement"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeAgreement"}
         ],
         "update": [
           {"action":"transfer:UpdateAgreement"},
@@ -34930,15 +34570,13 @@
         "create": [
           {"action":"transfer:ImportCertificate"},
           {"action":"transfer:DescribeCertificate"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteCertificate"}
         ],
         "read": [
-          {"action":"transfer:DescribeCertificate"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeCertificate"}
         ],
         "update": [
           {"action":"transfer:UpdateCertificate","changed":"description"},
@@ -34953,16 +34591,14 @@
         "create": [
           {"action":"transfer:CreateConnector"},
           {"action":"transfer:DescribeConnector"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteConnector"},
           {"action":"transfer:DescribeConnector"}
         ],
         "read": [
-          {"action":"transfer:DescribeConnector"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeConnector"}
         ],
         "update": [
           {"action":"transfer:UpdateConnector"},
@@ -34984,8 +34620,7 @@
           {"action":"transfer:DeleteHostKey"}
         ],
         "read": [
-          {"action":"transfer:DescribeHostKey"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeHostKey"}
         ],
         "update": [
           {"action":"transfer:UpdateHostKey"},
@@ -34999,15 +34634,13 @@
         "create": [
           {"action":"transfer:CreateProfile"},
           {"action":"transfer:DescribeProfile"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteProfile"}
         ],
         "read": [
-          {"action":"transfer:DescribeProfile"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeProfile"}
         ],
         "update": [
           {"action":"transfer:UpdateProfile"},
@@ -35026,8 +34659,7 @@
           {"action":"transfer:UpdateServer"},
           {"action":"transfer:StartServer"},
           {"action":"ec2:DescribeVpcEndpoints"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:ListUsers","attribute":"force_destroy"},
@@ -35038,8 +34670,7 @@
         ],
         "read": [
           {"action":"transfer:DescribeServer"},
-          {"action":"ec2:DescribeVpcEndpoints"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"ec2:DescribeVpcEndpoints"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcEndpoint","changed":"endpoint_details"},
@@ -35093,16 +34724,14 @@
         "create": [
           {"action":"transfer:CreateUser"},
           {"action":"transfer:DescribeUser"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteUser"},
           {"action":"transfer:DescribeUser"}
         ],
         "read": [
-          {"action":"transfer:DescribeUser"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeUser"}
         ],
         "update": [
           {"action":"transfer:UpdateUser"},
@@ -35126,8 +34755,7 @@
         ],
         "read": [
           {"action":"transfer:DescribeWebApp"},
-          {"action":"ec2:DescribeVpcEndpoints"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"ec2:DescribeVpcEndpoints"}
         ],
         "update": [
           {"action":"transfer:UpdateWebApp"},
@@ -35159,15 +34787,13 @@
         "create": [
           {"action":"transfer:CreateWorkflow"},
           {"action":"transfer:DescribeWorkflow"},
-          {"action":"transfer:TagResource","attribute":"tags"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:TagResource","attribute":"tags"}
         ],
         "delete": [
           {"action":"transfer:DeleteWorkflow"}
         ],
         "read": [
-          {"action":"transfer:DescribeWorkflow"},
-          {"action":"transfer:ListTagsForResource"}
+          {"action":"transfer:DescribeWorkflow"}
         ],
         "update": [
           {"action":"transfer:DescribeWorkflow"},
@@ -35226,16 +34852,14 @@
           {"action":"ec2:CreateVerifiedAccessGroup"},
           {"action":"ec2:DescribeVerifiedAccessGroups"},
           {"action":"ec2:GetVerifiedAccessGroupPolicy"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVerifiedAccessGroup"}
         ],
         "read": [
           {"action":"ec2:DescribeVerifiedAccessGroups"},
-          {"action":"ec2:GetVerifiedAccessGroupPolicy"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetVerifiedAccessGroupPolicy"}
         ],
         "update": [
           {"action":"ec2:ModifyVerifiedAccessGroup"},
@@ -35253,15 +34877,13 @@
         "create": [
           {"action":"ec2:CreateVerifiedAccessInstance"},
           {"action":"ec2:DescribeVerifiedAccessInstances"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVerifiedAccessInstance"}
         ],
         "read": [
-          {"action":"ec2:DescribeVerifiedAccessInstances"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVerifiedAccessInstances"}
         ],
         "update": [
           {"action":"ec2:ModifyVerifiedAccessInstance"},
@@ -35308,15 +34930,13 @@
         "create": [
           {"action":"ec2:CreateVerifiedAccessTrustProvider"},
           {"action":"ec2:DescribeVerifiedAccessTrustProviders"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVerifiedAccessTrustProvider"}
         ],
         "read": [
-          {"action":"ec2:DescribeVerifiedAccessTrustProviders"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVerifiedAccessTrustProviders"}
         ],
         "update": [
           {"action":"ec2:ModifyVerifiedAccessTrustProvider"},
@@ -35450,8 +35070,7 @@
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
           {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpc"},
@@ -35467,8 +35086,7 @@
           {"action":"ec2:DescribeVpcAttribute"},
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:DescribeRouteTables"},
-          {"action":"ec2:DescribeSecurityGroups"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroups"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcAttribute","changed":"enable_dns_hostnames"},
@@ -35506,8 +35124,7 @@
           {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"}
         ],
         "read": [
-          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpcBlockPublicAccessExclusions"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcBlockPublicAccessExclusion","changed":"internet_gateway_exclusion_mode"},
@@ -35541,8 +35158,7 @@
         "create": [
           {"action":"ec2:CreateDhcpOptions"},
           {"action":"ec2:DescribeDhcpOptions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:AssociateDhcpOptions"},
@@ -35550,8 +35166,7 @@
           {"action":"ec2:DescribeVpcs"}
         ],
         "read": [
-          {"action":"ec2:DescribeDhcpOptions"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeDhcpOptions"}
         ],
         "update": [
           {"action":"ec2:DescribeDhcpOptions"},
@@ -35596,8 +35211,7 @@
           {"action":"ec2:DescribeVpcEncryptionControls"}
         ],
         "read": [
-          {"action":"ec2:DescribeVpcEncryptionControls"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpcEncryptionControls"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcEncryptionControl"},
@@ -35618,8 +35232,7 @@
           {"action":"ec2:DeleteTags"},
           {"action":"ec2:CreateTags"},
           {"action":"ec2:DescribePrefixLists"},
-          {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInterfaces"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpcEndpoints"},
@@ -35628,8 +35241,7 @@
         "read": [
           {"action":"ec2:DescribeVpcEndpoints"},
           {"action":"ec2:DescribePrefixLists"},
-          {"action":"ec2:DescribeNetworkInterfaces"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeNetworkInterfaces"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcEndpoint","changed":"dns_options"},
@@ -35753,8 +35365,7 @@
           {"action":"ec2:ModifyVpcEndpointServicePermissions","attribute":"allowed_principals","value_guarded":true},
           {"action":"ec2:DescribeVpcEndpointServiceConfigurations"},
           {"action":"ec2:DescribeVpcEndpointServicePermissions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpcEndpointServiceConfigurations"},
@@ -35762,8 +35373,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeVpcEndpointServiceConfigurations"},
-          {"action":"ec2:DescribeVpcEndpointServicePermissions"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpcEndpointServicePermissions"}
         ],
         "update": [
           {"action":"ec2:ModifyVpcEndpointServiceConfiguration","changed":"acceptance_required"},
@@ -35822,16 +35432,14 @@
         "create": [
           {"action":"ec2:CreateIpam"},
           {"action":"ec2:DescribeIpams"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteIpam"},
           {"action":"ec2:DescribeIpams"}
         ],
         "read": [
-          {"action":"ec2:DescribeIpams"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeIpams"}
         ],
         "update": [
           {"action":"ec2:ModifyIpam"},
@@ -35862,16 +35470,14 @@
           {"action":"ec2:DescribeIpamScopes"},
           {"action":"ec2:GetIpamResourceCidrs","attribute":"source_resource","value_guarded":true},
           {"action":"ec2:DescribeIpamPools"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteIpamPool"},
           {"action":"ec2:DescribeIpamPools"}
         ],
         "read": [
-          {"action":"ec2:DescribeIpamPools"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeIpamPools"}
         ],
         "update": [
           {"action":"ec2:ModifyIpamPool"},
@@ -35903,15 +35509,13 @@
         "create": [
           {"action":"ec2:AllocateIpamPoolCidr"},
           {"action":"ec2:GetIpamPoolAllocations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:ReleaseIpamPoolAllocation"}
         ],
         "read": [
-          {"action":"ec2:GetIpamPoolAllocations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:GetIpamPoolAllocations"}
         ],
         "update": [
           {"action":"ec2:GetIpamPoolAllocations"},
@@ -35933,16 +35537,14 @@
           {"action":"ec2:CreateIpamResourceDiscovery"},
           {"action":"ec2:DescribeIpamResourceDiscoveries"},
           {"action":"ec2:ModifyIpamResourceDiscovery","attribute":"organizational_unit_exclusion","value_guarded":true},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteIpamResourceDiscovery"},
           {"action":"ec2:DescribeIpamResourceDiscoveries"}
         ],
         "read": [
-          {"action":"ec2:DescribeIpamResourceDiscoveries"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeIpamResourceDiscoveries"}
         ],
         "update": [
           {"action":"ec2:ModifyIpamResourceDiscovery"},
@@ -35957,16 +35559,14 @@
         "create": [
           {"action":"ec2:AssociateIpamResourceDiscovery"},
           {"action":"ec2:DescribeIpamResourceDiscoveryAssociations"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DisassociateIpamResourceDiscovery"},
           {"action":"ec2:DescribeIpamResourceDiscoveryAssociations"}
         ],
         "read": [
-          {"action":"ec2:DescribeIpamResourceDiscoveryAssociations"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeIpamResourceDiscoveryAssociations"}
         ],
         "update": [
           {"action":"ec2:DescribeIpamResourceDiscoveryAssociations"},
@@ -35980,16 +35580,14 @@
         "create": [
           {"action":"ec2:CreateIpamScope"},
           {"action":"ec2:DescribeIpamScopes"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteIpamScope"},
           {"action":"ec2:DescribeIpamScopes"}
         ],
         "read": [
-          {"action":"ec2:DescribeIpamScopes"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeIpamScopes"}
         ],
         "update": [
           {"action":"ec2:ModifyIpamScope","changed":"description"},
@@ -36050,16 +35648,14 @@
           {"action":"ec2:DescribeVpcPeeringConnections"},
           {"action":"ec2:AcceptVpcPeeringConnection","attribute":"auto_accept"},
           {"action":"ec2:ModifyVpcPeeringConnectionOptions"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpcPeeringConnection"},
           {"action":"ec2:DescribeVpcPeeringConnections"}
         ],
         "read": [
-          {"action":"ec2:DescribeVpcPeeringConnections"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpcPeeringConnections"}
         ],
         "update": [
           {"action":"ec2:DescribeVpcPeeringConnections"},
@@ -36078,12 +35674,10 @@
           {"action":"ec2:AcceptVpcPeeringConnection","attribute":"auto_accept"},
           {"action":"ec2:ModifyVpcPeeringConnectionOptions"},
           {"action":"ec2:DeleteTags"},
-          {"action":"ec2:CreateTags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags"}
         ],
         "read": [
-          {"action":"ec2:DescribeVpcPeeringConnections"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpcPeeringConnections"}
         ],
         "update": [
           {"action":"ec2:DescribeVpcPeeringConnections"},
@@ -36123,8 +35717,7 @@
           {"action":"ec2:DescribeRouteServers"}
         ],
         "read": [
-          {"action":"ec2:DescribeRouteServers"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeRouteServers"}
         ],
         "update": [
           {"action":"ec2:ModifyRouteServer","changed":"persist_routes"},
@@ -36151,8 +35744,7 @@
           {"action":"ec2:DescribeRouteServerEndpoints"}
         ],
         "read": [
-          {"action":"ec2:DescribeRouteServerEndpoints"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeRouteServerEndpoints"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -36173,8 +35765,7 @@
           {"action":"ec2:DescribeRouteServerPeers"}
         ],
         "read": [
-          {"action":"ec2:DescribeRouteServerPeers"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeRouteServerPeers"}
         ],
         "update": [
           {"action":"ec2:CreateTags","attribute":"tags"},
@@ -36223,8 +35814,7 @@
           {"action":"ec2:RevokeSecurityGroupEgress"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecurityGroupRules"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroupRules"}
         ],
         "update": [
           {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv4"},
@@ -36251,8 +35841,7 @@
           {"action":"ec2:RevokeSecurityGroupIngress"}
         ],
         "read": [
-          {"action":"ec2:DescribeSecurityGroupRules"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeSecurityGroupRules"}
         ],
         "update": [
           {"action":"ec2:ModifySecurityGroupRules","changed":"cidr_ipv4"},
@@ -36665,8 +36254,7 @@
           {"action":"ec2:CreateVpnConnection"},
           {"action":"ec2:DescribeVpnConnections"},
           {"action":"ec2:DescribeTransitGatewayAttachments"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpnConnection"},
@@ -36674,8 +36262,7 @@
         ],
         "read": [
           {"action":"ec2:DescribeVpnConnections"},
-          {"action":"ec2:DescribeTransitGatewayAttachments"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeTransitGatewayAttachments"}
         ],
         "update": [
           {"action":"ec2:ModifyVpnConnection","changed":"customer_gateway_id"},
@@ -36715,8 +36302,7 @@
           {"action":"ec2:CreateVpnGateway"},
           {"action":"ec2:DescribeVpnGateways"},
           {"action":"ec2:AttachVpnGateway","attribute":"vpc_id"},
-          {"action":"ec2:CreateTags","attribute":"tags"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:CreateTags","attribute":"tags"}
         ],
         "delete": [
           {"action":"ec2:DeleteVpnGateway"},
@@ -36724,8 +36310,7 @@
           {"action":"ec2:DescribeVpnGateways"}
         ],
         "read": [
-          {"action":"ec2:DescribeVpnGateways"},
-          {"action":"ec2:DescribeTags"}
+          {"action":"ec2:DescribeVpnGateways"}
         ],
         "update": [
           {"action":"ec2:DetachVpnGateway","changed":"vpc_id"},

@@ -33,6 +33,11 @@ type pkgIndex struct {
 	clients map[string]bool
 	reach   map[string]bool
 
+	// alwaysCalls maps each function to the package functions its body calls
+	// on every run: from a top-level statement, not under a condition, a
+	// loop or a closure. See setsTagsOut.
+	alwaysCalls map[string][]string
+
 	// others resolves calls into other service packages, by package
 	// directory name. It is nil until the packages are linked.
 	others map[string]*pkgIndex
@@ -58,18 +63,19 @@ type pkgIndex struct {
 
 func newPkgIndex(files []*ast.File) *pkgIndex {
 	idx := &pkgIndex{
-		funcs:      make(map[string]bool),
-		plain:      make(map[string]bool),
-		direct:     make(map[string][]iam.Requirement),
-		calls:      make(map[string][]helperCall),
-		memo:       make(map[string][]iam.Requirement),
-		inProgress: make(map[string]bool),
-		errResult:  make(map[string]bool),
-		clients:    make(map[string]bool),
-		reach:      make(map[string]bool),
-		models:     newModelTable(files),
-		embeds:     newEmbedTable(files),
-		virtual:    make(map[string][]string),
+		funcs:       make(map[string]bool),
+		plain:       make(map[string]bool),
+		direct:      make(map[string][]iam.Requirement),
+		calls:       make(map[string][]helperCall),
+		memo:        make(map[string][]iam.Requirement),
+		inProgress:  make(map[string]bool),
+		errResult:   make(map[string]bool),
+		clients:     make(map[string]bool),
+		reach:       make(map[string]bool),
+		alwaysCalls: make(map[string][]string),
+		models:      newModelTable(files),
+		embeds:      newEmbedTable(files),
+		virtual:     make(map[string][]string),
 	}
 
 	// A plain function wins over a method of the same name, since call sites
@@ -143,6 +149,64 @@ func (idx *pkgIndex) index(name string, fd *ast.FuncDecl, imports map[string]str
 	if touchesClient(fd) {
 		idx.clients[name] = true
 	}
+	if calls := alwaysCalled(fd); len(calls) > 0 {
+		idx.alwaysCalls[name] = calls
+	}
+}
+
+// alwaysCalled returns the names of the plain functions fd calls on every
+// run that gets past its early returns: calls in the expressions of its
+// top-level statements, closures excluded. A call inside an if, a loop or a
+// switch runs only sometimes, so it is left out.
+func alwaysCalled(fd *ast.FuncDecl) []string {
+	var out []string
+	for _, stmt := range fd.Body.List {
+		switch stmt.(type) {
+		case *ast.ExprStmt, *ast.AssignStmt, *ast.ReturnStmt, *ast.DeclStmt:
+		default:
+			continue
+		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.FuncLit:
+				return false
+			case *ast.CallExpr:
+				if id, ok := n.Fun.(*ast.Ident); ok {
+					out = append(out, id.Name)
+				}
+			}
+			return true
+		})
+	}
+	return dedup(out)
+}
+
+// setTagsOutFunc is the generated helper with which a resource's read hands
+// the provider the tags it got from the service API.
+const setTagsOutFunc = "setTagsOut"
+
+// setsTagsOut reports whether a function sets the resource's tags from the
+// service API on every run, itself or through the functions it always calls.
+// The provider's tag interceptor then skips the service's ListTags after a
+// create or read: it calls it only when the read set no tags.
+func (idx *pkgIndex) setsTagsOut(name string) bool {
+	return idx.searchTagsOut(name, make(map[string]bool))
+}
+
+func (idx *pkgIndex) searchTagsOut(name string, seen map[string]bool) bool {
+	if seen[name] {
+		return false
+	}
+	seen[name] = true
+	for _, callee := range idx.alwaysCalls[name] {
+		if !idx.hasPlain(callee) {
+			continue
+		}
+		if callee == setTagsOutFunc || idx.searchTagsOut(callee, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 // clientInterfaces maps each interface type the package declares whose

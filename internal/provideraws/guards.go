@@ -204,7 +204,8 @@ func initGuardVars(init ast.Stmt, prior map[string][]condGuard) map[string][]con
 }
 
 // bindGuardVars returns vars updated by an assignment: a local it binds to
-// the ok result of d.GetOk, or to d.HasChange, holds that guard, and any
+// the ok result of d.GetOk, to d.HasChange, or to a boolean expression over
+// such tests, holds the guards that expression implies when true, and any
 // other local it assigns holds none.
 func bindGuardVars(vars map[string][]condGuard, assign *ast.AssignStmt) map[string][]condGuard {
 	bound := make(map[string][]condGuard)
@@ -221,6 +222,11 @@ func bindGuardVars(vars map[string][]condGuard, assign *ast.AssignStmt) map[stri
 		for i, rhs := range assign.Rhs {
 			var gs []condGuard
 			switch e := unwrapExpr(rhs).(type) {
+			case *ast.BinaryExpr:
+				// aclChanged := d.HasChange("acl") && !d.IsNewResource()
+				if e.Op == token.LAND || e.Op == token.LOR {
+					gs = guardReader{vars: vars}.implied(e, true)
+				}
 			case *ast.TypeAssertExpr:
 				if t, ok := e.Type.(*ast.Ident); ok && t.Name == "bool" {
 					gs = resourceDataGuards(e.X)

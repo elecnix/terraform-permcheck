@@ -74,6 +74,23 @@ func TestValidate_VerdictIAM(t *testing.T) {
 			},
 		},
 		{
+			// A bucket that sets neither acl nor grant makes no PutBucketAcl
+			// call (issue #194).
+			name: "s3 bucket without acl or grant", plan: "s3_acl_plan.json", policy: "s3_acl_policy.json",
+			absent: []string{"aws_s3_bucket.x s3:PutBucketAcl"},
+		},
+		{
+			// A bucket with a grant does make it.
+			name: "s3 bucket with grant", plan: "s3_acl_set_plan.json", policy: "s3_acl_policy.json",
+			present: []string{"aws_s3_bucket.x s3:PutBucketAcl"},
+		},
+		{
+			// The read of an OIDC provider takes its tags from
+			// GetOpenIDConnectProvider, so no tag listing is made (issue #197).
+			name: "oidc provider tags come from the read", plan: "oidc_plan.json", policy: "oidc_policy.json",
+			absent: []string{"aws_iam_openid_connect_provider.x iam:ListOpenIDConnectProviderTags"},
+		},
+		{
 			// A gate on a nested path reads the nested plan value.
 			name: "nested gate paths hold", plan: "nested_gate_plan.json", policy: "nested_gate_policy.json",
 			present: []string{
