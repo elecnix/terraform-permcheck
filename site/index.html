@@ -61,7 +61,7 @@ $ echo $?
       <div class="box req"><h3>Report the gaps</h3><p>Text, GitHub annotations or JSON. Exit code 1 when a permission is missing.</p></div>
     </div>
     <p>Some permissions depend on what the plan sets. A <code>tags</code> block adds a tagging call, and a change to <code>permissions_boundary</code> adds a boundary call. PermCheck reads the planned values and asks for those permissions only when the apply makes the call.</p>
-    <p>Static HCL mode reads the <code>.tf</code> files directly. It runs without a plan or cloud credentials, so pull requests from forks can run the check too. AWS is the supported cloud today. GCP and Azure are planned.</p>
+    <p>Static HCL mode reads the <code>.tf</code> files directly. It runs without a plan or cloud credentials, so pull requests from forks can run the check too. AWS is the supported cloud today. GCP and Azure are not planned for 1.0, and contributions are welcome: the <a href="https://github.com/elecnix/terraform-permcheck/blob/main/docs/adding-a-cloud.md">guide to adding a cloud provider</a> explains how.</p>
   </section>
 
   <section id="install">

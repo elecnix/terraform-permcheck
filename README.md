@@ -590,8 +590,8 @@ collect the other policies in the plan or evaluate resource-based policies.
 | Cloud | Schema source | Status |
 |-------|--------------|--------|
 | **AWS** | CloudFormation Resource Schema Registry | ✅ MVP |
-| **GCP** | Cloud Asset Inventory / IAM API | 🔜 planned |
-| **Azure** | Resource Provider operations API | 🔜 planned |
+| **GCP** | Cloud Asset Inventory / IAM API | Not planned for 1.0, contributions welcome. See [Adding a cloud provider](docs/adding-a-cloud.md). |
+| **Azure** | Resource Provider operations API | Not planned for 1.0, contributions welcome. See [Adding a cloud provider](docs/adding-a-cloud.md). |
 
 ## Usage
 
