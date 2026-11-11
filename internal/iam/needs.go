@@ -120,18 +120,12 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 			}
 			for _, r := range n.Resources {
 				// A need on "*" needs a grant on every resource, so a grant
-				// limited to some resources falls short of it: the strict
-				// verdict decides it.
+				// limited to some resources falls short of it even without
+				// strict mode. A grant on every resource whose condition the
+				// tool cannot evaluate counts as covered, and strict mode
+				// reports it unverified.
 				if r == "*" {
-					res := doc.Coverage(action, nil, nil, true)
-					// A grant limited to some resources provably cannot cover
-					// every resource, so a need on "*" is missing. A grant the
-					// tool cannot evaluate might cover it, so it stays
-					// unverified: the tool never reports a gap it cannot prove.
-					if res.Verdict == policy.Unverified && res.Reason == policy.ReasonResourceScope {
-						res = policy.Result{Verdict: policy.Missing}
-					}
-					if res.Verdict != policy.Covered {
+					if res := doc.CoverageOfEveryResource(action, strict); res.Verdict != policy.Covered {
 						add(r, res)
 					}
 					continue

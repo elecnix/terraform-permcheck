@@ -526,10 +526,10 @@ config file, and PermCheck checks them against the same policy as the plan:
   on. The policy must cover each one. PermCheck uses the same resource-scoped
   check as for plan resources, so a Deny on the resource counts. `"*"` means
   the policy must grant the action on every resource, so a grant limited to
-  some resources is a gap even without `--strict-resources`. A grant whose
-  condition PermCheck cannot evaluate is not: it stays unverified under
-  `--strict-resources`, because the tool cannot prove that grant falls short
-  of every resource. Without `resources`, any
+  some resources is a gap even without `--strict-resources`, with or without
+  a condition. A grant on every resource whose condition PermCheck cannot
+  evaluate counts as covered, as for a plan resource, and
+  `--strict-resources` reports it unverified. Without `resources`, any
   grant of the action counts, as for a resource whose ARN the plan does not
   show. `--strict-resources` then reports a grant limited to some resources as
   unverified.

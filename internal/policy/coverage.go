@@ -123,6 +123,51 @@ func (d *Document) Coverage(action string, targets []string, conds Conditions, s
 	return Result{Verdict: Covered}
 }
 
+// CoverageOfEveryResource reports whether the policy grants action on every
+// resource, as a declared need on "*" requires.
+//
+// Only an Allow on every resource can cover every resource, so a grant
+// limited to some resources is no coverage, with or without a condition. A
+// grant on every resource whose condition the tool cannot evaluate may or may
+// not apply: it counts as coverage, and with strict set the action is
+// Unverified, as in Coverage. An unconditional Deny on every resource
+// overrides any grant.
+func (d *Document) CoverageOfEveryResource(action string, strict bool) Result {
+	granted, conditionUnknown := false, false
+	for _, s := range d.Statements {
+		if !s.matchesAction(action) {
+			continue
+		}
+		switch s.Effect {
+		case "Deny":
+			if !s.conditional() && s.deniesEveryResource() {
+				return Result{Verdict: Missing}
+			}
+		case "Allow":
+			if !s.grantsEveryResource() {
+				continue
+			}
+			switch s.conditionVerdict(nil) {
+			case condFails:
+				// The grant provably does not apply.
+			case condHolds:
+				granted = true
+			default:
+				conditionUnknown = true
+			}
+		}
+	}
+	switch {
+	case granted:
+		return Result{Verdict: Covered}
+	case conditionUnknown && strict:
+		return Result{Verdict: Unverified, Reason: ReasonCondition}
+	case conditionUnknown:
+		return Result{Verdict: Covered}
+	}
+	return Result{Verdict: Missing}
+}
+
 // grantsWithoutTarget reports what the tool concluded about the grants of an
 // action whose target resource is unknown.
 //

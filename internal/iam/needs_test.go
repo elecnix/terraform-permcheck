@@ -207,3 +207,73 @@ func TestExclusions_MatchNeeds(t *testing.T) {
 		t.Errorf("an operations exclusion must not match a need, kept %+v", kept)
 	}
 }
+
+// TestCheckNeeds_StarNeedUnderCondition checks a need on "*" against grants
+// that carry a condition the tool cannot evaluate. Such a grant on every
+// resource counts as covered by default and is unverified only in strict
+// mode, as for a resource change. A grant limited to some resources stays a
+// gap with or without a condition, since it cannot cover every resource.
+func TestCheckNeeds_StarNeedUnderCondition(t *testing.T) {
+	const cond = `"Condition":{"StringEquals":{"aws:RequestedRegion":"ca-central-1"}}`
+	const scoped = `"arn:aws:guardduty:ca-central-1:111122223333:detector/d1"`
+	tests := []struct {
+		name   string
+		policy string
+		strict bool
+		want   string // "" covered, "missing", or "condition"
+	}{
+		{
+			name:   "conditional grant on every resource is covered by default",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":"*",` + cond + `}`,
+		},
+		{
+			name:   "conditional grant on every resource is unverified in strict mode",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":"*",` + cond + `}`,
+			strict: true,
+			want:   "condition",
+		},
+		{
+			name:   "conditional grant on some resources is missing by default",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":` + scoped + `,` + cond + `}`,
+			want:   "missing",
+		},
+		{
+			name:   "conditional grant on some resources is missing in strict mode",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":` + scoped + `,` + cond + `}`,
+			strict: true,
+			want:   "missing",
+		},
+		{
+			name: "scoped grant beside a conditional grant on every resource is covered by default",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":` + scoped + `},
+				{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":"*",` + cond + `}`,
+		},
+		{
+			name: "deny on every resource overrides a conditional grant",
+			policy: `{"Effect":"Allow","Action":"guardduty:GetDetector","Resource":"*",` + cond + `},
+				{"Effect":"Deny","Action":"guardduty:GetDetector","Resource":"*"}`,
+			want: "missing",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			needs := []Need{{Sid: "N", Actions: []string{"guardduty:GetDetector"}, Resources: []string{"*"}}}
+			got := CheckNeeds(needs, mustPolicy(t, `{"Statement":[`+tt.policy+`]}`), tt.strict)
+			var verdict string
+			switch {
+			case len(got) == 0:
+			case len(got) > 1:
+				t.Fatalf("got %d findings, want at most 1: %+v", len(got), got)
+			case got[0].ConditionUnverified:
+				verdict = "condition"
+			case got[0].ResourceScopeUnverified:
+				verdict = "resource scope"
+			default:
+				verdict = "missing"
+			}
+			if verdict != tt.want {
+				t.Errorf("verdict = %q, want %q", verdict, tt.want)
+			}
+		})
+	}
+}
