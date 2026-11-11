@@ -3,6 +3,7 @@ package provideraws
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -528,5 +529,134 @@ func findRoleByName(ctx context.Context, conn *iam.Client, name string) (*awstyp
 	}
 	if len(schema.Incomplete) != 0 {
 		t.Errorf("Incomplete = %v, want none", schema.Incomplete)
+	}
+}
+
+// TestSourceProvider_GeneratedPaginator follows a paginator the provider
+// generates into the service package instead of taking it from the SDK, as
+// in internal/service/ec2/paginator_DescribeVpcEncryptionControls_gen.go
+// (provider v6.72.0). The constructor takes the client as a package-local
+// interface whose one method is the SDK operation, and NextPage calls that
+// method on the stored client, so the call names no client variable the
+// parser binds. The interface method is the call the paginator makes.
+func TestSourceProvider_GeneratedPaginator(t *testing.T) {
+	dir := t.TempDir()
+	ec2Dir := filepath.Join(dir, "internal", "service", "ec2")
+	if err := os.MkdirAll(ec2Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"vpc_encryption_control.go": `package ec2
+
+// @FrameworkResource("aws_vpc_encryption_control", name="VPC Encryption Control")
+func newResourceVPCEncryptionControl(_ context.Context) (resource.ResourceWithConfigure, error) {
+	return &resourceVPCEncryptionControl{}, nil
+}
+
+type resourceVPCEncryptionControl struct {
+	framework.ResourceWithModel[resourceVPCEncryptionControlModel]
+}
+
+func (r *resourceVPCEncryptionControl) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	conn := r.Meta().EC2Client(ctx)
+	out, err := conn.CreateVpcEncryptionControl(ctx, &input)
+}
+
+func (r *resourceVPCEncryptionControl) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	conn := r.Meta().EC2Client(ctx)
+	out, err := findVPCEncryptionControlByID(ctx, conn, state.ID.ValueString())
+}
+
+func (r *resourceVPCEncryptionControl) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	conn := r.Meta().EC2Client(ctx)
+	_, err := conn.DeleteVpcEncryptionControl(ctx, &input)
+}
+
+func findVPCEncryptionControlByID(ctx context.Context, conn *ec2.Client, id string) (*awstypes.VpcEncryptionControl, error) {
+	output, err := findVPCEncryptionControlsByIDs(ctx, conn, []string{id})
+	return tfresource.AssertSingleValueResult(output)
+}
+
+func findVPCEncryptionControlsByIDs(ctx context.Context, conn *ec2.Client, ids []string) ([]awstypes.VpcEncryptionControl, error) {
+	input := ec2.DescribeVpcEncryptionControlsInput{VpcEncryptionControlIds: ids}
+	var output []awstypes.VpcEncryptionControl
+	pages := newDescribeVpcEncryptionControlsPaginator(conn, &input)
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		output = append(output, page.VpcEncryptionControls...)
+	}
+	return output, nil
+}
+`,
+		"paginator_DescribeVpcEncryptionControls_gen.go": `package ec2
+
+type describeVpcEncryptionControlsPaginator struct {
+	client    describeVpcEncryptionControlsAPIClient
+	params    *ec2.DescribeVpcEncryptionControlsInput
+	nextToken *string
+	firstPage bool
+}
+
+func newDescribeVpcEncryptionControlsPaginator(client describeVpcEncryptionControlsAPIClient, params *ec2.DescribeVpcEncryptionControlsInput, optFns ...func(*describeVpcEncryptionControlsPaginatorOptions)) *describeVpcEncryptionControlsPaginator {
+	return &describeVpcEncryptionControlsPaginator{client: client, params: params, firstPage: true}
+}
+
+func (p *describeVpcEncryptionControlsPaginator) NextPage(ctx context.Context, optFns ...func(*ec2.Options)) (*ec2.DescribeVpcEncryptionControlsOutput, error) {
+	params := *p.params
+	result, err := p.client.DescribeVpcEncryptionControls(ctx, &params, optFns...)
+	return result, err
+}
+
+type describeVpcEncryptionControlsAPIClient interface {
+	DescribeVpcEncryptionControls(context.Context, *ec2.DescribeVpcEncryptionControlsInput, ...func(*ec2.Options)) (*ec2.DescribeVpcEncryptionControlsOutput, error)
+}
+`,
+	}
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(ec2Dir, name), []byte(src), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := NewSourceProviderWithPath(dir)
+	s, err := p.Resolve("aws_vpc_encryption_control")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Actions("read"); !reflect.DeepEqual(got, []string{"ec2:DescribeVpcEncryptionControls"}) {
+		t.Errorf("read = %v, want [ec2:DescribeVpcEncryptionControls]", got)
+	}
+}
+
+// TestParse_SDKWaiter covers an SDK waiter, as in resourceResourceCreate of
+// internal/service/cloudcontrol/resource.go (provider v6.72.0). The waiter is
+// named after the state it waits for, not the operation it polls, so the
+// operation comes from the input type its Wait method takes.
+func TestParse_SDKWaiter(t *testing.T) {
+	src := `package cloudcontrol
+
+func resourceResourceCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).CloudControlClient(ctx)
+	output, err := conn.CreateResource(ctx, &input)
+	waiter := cloudcontrol.NewResourceRequestSuccessWaiter(conn, func(o *cloudcontrol.ResourceRequestSuccessWaiterOptions) {
+		o.Retryable = retryGetResourceRequestStatus(&progressEvent)
+	})
+	if err := waiter.Wait(ctx, &cloudcontrol.GetResourceRequestStatusInput{RequestToken: aws.String(requestToken)}, d.Timeout(schema.TimeoutCreate)); err != nil {
+		return diags
+	}
+	return diags
+}
+
+func resourceResourceDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).CloudControlClient(ctx)
+	_, err := conn.DeleteResource(ctx, &input)
+	return diags
+}
+`
+	actions, err := ParseResourceFileStructured(src, "aws_cloudcontrolapi_resource", "Resource")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := actionNames(actions, "create"), []string{"cloudformation:CreateResource", "cloudformation:GetResourceRequestStatus"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("create = %v, want %v", got, want)
 	}
 }

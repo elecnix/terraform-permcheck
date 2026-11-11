@@ -50,6 +50,10 @@ type pkgIndex struct {
 	// r.securityGroupRule.create(...). The type that embeds the method's
 	// type supplies them.
 	virtual map[string][]string
+
+	// ifaces maps the package's client interfaces to the SDK operations
+	// their methods make; see clientInterfaces.
+	ifaces map[string][]iam.Requirement
 }
 
 func newPkgIndex(files []*ast.File) *pkgIndex {
@@ -111,22 +115,120 @@ func newPkgIndex(files []*ast.File) *pkgIndex {
 			}
 		}
 	}
+	idx.ifaces = clientInterfaces(files)
 	for name, d := range decls {
-		if calls := extractSDKCalls(d.fd, idx.models); len(calls) > 0 {
-			idx.direct[name] = calls
-		}
-		helpers, virtual := findCalls(d.fd, idx, d.imports)
-		if len(helpers) > 0 {
-			idx.calls[name] = helpers
-		}
-		if len(virtual) > 0 {
-			idx.virtual[name] = virtual
-		}
-		if touchesClient(d.fd) {
-			idx.clients[name] = true
-		}
+		idx.index(name, d.fd, d.imports)
 	}
 	return idx
+}
+
+// index records the direct SDK calls and the helper calls of one function
+// under name. imports are the service packages its file imports.
+func (idx *pkgIndex) index(name string, fd *ast.FuncDecl, imports map[string]string) {
+	calls := extractSDKCalls(fd, idx.models)
+	if ops := interfaceParamCalls(fd.Type, idx.ifaces); len(ops) > 0 {
+		calls = mergeRequirements(append(calls, ops...))
+		idx.clients[name] = true
+	}
+	if len(calls) > 0 {
+		idx.direct[name] = calls
+	}
+	helpers, virtual := findCalls(fd, idx, imports)
+	if len(helpers) > 0 {
+		idx.calls[name] = helpers
+	}
+	if len(virtual) > 0 {
+		idx.virtual[name] = virtual
+	}
+	if touchesClient(fd) {
+		idx.clients[name] = true
+	}
+}
+
+// clientInterfaces maps each interface type the package declares whose
+// methods are SDK operations to the actions of those methods. The provider
+// generates paginators into some service packages, such as
+// paginator_DescribeVpcEncryptionControls_gen.go in ec2: the constructor takes
+// the client as describeVpcEncryptionControlsAPIClient, whose one method is
+// DescribeVpcEncryptionControls(context.Context,
+// *ec2.DescribeVpcEncryptionControlsInput, ...), and NextPage calls it on the
+// client it stored. A method counts as an operation when its second parameter
+// is a pointer to the SDK input type named after it.
+func clientInterfaces(files []*ast.File) map[string][]iam.Requirement {
+	out := make(map[string][]iam.Requirement)
+	for _, f := range files {
+		for _, decl := range f.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				it, ok := ts.Type.(*ast.InterfaceType)
+				if !ok || it.Methods == nil {
+					continue
+				}
+				var reqs []iam.Requirement
+				for _, m := range it.Methods.List {
+					ft, ok := m.Type.(*ast.FuncType)
+					if !ok || len(m.Names) != 1 {
+						continue
+					}
+					if svc := operationInputService(ft, m.Names[0].Name); svc != "" {
+						reqs = append(reqs, iam.Requirement{Action: sdKMethodToIAMAction(m.Names[0].Name, svc)})
+					}
+				}
+				if len(reqs) > 0 {
+					out[ts.Name.Name] = reqs
+				}
+			}
+		}
+	}
+	return out
+}
+
+// operationInputService returns the service of an SDK operation's signature,
+// "ec2" for (context.Context, *ec2.DescribeVpcsInput, ...) when method is
+// DescribeVpcs, or "" when the second parameter is not that input type.
+func operationInputService(ft *ast.FuncType, method string) string {
+	if ft.Params == nil || len(ft.Params.List) < 2 || !isAWSMethod(method) {
+		return ""
+	}
+	star, ok := ft.Params.List[1].Type.(*ast.StarExpr)
+	if !ok {
+		return ""
+	}
+	sel, ok := star.X.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != method+"Input" {
+		return ""
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	if svc := sdkPackageToIAMService(pkg.Name); svc != "" {
+		return svc
+	}
+	return pkg.Name
+}
+
+// interfaceParamCalls returns the actions of the client interfaces a function
+// takes as parameters: a function handed such a client makes those calls on
+// it, as a paginator constructor does on every page.
+func interfaceParamCalls(ft *ast.FuncType, ifaces map[string][]iam.Requirement) []iam.Requirement {
+	if ft == nil || ft.Params == nil || len(ifaces) == 0 {
+		return nil
+	}
+	var out []iam.Requirement
+	for _, param := range ft.Params.List {
+		if ident, ok := param.Type.(*ast.Ident); ok {
+			out = append(out, ifaces[ident.Name]...)
+		}
+	}
+	return out
 }
 
 // touchesClient reports whether a function obtains an SDK client through an

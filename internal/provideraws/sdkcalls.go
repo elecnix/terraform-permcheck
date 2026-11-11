@@ -123,6 +123,11 @@ func extractCallAction(call *ast.CallExpr, conns map[string]string) string {
 		}
 	}
 
+	// An SDK waiter polls the operation whose input its Wait method takes.
+	if op, service := waiterOperation(call); op != "" {
+		return sdKMethodToIAMAction(op, service)
+	}
+
 	// The S3 feature manager makes S3 calls with the client it is handed.
 	if op, ok := s3ManagerCalls[method]; ok {
 		for _, arg := range call.Args {
@@ -141,6 +146,41 @@ var s3ManagerCalls = map[string]string{
 	"NewUploader":     "PutObject",
 	"NewDownloader":   "GetObject",
 	"GetBucketRegion": "HeadBucket",
+}
+
+// waiterOperation returns the operation and service an SDK waiter polls, as
+// GetResourceRequestStatus and cloudformation for
+// waiter.Wait(ctx, &cloudcontrol.GetResourceRequestStatusInput{...}, timeout),
+// or "" when the call is not a waiter's Wait or WaitForOutput with an SDK
+// input literal. The waiter's constructor names the state it waits for, such
+// as NewResourceRequestSuccessWaiter, not the operation.
+func waiterOperation(call *ast.CallExpr) (op, service string) {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || (sel.Sel.Name != "Wait" && sel.Sel.Name != "WaitForOutput") || len(call.Args) < 2 {
+		return "", ""
+	}
+	addr, ok := call.Args[1].(*ast.UnaryExpr)
+	if !ok || addr.Op != token.AND {
+		return "", ""
+	}
+	lit, ok := addr.X.(*ast.CompositeLit)
+	if !ok {
+		return "", ""
+	}
+	typ, ok := lit.Type.(*ast.SelectorExpr)
+	if !ok || !strings.HasSuffix(typ.Sel.Name, "Input") {
+		return "", ""
+	}
+	pkg, ok := typ.X.(*ast.Ident)
+	if !ok {
+		return "", ""
+	}
+	service = sdkPackageToIAMService(pkg.Name)
+	op = strings.TrimSuffix(typ.Sel.Name, "Input")
+	if service == "" || !isAWSMethod(op) {
+		return "", ""
+	}
+	return op, service
 }
 
 // paginatorOperation returns the operation a paginator constructor pages
