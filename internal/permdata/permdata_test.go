@@ -40,7 +40,7 @@ func sample() map[string]*iam.Schema {
 // the same schemas.
 func TestEncodeDecode_RoundTrip(t *testing.T) {
 	want := sample()
-	data, err := Generate(want, "v1.2.3")
+	data, err := Generate([]Version{{Ref: "v1.2.3", Schemas: want}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,21 +48,24 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v\n%s", err, data)
 	}
-	if tbl.Ref != "v1.2.3" {
-		t.Errorf("Ref = %q, want v1.2.3", tbl.Ref)
+	if !reflect.DeepEqual(tbl.Refs, []string{"v1.2.3"}) {
+		t.Errorf("Refs = %q, want [v1.2.3]", tbl.Refs)
 	}
-	assertSameSchemas(t, tbl.Schemas, want)
+	assertSameSchemas(t, tbl.Schemas["v1.2.3"], want)
+	if strings.Contains(string(data), `"providers"`) {
+		t.Errorf("a one-version table marks providers:\n%s", data)
+	}
 }
 
 // TestEncode_Deterministic checks that the same table always encodes to the
 // same bytes, whatever order the maps were built in.
 func TestEncode_Deterministic(t *testing.T) {
-	first, err := Generate(sample(), "v1")
+	first, err := Generate(twoVersions())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 20; i++ {
-		again, err := Generate(sample(), "v1")
+		again, err := Generate(twoVersions())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,6 +91,11 @@ func TestDecode_RejectsOtherFormat(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "format") {
 		t.Errorf("Decode(format 99) error = %v, want a format error", err)
 	}
+	// Format 1 named one ref and had no providers marks.
+	_, err = Decode([]byte(`{"format": 1, "ref": "v6.72.0", "resources": {}}`))
+	if err == nil || !strings.Contains(err.Error(), "format") {
+		t.Errorf("Decode(format 1) error = %v, want a format error", err)
+	}
 }
 
 // TestGateFields fails when iam.Gate gains a field, because the format must
@@ -109,7 +117,7 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data, err := Generate(schemas, provideraws.DefaultProviderRef)
+		data, err := Generate([]Version{{Ref: provideraws.DefaultProviderRef, Schemas: schemas}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,14 +134,14 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tbl.Ref != provideraws.DefaultProviderRef {
-		t.Errorf("Ref = %q, want %q", tbl.Ref, provideraws.DefaultProviderRef)
+	if tbl.Newest() != provideraws.DefaultProviderRef {
+		t.Errorf("Newest = %q, want %q", tbl.Newest(), provideraws.DefaultProviderRef)
 	}
 	want, err := src.Schemas()
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertSameSchemas(t, tbl.Schemas, want)
+	assertSameSchemas(t, tbl.Schemas[provideraws.DefaultProviderRef], want)
 
 	p := newProvider(data)
 	for tfType, w := range want {
@@ -148,12 +156,15 @@ func TestGenerate_MatchesSourceProvider(t *testing.T) {
 // TestProvider_UnknownType checks that a type the table lacks is an error, so
 // the chain falls back to the next provider.
 func TestProvider_UnknownType(t *testing.T) {
-	data, err := Generate(sample(), "v1")
+	data, err := Generate([]Version{{Ref: "v1", Schemas: sample()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newProvider(data).Resolve("aws_nothing"); err == nil {
 		t.Error("Resolve(aws_nothing): want an error")
+	}
+	if _, err := newProvider(data).At("v9.0.0").Resolve("aws_widget"); err == nil {
+		t.Error("Resolve on a ref the table lacks: want an error")
 	}
 	if _, err := newProvider([]byte("not json")).Resolve("aws_widget"); err == nil {
 		t.Error("Resolve on a broken table: want an error")
@@ -168,11 +179,13 @@ func TestEmbedded_KeyTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tbl.Ref != provideraws.DefaultProviderRef {
-		t.Errorf("embedded table is for %s, DefaultProviderRef is %s; regenerate it with generate-permissions", tbl.Ref, provideraws.DefaultProviderRef)
+	if !reflect.DeepEqual(tbl.Refs, provideraws.TableProviderRefs) {
+		t.Errorf("embedded table is for %v, TableProviderRefs is %v; regenerate it with generate-permissions", tbl.Refs, provideraws.TableProviderRefs)
 	}
-	if n := len(tbl.Schemas); n < 1000 {
-		t.Errorf("embedded table has %d resource types, want over 1000", n)
+	for _, ref := range tbl.Refs {
+		if n := len(tbl.Schemas[ref]); n < 1000 {
+			t.Errorf("embedded table has %d resource types for %s, want over 1000", n, ref)
+		}
 	}
 	for tfType, ops := range map[string]map[string]string{
 		"aws_s3_bucket":            {"create": "s3:CreateBucket", "delete": "s3:DeleteBucket"},

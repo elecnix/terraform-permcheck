@@ -13,7 +13,7 @@
 //	terraform-permcheck validate --terraform-root ./terraform --policy-file deploy_policy.json --cloud aws
 //
 // Regenerate the embedded permissions table and the IAM service tables after
-// bumping DefaultProviderRef:
+// changing TableProviderRefs or DefaultProviderRef:
 //
 //	go run . generate-permissions --out internal/permdata/permissions.json
 //	go run internal/provideraws/gen_iam_services.go -provider <checkout>
@@ -45,13 +45,19 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
+	"sync"
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/config"
 	"github.com/elecnix/terraform-permcheck/internal/hcl"
+	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
+	"github.com/elecnix/terraform-permcheck/internal/providerversion"
 	"github.com/elecnix/terraform-permcheck/internal/report"
 )
 
@@ -187,6 +193,7 @@ func validateCmd(args []string) error {
 	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
 	allowUnresolved := fs.Bool("allow-unresolved-types", false, "report resource types no schema source knows but do not fail the run on them (default: from config allow_unresolved_types)")
+	awsProviderVersion := fs.String("aws-provider-version", "", "check against the requirements of this AWS provider major version, such as 5 or 5.100.0 (default: from config aws_provider_version, else the version the .terraform.lock.hcl under --terraform-root pins, else the plan's version constraint, else the newest the embedded table holds)")
 	providerSource := fs.String("provider-source", os.Getenv(check.ProviderSourceEnv), "where provider-source permissions come from: embedded (the table built into the binary) or live (clone and parse terraform-provider-aws) (default: $"+check.ProviderSourceEnv+", else embedded)")
 
 	if err := parseFlags(fs, args); err != nil {
@@ -232,8 +239,36 @@ func validateCmd(args []string) error {
 		Principal:  *principal,
 
 		AllowUnresolvedTypes: allowUnresolvedTypes,
-
-		Resolver: check.ResolverFor(source),
+	}
+	hints := check.VersionHints{Explicit: cfg.AWSProviderVersion, ExplicitFrom: "config aws_provider_version"}
+	if *awsProviderVersion != "" {
+		hints.Explicit, hints.ExplicitFrom = *awsProviderVersion, "--aws-provider-version"
+	}
+	if *terraformRoot != "" && hints.Explicit == "" {
+		locked, _, err := providerversion.FromLockFile(*terraformRoot)
+		if err != nil {
+			return fmt.Errorf("read the AWS provider version: %w", err)
+		}
+		hints.Locked = locked
+	}
+	hints.Root = *terraformRoot
+	// resolver picks the provider version the requirements come from. When
+	// nothing named it, the first lookup prints a notice that says which
+	// version the run reads.
+	resolver := func(planRaw []byte, static bool) error {
+		hints.Static = static
+		if hints.Explicit == "" && hints.Locked == "" {
+			hints.Constraints = providerversion.Constraints(planRaw)
+		}
+		choice, err := check.ChooseProviderRef(hints)
+		if err != nil {
+			return err
+		}
+		opts.Resolver = check.ResolverFor(source, choice.Ref)
+		if choice.Notice != "" {
+			opts.Resolver = &noticeResolver{Resolver: opts.Resolver, notice: choice.Notice}
+		}
+		return nil
 	}
 
 	sources := check.Sources{
@@ -284,6 +319,9 @@ func validateCmd(args []string) error {
 		if sources.StdinIgnored(stdin) {
 			fmt.Fprintln(os.Stderr, "terraform-permcheck: --terraform-root without --plan-file runs static HCL mode; stdin is ignored. Pass --plan-file - to check a piped plan.")
 		}
+		if err := resolver(nil, true); err != nil {
+			return err
+		}
 		return validateStaticHCL(*terraformRoot, sources.Policy, opts, outFormat, *exitZero, locations, *showExcluded)
 	}
 
@@ -299,6 +337,9 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("parse plan: %w", err)
 	}
+	if err := resolver(planRaw, false); err != nil {
+		return err
+	}
 
 	res, err := check.Run(check.FromPlan(changes), func() ([]byte, error) { return policyRaw, nil }, opts)
 	if err != nil {
@@ -306,6 +347,19 @@ func validateCmd(args []string) error {
 	}
 
 	return reportResult(res, outFormat, *exitZero, *showExcluded, locations)
+}
+
+// noticeResolver prints a notice to stderr the first time a check looks up a
+// resource type, so a run with nothing to check stays quiet.
+type noticeResolver struct {
+	iam.Resolver
+	notice string
+	once   sync.Once
+}
+
+func (r *noticeResolver) Resolve(tfType string) (*iam.Schema, error) {
+	r.once.Do(func() { fmt.Fprintln(os.Stderr, r.notice) })
+	return r.Resolver.Resolve(tfType)
 }
 
 // githubWorkspaceEnv is the environment variable the Actions runner sets to
@@ -414,26 +468,43 @@ func validateStaticHCL(terraformRoot string, policySource check.PolicySource, op
 	return reportResult(res, format, exitZero, showExcluded, locations)
 }
 
-// generatePermissionsCmd parses the terraform-provider-aws source and writes
-// the permissions table that the binary embeds. Without --provider-dir it
-// clones provideraws.DefaultProviderRef into the provider cache.
+// generatePermissionsCmd parses the terraform-provider-aws source at each
+// ref of provideraws.TableProviderRefs and writes the merged permissions
+// table that the binary embeds. It clones each ref into the provider cache,
+// unless --provider-dir names a checkout for it.
 func generatePermissionsCmd(args []string) error {
 	fs := newFlagSet("generate-permissions", "[flags]")
-	providerDir := fs.String("provider-dir", "", "use this terraform-provider-aws checkout, which must be at "+provideraws.DefaultProviderRef+" (default: clone it into the provider cache)")
+	dirs := providerDirs{}
+	fs.Var(dirs, "provider-dir", "use the terraform-provider-aws checkout DIR for provider REF, given as REF=DIR, such as "+provideraws.DefaultProviderRef+"=../terraform-provider-aws; repeat it for each ref (default: clone each ref of "+strings.Join(provideraws.TableProviderRefs, ", ")+" into the provider cache)")
 	out := fs.String("out", "-", "write the table to this file (default: stdout); the embedded table is "+permdata.EmbeddedFile)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
-	src := provideraws.NewSourceProvider()
-	if *providerDir != "" {
-		src = provideraws.NewSourceProviderWithPath(*providerDir)
+	versions := make([]permdata.Version, len(provideraws.TableProviderRefs))
+	errs := make([]error, len(versions))
+	var wg sync.WaitGroup
+	for i, ref := range provideraws.TableProviderRefs {
+		src := provideraws.NewSourceProviderAt(ref)
+		if dir, ok := dirs[ref]; ok {
+			src = provideraws.NewSourceProviderWithPath(dir)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			schemas, err := src.Schemas()
+			if err != nil {
+				errs[i] = fmt.Errorf("provider %s: %w", ref, err)
+				return
+			}
+			versions[i] = permdata.Version{Ref: ref, Schemas: schemas}
+		}()
 	}
-	schemas, err := src.Schemas()
-	if err != nil {
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("generate permissions: %w", err)
 	}
-	data, err := permdata.Generate(schemas, provideraws.DefaultProviderRef)
+	data, err := permdata.Generate(versions)
 	if err != nil {
 		return fmt.Errorf("generate permissions: %w", err)
 	}
@@ -442,6 +513,34 @@ func generatePermissionsCmd(args []string) error {
 		return err
 	}
 	return writeFileAtomic(*out, data)
+}
+
+// providerDirs is the --provider-dir flag of generate-permissions: a
+// checkout per provider ref.
+type providerDirs map[string]string
+
+func (d providerDirs) String() string {
+	pairs := make([]string, 0, len(d))
+	for ref, dir := range d {
+		pairs = append(pairs, ref+"="+dir)
+	}
+	sort.Strings(pairs)
+	return strings.Join(pairs, ",")
+}
+
+func (d providerDirs) Set(v string) error {
+	ref, dir, ok := strings.Cut(v, "=")
+	if !ok || ref == "" || dir == "" {
+		return fmt.Errorf("want REF=DIR, such as %s=../terraform-provider-aws", provideraws.DefaultProviderRef)
+	}
+	if !slices.Contains(provideraws.TableProviderRefs, ref) {
+		return fmt.Errorf("ref %s is not one the table is generated from (%s)", ref, strings.Join(provideraws.TableProviderRefs, ", "))
+	}
+	if _, dup := d[ref]; dup {
+		return fmt.Errorf("ref %s given twice", ref)
+	}
+	d[ref] = dir
+	return nil
 }
 
 // writeFileAtomic writes data to a temporary file next to path and renames it
