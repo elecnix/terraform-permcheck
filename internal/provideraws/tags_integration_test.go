@@ -542,3 +542,139 @@ var ListTags = listTags
 		t.Errorf("read = %v, want %v", got, want)
 	}
 }
+
+// TestSourceProvider_TagsDispatchThroughPackageFunction follows the tagging
+// of internal/service/iam (provider v6.72.0). The servicePackage UpdateTags
+// method has no switch: it hands its resourceType to the package function
+// updateTags, which switches on it. A role must get the role tagging API
+// only, not every case of that switch.
+func TestSourceProvider_TagsDispatchThroughPackageFunction(t *testing.T) {
+	p := writeService(t, "iam", map[string]string{
+		"role.go": `package iam
+
+// @SDKResource("aws_iam_role", name="Role")
+// @Tags(identifierAttribute="name", resourceType="Role")
+func resourceRoleCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.CreateRole(ctx, &input)
+	return nil
+}
+
+func resourceRoleRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.GetRole(ctx, &input)
+	return nil
+}
+
+func resourceRoleDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.DeleteRole(ctx, &input)
+	return nil
+}
+`,
+		"user.go": `package iam
+
+// @SDKResource("aws_iam_user", name="User")
+// @Tags(identifierAttribute="id", resourceType="User")
+func resourceUserCreate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.CreateUser(ctx, &input)
+	return nil
+}
+
+func resourceUserRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.GetUser(ctx, &input)
+	return nil
+}
+
+func resourceUserDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).IAMClient(ctx)
+	_, err := conn.DeleteUser(ctx, &input)
+	return nil
+}
+`,
+		"tags_gen.go": `package iam
+
+func getTagsIn(ctx context.Context) []awstypes.Tag {
+	return nil
+}
+`,
+		"tags.go": `package iam
+
+func roleUpdateTags(ctx context.Context, conn *iam.Client, identifier string, oldTagsMap, newTagsMap any) error {
+	_, err := conn.UntagRole(ctx, &input)
+	_, err = conn.TagRole(ctx, &input)
+	return err
+}
+
+func roleKeyValueTags(ctx context.Context, conn *iam.Client, identifier string) (tftags.KeyValueTags, error) {
+	output, err := conn.ListRoleTags(ctx, &input)
+	return nil, err
+}
+
+func userUpdateTags(ctx context.Context, conn *iam.Client, identifier string, oldTagsMap, newTagsMap any) error {
+	_, err := conn.UntagUser(ctx, &input)
+	_, err = conn.TagUser(ctx, &input)
+	return err
+}
+
+func userKeyValueTags(ctx context.Context, conn *iam.Client, identifier string) (tftags.KeyValueTags, error) {
+	output, err := conn.ListUserTags(ctx, &input)
+	return nil, err
+}
+
+func updateTags(ctx context.Context, conn *iam.Client, identifier, resourceType string, oldTagsMap, newTagsMap any) error {
+	switch resourceType {
+	case "Role":
+		return roleUpdateTags(ctx, conn, identifier, oldTagsMap, newTagsMap)
+	case "User":
+		return userUpdateTags(ctx, conn, identifier, oldTagsMap, newTagsMap)
+	}
+	return fmt.Errorf("unsupported resource type: %s", resourceType)
+}
+
+func (p *servicePackage) ListTags(ctx context.Context, meta any, identifier, resourceType string) error {
+	var (
+		tags tftags.KeyValueTags
+		err  error
+	)
+	switch resourceType {
+	case "Role":
+		tags, err = roleKeyValueTags(ctx, meta.(*conns.AWSClient).IAMClient(ctx), identifier)
+	case "User":
+		tags, err = userKeyValueTags(ctx, meta.(*conns.AWSClient).IAMClient(ctx), identifier)
+	default:
+		return nil
+	}
+	return err
+}
+
+func (p *servicePackage) UpdateTags(ctx context.Context, meta any, identifier, resourceType string, oldTags, newTags any) error {
+	return updateTags(ctx, meta.(*conns.AWSClient).IAMClient(ctx), identifier, resourceType, oldTags, newTags)
+}
+`,
+	})
+	for typ, want := range map[string]map[string][]string{
+		"aws_iam_role": {
+			"create": {"iam:CreateRole", "iam:ListRoleTags", "iam:TagRole"},
+			"update": {"iam:TagRole", "iam:UntagRole"},
+		},
+		"aws_iam_user": {
+			"create": {"iam:CreateUser", "iam:ListUserTags", "iam:TagUser"},
+			"update": {"iam:TagUser", "iam:UntagUser"},
+		},
+	} {
+		s, err := p.Resolve(typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for op, w := range want {
+			got := append([]string(nil), s.Actions(op)...)
+			sort.Strings(got)
+			if !reflect.DeepEqual(got, w) {
+				t.Errorf("%s %s = %v, want %v", typ, op, got, w)
+			}
+		}
+	}
+}

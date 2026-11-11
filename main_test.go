@@ -1477,3 +1477,31 @@ func TestValidate_StarNeedUnderUnevaluableCondition(t *testing.T) {
 		t.Errorf("want one unverified (condition) finding for need N, got %+v", result.Missing)
 	}
 }
+
+// TestValidate_IAMRoleTagsNeedOnlyRoleTagActions runs the repro of issue 190:
+// a tag change on an aws_iam_role needs iam:TagRole and iam:UntagRole, not
+// the tag actions of every IAM resource type.
+func TestValidate_IAMRoleTagsNeedOnlyRoleTagActions(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := dir + "/" + name
+		if err := os.WriteFile(p, []byte(body), 0644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		return p
+	}
+	args := []string{"validate", "--cloud", "aws",
+		"--plan-file", write("plan.json", `{"format_version":"1.2","terraform_version":"1.9.0","resource_changes":[
+{"address":"aws_iam_role.r","mode":"managed","type":"aws_iam_role","name":"r","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["update"],"before":{"name":"r","tags":{"a":"b"}},"after":{"name":"r","tags":{"a":"c"}},"after_unknown":{}}}]}`),
+		"--policy-file", write("policy.json", `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:TagRole","iam:UntagRole","iam:GetRole","iam:GetRolePolicy","iam:UpdateRole","iam:ListRoleTags","iam:UpdateAssumeRolePolicy","iam:ListAttachedRolePolicies","iam:ListRolePolicies"],"Resource":"*"}]}`),
+		"--config", writeConfig(t, dir, `{}`),
+	}
+	var runErr error
+	out := captureStdout(t, func() { runErr = run(args) })
+	if runErr != nil {
+		t.Fatalf("expected nil, got %v\n%s", runErr, out)
+	}
+	if !strings.Contains(out, "All required permissions covered") {
+		t.Errorf("expected all-clear, got %s", out)
+	}
+}

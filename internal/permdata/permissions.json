@@ -17054,13 +17054,6 @@
           {"action":"iam:TagInstanceProfile"},
           {"action":"iam:GetRole"},
           {"action":"iam:RemoveRoleFromInstanceProfile"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListInstanceProfileTags"}
         ],
         "delete": [
@@ -17079,21 +17072,7 @@
           {"action":"iam:GetInstanceProfile"},
           {"action":"iam:GetRole"},
           {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagInstanceProfile","attribute":"tags"}
         ]
       }
     },
@@ -17104,13 +17083,6 @@
           {"action":"iam:UntagOpenIDConnectProvider"},
           {"action":"iam:TagOpenIDConnectProvider"},
           {"action":"iam:GetOpenIDConnectProvider"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListOpenIDConnectProviderTags"}
         ],
         "delete": [
@@ -17125,22 +17097,8 @@
           {"action":"iam:AddClientIDToOpenIDConnectProvider","changed":"client_id_list"},
           {"action":"iam:RemoveClientIDFromOpenIDConnectProvider","changed":"client_id_list"},
           {"action":"iam:GetOpenIDConnectProvider"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
           {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"}
         ]
       }
     },
@@ -17191,13 +17149,6 @@
           {"action":"iam:TagPolicy"},
           {"action":"iam:GetPolicy"},
           {"action":"iam:GetPolicyVersion"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListPolicyTags"}
         ],
         "delete": [
@@ -17217,22 +17168,8 @@
           {"action":"iam:DeletePolicyVersion"},
           {"action":"iam:GetPolicy"},
           {"action":"iam:GetPolicyVersion"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
           {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagPolicy","attribute":"tags"}
         ]
       }
     },
@@ -17280,13 +17217,6 @@
           {"action":"iam:TagRole"},
           {"action":"iam:GetRole"},
           {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListRoleTags"}
         ],
         "delete": [
@@ -17318,22 +17248,8 @@
           {"action":"iam:GetRolePolicy","attribute":"inline_policy","value_guarded":true},
           {"action":"iam:ListRolePolicies"},
           {"action":"iam:ListAttachedRolePolicies"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
           {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagRole","attribute":"tags"}
         ]
       }
     },
@@ -17410,13 +17326,6 @@
           {"action":"iam:UntagSAMLProvider"},
           {"action":"iam:TagSAMLProvider"},
           {"action":"iam:GetSAMLProvider"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListSAMLProviderTags"}
         ],
         "delete": [
@@ -17429,22 +17338,8 @@
         "update": [
           {"action":"iam:UpdateSAMLProvider"},
           {"action":"iam:GetSAMLProvider"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
           {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagSAMLProvider","attribute":"tags"}
         ]
       }
     },
@@ -17470,13 +17365,6 @@
           {"action":"iam:UntagServerCertificate"},
           {"action":"iam:TagServerCertificate"},
           {"action":"iam:GetServerCertificate"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListServerCertificateTags"}
         ],
         "delete": [
@@ -17491,22 +17379,8 @@
           {"action":"iam:UpdateServerCertificate","changed":"name_prefix"},
           {"action":"iam:UpdateServerCertificate","changed":"path"},
           {"action":"iam:GetServerCertificate"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
           {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagServerCertificate","attribute":"tags"}
         ]
       }
     },
@@ -17517,13 +17391,6 @@
           {"action":"iam:UntagRole"},
           {"action":"iam:TagRole"},
           {"action":"iam:GetRole"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListRoleTags"}
         ],
         "delete": [
@@ -17537,22 +17404,8 @@
         "update": [
           {"action":"iam:UpdateRole"},
           {"action":"iam:GetRole"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
           {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagRole","attribute":"tags"}
         ]
       }
     },
@@ -17601,13 +17454,6 @@
           {"action":"iam:UntagUser"},
           {"action":"iam:TagUser"},
           {"action":"iam:GetUser"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
           {"action":"iam:ListUserTags"}
         ],
         "delete": [
@@ -17642,22 +17488,8 @@
           {"action":"iam:PutUserPermissionsBoundary","changed":"permissions_boundary"},
           {"action":"iam:DeleteUserPermissionsBoundary","changed":"permissions_boundary"},
           {"action":"iam:GetUser"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
           {"action":"iam:TagUser","attribute":"tags"},
-          {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
-          {"action":"iam:UntagMFADevice","attribute":"tags"}
+          {"action":"iam:UntagUser","attribute":"tags"}
         ]
       }
     },
@@ -17786,14 +17618,7 @@
           {"action":"iam:UntagMFADevice"},
           {"action":"iam:TagMFADevice"},
           {"action":"iam:ListVirtualMFADevices"},
-          {"action":"iam:ListMFADeviceTags"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"}
+          {"action":"iam:ListMFADeviceTags"}
         ],
         "delete": [
           {"action":"iam:DeactivateMFADevice"},
@@ -17806,21 +17631,7 @@
         "update": [
           {"action":"iam:ListVirtualMFADevices"},
           {"action":"iam:ListMFADeviceTags"},
-          {"action":"iam:TagInstanceProfile","attribute":"tags"},
-          {"action":"iam:TagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:TagPolicy","attribute":"tags"},
-          {"action":"iam:TagRole","attribute":"tags"},
-          {"action":"iam:TagSAMLProvider","attribute":"tags"},
-          {"action":"iam:TagServerCertificate","attribute":"tags"},
-          {"action":"iam:TagUser","attribute":"tags"},
           {"action":"iam:TagMFADevice","attribute":"tags"},
-          {"action":"iam:UntagInstanceProfile","attribute":"tags"},
-          {"action":"iam:UntagOpenIDConnectProvider","attribute":"tags"},
-          {"action":"iam:UntagPolicy","attribute":"tags"},
-          {"action":"iam:UntagRole","attribute":"tags"},
-          {"action":"iam:UntagSAMLProvider","attribute":"tags"},
-          {"action":"iam:UntagServerCertificate","attribute":"tags"},
-          {"action":"iam:UntagUser","attribute":"tags"},
           {"action":"iam:UntagMFADevice","attribute":"tags"}
         ]
       }
@@ -33777,16 +33588,14 @@
           {"action":"ssm:CreateAssociation"},
           {"action":"ssm:DescribeAssociation"},
           {"action":"ssm:AddTagsToResource","attribute":"tags"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "delete": [
           {"action":"ssm:DeleteAssociation"}
         ],
         "read": [
           {"action":"ssm:DescribeAssociation"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "update": [
           {"action":"ssm:UpdateAssociation"},
@@ -33821,8 +33630,7 @@
           {"action":"ssm:GetDocument"},
           {"action":"ssm:DescribeDocumentPermission"},
           {"action":"ssm:AddTagsToResource","attribute":"tags"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "delete": [
           {"action":"ssm:ModifyDocumentPermission","attribute":"permissions","value_guarded":true},
@@ -33833,8 +33641,7 @@
           {"action":"ssm:DescribeDocument"},
           {"action":"ssm:GetDocument"},
           {"action":"ssm:DescribeDocumentPermission"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "update": [
           {"action":"ssm:ModifyDocumentPermission","changed":"permissions"},
@@ -33855,16 +33662,14 @@
           {"action":"ssm:UpdateMaintenanceWindow"},
           {"action":"ssm:GetMaintenanceWindow"},
           {"action":"ssm:AddTagsToResource","attribute":"tags"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "delete": [
           {"action":"ssm:DeleteMaintenanceWindow"}
         ],
         "read": [
           {"action":"ssm:GetMaintenanceWindow"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "update": [
           {"action":"ssm:UpdateMaintenanceWindow"},
@@ -33917,8 +33722,7 @@
           {"action":"ssm:AddTagsToResource"},
           {"action":"ssm:GetParameter"},
           {"action":"ssm:DescribeParameters"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "delete": [
           {"action":"ssm:DeleteParameter"}
@@ -33926,8 +33730,7 @@
         "read": [
           {"action":"ssm:GetParameter"},
           {"action":"ssm:DescribeParameters"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "update": [
           {"action":"ssm:PutParameter"},
@@ -33944,8 +33747,7 @@
           {"action":"ssm:CreatePatchBaseline"},
           {"action":"ssm:GetPatchBaseline"},
           {"action":"ssm:AddTagsToResource","attribute":"tags"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "delete": [
           {"action":"ssm:DeletePatchBaseline"},
@@ -33954,8 +33756,7 @@
         ],
         "read": [
           {"action":"ssm:GetPatchBaseline"},
-          {"action":"ssm:ListTagsForResource"},
-          {"action":"ssm:DescribeActivations"}
+          {"action":"ssm:ListTagsForResource"}
         ],
         "update": [
           {"action":"ssm:UpdatePatchBaseline"},

@@ -95,30 +95,68 @@ func (p *Package) tagEntriesFor(resourceType string) tagEntries {
 }
 
 // forResourceType returns the index name of a servicePackage method as it
-// runs for resourceType. When the method's body switches on resourceType,
-// the switch is replaced by the statements of the case that names
-// resourceType, or of the default case, and that copy is indexed under its
-// own name. Otherwise the method runs the same for every type.
+// runs for resourceType. See specialize.
 func (p *Package) forResourceType(fd *ast.FuncDecl, imports map[string]string, resourceType string) string {
-	method := methodKey("servicePackage", fd.Name.Name)
-	at := -1
+	return p.specialize(methodKey("servicePackage", fd.Name.Name), fd, imports, "resourceType", resourceType)
+}
+
+// specialize returns the index name of the function fd, indexed as key, as it
+// runs when its parameter param holds value.
+//
+// When the body switches on param, the switch is replaced by the statements
+// of the case that names value, or of the default case. When the body passes
+// param on to a package function, as the iam servicePackage's UpdateTags
+// hands its resourceType to updateTags, which switches on it, that function
+// is specialized in turn and the call goes to the copy. The copy is indexed
+// under its own name. Otherwise the function runs the same for every value,
+// and key is returned.
+func (p *Package) specialize(key string, fd *ast.FuncDecl, imports map[string]string, param, value string) string {
+	body := fd.Body.List
+	switched := false
 	for i, stmt := range fd.Body.List {
 		if sw, ok := stmt.(*ast.SwitchStmt); ok {
-			if tag, ok := sw.Tag.(*ast.Ident); ok && tag.Name == "resourceType" {
-				at = i
+			if tag, ok := sw.Tag.(*ast.Ident); ok && tag.Name == param {
+				body = append(append([]ast.Stmt(nil), fd.Body.List[:i]...), caseFor(sw, value)...)
+				body = append(body, fd.Body.List[i+1:]...)
+				switched = true
 				break
 			}
 		}
 	}
-	if at < 0 {
-		return method
+	forwarded := p.forwardedTo(body, param)
+	if !switched && len(forwarded) == 0 {
+		return key
 	}
-	name := method + "[" + resourceType + "]"
+	name := key + "[" + value + "]"
 	if p.idx.has(name) {
 		return name
 	}
-	var chosen, def *ast.CaseClause
-	for _, stmt := range fd.Body.List[at].(*ast.SwitchStmt).Body.List {
+	// Register the copy before its callees, so a recursive call stops here.
+	p.idx.funcs[name] = true
+	p.idx.errResult[name] = lastResultIsError(fd.Type.Results)
+	renamed := map[string]string{}
+	for callee, calleeParam := range forwarded {
+		cfd, cimports := p.plainFunc(callee)
+		if c := p.specialize(callee, cfd, cimports, calleeParam, value); c != callee {
+			renamed[callee] = c
+		}
+	}
+	copied := *fd
+	copied.Body = &ast.BlockStmt{List: body}
+	p.idx.index(name, &copied, imports)
+	for i, c := range p.idx.calls[name] {
+		if to, ok := renamed[c.Name]; ok && c.Pkg == "" {
+			p.idx.calls[name][i].Name = to
+		}
+	}
+	return name
+}
+
+// caseFor returns the statements of the case of sw that names value, or of
+// its default case, or nil when neither exists.
+func caseFor(sw *ast.SwitchStmt, value string) []ast.Stmt {
+	var def *ast.CaseClause
+	for _, stmt := range sw.Body.List {
 		cc, ok := stmt.(*ast.CaseClause)
 		if !ok {
 			continue
@@ -127,25 +165,94 @@ func (p *Package) forResourceType(fd *ast.FuncDecl, imports map[string]string, r
 			def = cc
 		}
 		for _, e := range cc.List {
-			if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING && strings.Trim(lit.Value, "\"`") == resourceType {
-				chosen = cc
+			if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING && strings.Trim(lit.Value, "\"`") == value {
+				return []ast.Stmt{&ast.BlockStmt{List: cc.Body}}
 			}
 		}
 	}
-	if chosen == nil {
-		chosen = def
+	if def != nil {
+		return []ast.Stmt{&ast.BlockStmt{List: def.Body}}
 	}
-	body := append([]ast.Stmt(nil), fd.Body.List[:at]...)
-	if chosen != nil {
-		body = append(body, &ast.BlockStmt{List: chosen.Body})
+	return nil
+}
+
+// forwardedTo maps each package function that body passes param to, as an
+// argument of its own, to the name of the callee's parameter at that
+// position. A function that body also calls without param in that position
+// is left out: one specialized copy could not stand for both calls.
+func (p *Package) forwardedTo(body []ast.Stmt, param string) map[string]string {
+	out := map[string]string{}
+	mixed := map[string]bool{}
+	for _, stmt := range body {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			fn, ok := call.Fun.(*ast.Ident)
+			if !ok || !p.idx.hasPlain(fn.Name) {
+				return true
+			}
+			cfd, _ := p.plainFunc(fn.Name)
+			calleeParam := ""
+			if cfd != nil {
+				for i, arg := range call.Args {
+					if id, ok := arg.(*ast.Ident); ok && id.Name == param {
+						calleeParam = paramName(cfd.Type, i)
+						break
+					}
+				}
+			}
+			if prev, seen := out[fn.Name]; mixed[fn.Name] || calleeParam == "" || (seen && prev != calleeParam) {
+				mixed[fn.Name] = true
+				delete(out, fn.Name)
+				return true
+			}
+			out[fn.Name] = calleeParam
+			return true
+		})
 	}
-	body = append(body, fd.Body.List[at+1:]...)
-	copied := *fd
-	copied.Body = &ast.BlockStmt{List: body}
-	p.idx.funcs[name] = true
-	p.idx.errResult[name] = lastResultIsError(fd.Type.Results)
-	p.idx.index(name, &copied, imports)
-	return name
+	return out
+}
+
+// plainFunc returns the declaration of the package function name, without a
+// receiver, and the service packages its file imports.
+func (p *Package) plainFunc(name string) (*ast.FuncDecl, map[string]string) {
+	for _, f := range p.files {
+		for _, decl := range f.Decls {
+			if fd, ok := decl.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Body != nil && fd.Name.Name == name {
+				return fd, serviceImports(f)
+			}
+		}
+	}
+	return nil, nil
+}
+
+// paramName returns the name of the parameter at position i of ft, or "" when
+// there is none, it is unnamed, or it is variadic.
+func paramName(ft *ast.FuncType, i int) string {
+	if ft.Params == nil {
+		return ""
+	}
+	n := 0
+	for _, field := range ft.Params.List {
+		if _, variadic := field.Type.(*ast.Ellipsis); variadic {
+			return ""
+		}
+		for _, id := range field.Names {
+			if n == i {
+				return id.Name
+			}
+			n++
+		}
+		if len(field.Names) == 0 {
+			if n == i {
+				return ""
+			}
+			n++
+		}
+	}
+	return ""
 }
 
 // tagActions resolves tagging entry points to the actions they make, through
