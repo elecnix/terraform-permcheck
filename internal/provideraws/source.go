@@ -280,15 +280,17 @@ func indexService(svcDir, serviceName string) (*Package, []resourceFile) {
 		// or binds them in its schema.Resource literal. Only a literal that
 		// binds a create function makes a file without a ...Create or
 		// ...Delete function a resource; a data source binds only a read.
-		// A create bound to a method (h.Upsert) names no function to follow,
-		// so such a file stays unresolved rather than get an empty entry.
+		// A create bound to a method of a handler type the package declares
+		// (h.Upsert) resolves to that method. One that names nothing to
+		// follow leaves the file unresolved rather than give it an empty
+		// entry.
 		resourceName := resourceNameFromFile(parsed[name])
+		funcs := pkg.resourceFuncs(name, resourceName)
 		if resourceName == "" {
-			if create := operationBindings(parsed[name])["create"]; len(create) == 0 || create[0] == "" {
+			if create := funcs["create"]; len(create) == 0 || create[0] == "" {
 				continue
 			}
 		}
-		funcs := pkg.resourceFuncs(name, resourceName)
 		for _, tfType := range tfTypes {
 			found = append(found, resourceFile{
 				pkg:    pkg,

@@ -33568,6 +33568,63 @@
         ]
       }
     },
+    "aws_sqs_queue_policy": {
+      "ops": {
+        "create": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "delete": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "read": [
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "update": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ]
+      }
+    },
+    "aws_sqs_queue_redrive_allow_policy": {
+      "ops": {
+        "create": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "delete": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "read": [
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "update": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ]
+      }
+    },
+    "aws_sqs_queue_redrive_policy": {
+      "ops": {
+        "create": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "delete": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "read": [
+          {"action":"sqs:GetQueueAttributes"}
+        ],
+        "update": [
+          {"action":"sqs:SetQueueAttributes"},
+          {"action":"sqs:GetQueueAttributes"}
+        ]
+      }
+    },
     "aws_ssm_activation": {
       "ops": {
         "create": [

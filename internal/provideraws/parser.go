@@ -45,6 +45,7 @@ func (p *Package) resourceFuncs(fileName, resourceName string) map[string][]stri
 	}
 	byName := operationsByName(f, resourceName)
 	funcs := operationBindings(f)
+	resolveMethodBindings(funcs, p.idx)
 	if len(funcs) == 0 {
 		return byName
 	}

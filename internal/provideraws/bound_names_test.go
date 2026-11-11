@@ -63,10 +63,80 @@ func resourceDetectorFeatureRead(ctx context.Context, d *schema.ResourceData, me
 	}
 }
 
-// A create bound to a method of a handler struct names no function the parser
-// can follow. The type stays unresolved instead of getting an entry with no
-// actions, which would let a plan through unchecked.
-func TestSourceProvider_MethodBoundCreateStaysUnresolved(t *testing.T) {
+// The SQS queue policy types bind their operations to methods of a handler
+// struct (h.Upsert) that another file of the package declares. The binding
+// resolves to that method declaration.
+func TestSourceProvider_HandlerMethodBinding(t *testing.T) {
+	dir := t.TempDir()
+	svcDir := filepath.Join(dir, "internal", "service", "sqs")
+	if err := os.MkdirAll(svcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	policy := `
+// @SDKResource("aws_sqs_queue_policy", name="Queue Policy")
+package sqs
+
+func resourceQueuePolicy() *schema.Resource {
+	h := &queueAttributeHandler{}
+	return &schema.Resource{
+		CreateWithoutTimeout: h.Upsert,
+		ReadWithoutTimeout:   h.Read,
+		DeleteWithoutTimeout: h.Delete,
+	}
+}
+`
+	handler := `
+package sqs
+
+import "github.com/aws/aws-sdk-go-v2/service/sqs"
+
+type queueAttributeHandler struct{}
+
+func (h *queueAttributeHandler) Upsert(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SQSClient(ctx)
+	_, err := conn.SetQueueAttributes(ctx, &sqs.SetQueueAttributesInput{})
+	if err != nil { return nil }
+	return h.Read(ctx, d, meta)
+}
+
+func (h *queueAttributeHandler) Read(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SQSClient(ctx)
+	_, err := conn.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{})
+	if err != nil { return nil }
+	return nil
+}
+
+func (h *queueAttributeHandler) Delete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
+	conn := meta.(*conns.AWSClient).SQSClient(ctx)
+	_, err := conn.SetQueueAttributes(ctx, &sqs.SetQueueAttributesInput{})
+	if err != nil { return nil }
+	return nil
+}
+`
+	for name, src := range map[string]string{"queue_policy.go": policy, "attribute_funcs.go": handler} {
+		if err := os.WriteFile(filepath.Join(svcDir, name), []byte(src), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := NewSourceProviderWithPath(dir).Resolve("aws_sqs_queue_policy")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := schema.Actions("create"); !containsAction(got, "sqs:SetQueueAttributes") {
+		t.Errorf("create: want sqs:SetQueueAttributes, got %v", got)
+	}
+	if got := schema.Actions("read"); !containsAction(got, "sqs:GetQueueAttributes") {
+		t.Errorf("read: want sqs:GetQueueAttributes, got %v", got)
+	}
+	if got := schema.Actions("delete"); !containsAction(got, "sqs:SetQueueAttributes") {
+		t.Errorf("delete: want sqs:SetQueueAttributes, got %v", got)
+	}
+}
+
+// A method binding on a receiver that is not a struct type of the package
+// stays unresolved instead of getting an entry with no actions, which would
+// let a plan through unchecked.
+func TestSourceProvider_UnknownHandlerStaysUnresolved(t *testing.T) {
 	dir := t.TempDir()
 	svcDir := filepath.Join(dir, "internal", "service", "sqs")
 	if err := os.MkdirAll(svcDir, 0755); err != nil {
@@ -89,6 +159,6 @@ func resourceQueuePolicy() *schema.Resource {
 		t.Fatal(err)
 	}
 	if _, err := NewSourceProviderWithPath(dir).Resolve("aws_sqs_queue_policy"); err == nil {
-		t.Error("Resolve succeeded for a create bound to a method, want not found")
+		t.Error("Resolve succeeded for a create bound to an undeclared type's method, want not found")
 	}
 }
