@@ -19,7 +19,11 @@ func (r *Report) annotations() string {
 	for _, g := range r.groups {
 		var sources []string
 		for _, f := range g.items {
-			sources = append(sources, source(f.MissingAction))
+			src := source(f.MissingAction)
+			if note := grantNote(f.MissingAction); note != "" {
+				src += "; " + note
+			}
+			sources = append(sources, src)
 		}
 
 		msg := g.key.action

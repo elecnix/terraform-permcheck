@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1008,7 +1009,7 @@ func TestValidate_NeedsReportMissing(t *testing.T) {
 		Class:         "[required]",
 		Reason:        "CI verifies images",
 	}
-	if len(result.Missing) != 1 || result.Missing[0] != want {
+	if len(result.Missing) != 1 || !reflect.DeepEqual(result.Missing[0], want) {
 		t.Errorf("missing = %+v, want [%+v]", result.Missing, want)
 	}
 

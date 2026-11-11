@@ -3,6 +3,7 @@ package iam
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/elecnix/terraform-permcheck/internal/plan"
@@ -32,7 +33,7 @@ func TestValidate_ReportsUnresolvedType(t *testing.T) {
 		t.Fatalf("missing = %+v, want %+v", missing, want)
 	}
 	for i := range want {
-		if missing[i] != want[i] {
+		if !reflect.DeepEqual(missing[i], want[i]) {
 			t.Errorf("missing[%d] = %+v, want %+v", i, missing[i], want[i])
 		}
 	}

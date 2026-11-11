@@ -341,6 +341,16 @@ func source(m iam.MissingAction) string {
 	return s
 }
 
+// grantNote says which resources the policy grants the action on, for a
+// finding whose action the policy grants only on other resources. It is
+// empty for a finding the policy does not grant at all.
+func grantNote(m iam.MissingAction) string {
+	if len(m.GrantedOn) == 0 {
+		return ""
+	}
+	return "granted only on " + strings.Join(m.GrantedOn, ", ")
+}
+
 // classTag is the tag of a permission class in every format. The json
 // report keeps the brackets, as it always has. A finding with no action has
 // no tag.

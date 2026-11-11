@@ -66,6 +66,9 @@ func writeSources(b *strings.Builder, findings []finding) {
 			resourceLine += fmt.Sprintf(" [%s:%d]", f.loc.Path, f.loc.Line)
 		}
 		b.WriteString(resourceLine + "\n")
+		if note := grantNote(f.MissingAction); note != "" {
+			b.WriteString("      " + note + "\n")
+		}
 	}
 }
 

@@ -88,6 +88,10 @@ type JSONMissing struct {
 	// condition on the grant names a key the plan does not supply or an
 	// operator the tool does not model (--strict-resources).
 	Unverified string `json:"unverified,omitempty"`
+	// GrantedOn lists the resources the policy grants missing_action on,
+	// sorted, when it grants it only on resources that do not cover the
+	// target. It is absent when the policy does not grant the action at all.
+	GrantedOn []string `json:"granted_on,omitempty"`
 }
 
 // json renders the report as one JSON object. Unlike the other formats it
@@ -146,6 +150,7 @@ func (r *Report) json() string {
 				Class:              classTag(f.Class),
 				ConditionAttribute: f.ConditionAttribute,
 				Reason:             f.Reason,
+				GrantedOn:          f.GrantedOn,
 			}
 			if reason := f.unverifiedReason(); reason != iam.ReasonNone {
 				item.Unverified = reason.Value()

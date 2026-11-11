@@ -560,6 +560,22 @@ and its reason in parentheses:
 ::warning title=Missing IAM permission::ecr:DescribeImages needed by: needs "EcrImageVerification" on arn:aws:ecr:us-east-1:123456789012:repository/my-app (CI verifies images before deploy)
 ```
 
+When the policy grants the action, but only on resources that do not cover the
+need's resource, the finding says so and lists the resources the policy grants
+the action on, sorted. A need on `"*"` that meets a narrow grant is the usual
+case: the fix is to narrow the need to that resource.
+
+```
+  iam:CreateServiceLinkedRole [required]
+    → needs "SecurityHubAccount" on * (enable Security Hub)
+      granted only on arn:aws:iam::*:role/aws-service-role/securityhubv2.amazonaws.com/AWSServiceRoleForSecurityHubV2
+```
+
+The `github-annotations` format appends `; granted only on <resources>` to the
+need, and `json` adds a `granted_on` list to the finding. A plan resource whose
+ARN the grant does not cover gets the same detail. An action the policy does not
+grant at all keeps the plain message, with no `granted_on`.
+
 In `--format json`, the finding carries `need` and `need_resource` in place of
 `resource_type`, `resource_name` and `change`, plus the need's `reason`. A
 missing need fails the run unless `--exit-zero` is set. An exclusion can

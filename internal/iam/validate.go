@@ -99,6 +99,11 @@ type MissingAction struct {
 	// a dependent action (see dependentActions): the finding reads "needed
 	// because DependsOn is required". Empty for an action required on its own.
 	DependsOn string
+	// GrantedOn lists the Resource patterns of the Allow statements that grant
+	// Action, sorted and without duplicates, when the policy grants it only on
+	// resources that do not cover the target. Empty when the policy does not
+	// grant Action at all, or grants it on every resource.
+	GrantedOn []string
 	// Unresolved marks a resource change whose type no schema source knows.
 	// The tool has no permission data for it, so Action is empty and the
 	// change was not checked.
@@ -267,6 +272,9 @@ func checkChange(rc *plan.ResourceChange, reqs []targeted, doc *policy.Document,
 		if verdict := paths.verdict(rc, doc, filter.StrictResources); verdict.Verdict != policy.Covered {
 			m := newFinding(action, class, verdict).on(rc)
 			m.ConditionAttribute = gateAttr
+			if verdict.Verdict == policy.Missing {
+				m.GrantedOn = doc.GrantedResources(action)
+			}
 			missing = append(missing, m)
 		}
 

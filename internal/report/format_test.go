@@ -920,3 +920,52 @@ func TestFormat_DependentActionNamesParent(t *testing.T) {
 		t.Errorf("json:\n%s", got)
 	}
 }
+
+const slrARN = "arn:aws:iam::*:role/aws-service-role/securityhubv2.amazonaws.com/AWSServiceRoleForSecurityHubV2"
+
+func narrowNeed(granted []string) []iam.MissingAction {
+	return []iam.MissingAction{{
+		Need: "SecurityHubAccount", NeedResource: "*", Reason: "enable Security Hub",
+		Action: "iam:CreateServiceLinkedRole", Class: iam.ClassManagement, GrantedOn: granted,
+	}}
+}
+
+func TestFormat_NarrowGrantNamesGrantedResources(t *testing.T) {
+	missing := narrowNeed([]string{slrARN})
+
+	wantText := "    → needs \"SecurityHubAccount\" on * (enable Security Hub)\n      granted only on " + slrARN + "\n"
+	if got := formatMissing(missing, nil); !strings.Contains(got, wantText) {
+		t.Errorf("text lacks %q:\n%s", wantText, got)
+	}
+	wantAnn := "needs \"SecurityHubAccount\" on * (enable Security Hub); granted only on " + slrARN
+	if got := formatGitHubAnnotations(missing, nil); !strings.Contains(got, wantAnn) {
+		t.Errorf("annotation lacks %q:\n%s", wantAnn, got)
+	}
+	var out struct {
+		Missing []struct {
+			GrantedOn []string `json:"granted_on"`
+		} `json:"missing"`
+	}
+	if err := json.Unmarshal([]byte(formatJSON(missing, nil, 1, "", nil)), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Missing) != 1 || len(out.Missing[0].GrantedOn) != 1 || out.Missing[0].GrantedOn[0] != slrARN {
+		t.Errorf("json granted_on = %+v, want [%s]", out.Missing, slrARN)
+	}
+}
+
+func TestFormat_NoGrantKeepsOutput(t *testing.T) {
+	missing := narrowNeed(nil)
+
+	wantText := "Missing IAM permissions (1):\n  iam:CreateServiceLinkedRole [required]\n    → needs \"SecurityHubAccount\" on * (enable Security Hub)\n"
+	if got := formatMissing(missing, nil); got != wantText {
+		t.Errorf("text = %q, want %q", got, wantText)
+	}
+	wantAnn := "::warning title=Missing IAM permission::iam:CreateServiceLinkedRole needed by: needs \"SecurityHubAccount\" on * (enable Security Hub)\n"
+	if got := formatGitHubAnnotations(missing, nil); got != wantAnn {
+		t.Errorf("annotation = %q, want %q", got, wantAnn)
+	}
+	if got := formatJSON(missing, nil, 1, "", nil); strings.Contains(got, "granted_on") {
+		t.Errorf("json carries granted_on without a grant:\n%s", got)
+	}
+}

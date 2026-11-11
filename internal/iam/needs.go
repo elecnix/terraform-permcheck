@@ -110,6 +110,11 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 				m.Need = n.Sid
 				m.NeedResource = resource
 				m.Reason = n.Reason
+				// A grant limited to other resources is the likely cause of a
+				// miss on a resource the need names: say where it does apply.
+				if res.Verdict == policy.Missing && resource != "" {
+					m.GrantedOn = doc.GrantedResources(action)
+				}
 				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {
