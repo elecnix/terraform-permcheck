@@ -9,7 +9,7 @@ import (
 // root. generate-permissions writes it.
 const EmbeddedFile = "internal/permdata/permissions.json"
 
-// The table is about 0.9 MB of JSON, so it is embedded uncompressed: a
+// The table is about 1.4 MB of JSON, so it is embedded uncompressed: a
 // regenerated table then diffs as text in review.
 //
 //go:embed permissions.json

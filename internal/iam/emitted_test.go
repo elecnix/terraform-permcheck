@@ -49,10 +49,12 @@ func producerNames(t *testing.T) (actions, services map[string]bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, schema := range table.Schemas {
-		for op := range schema.Ops {
-			for _, a := range schema.Actions(op) {
-				actions[a] = true
+	for _, schemas := range table.Schemas {
+		for _, schema := range schemas {
+			for op := range schema.Ops {
+				for _, a := range schema.Actions(op) {
+					actions[a] = true
+				}
 			}
 		}
 	}

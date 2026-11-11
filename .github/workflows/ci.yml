@@ -34,9 +34,10 @@ jobs:
       - name: Test (short, race detector)
         run: go test ./... -short -race -count=1 -v
 
-  # test-live and permissions-drift need a clone of terraform-provider-aws
-  # at DefaultProviderRef, about 300 MB. Both restore it from the Actions
-  # cache, keyed on that ref, so only the first run after a bump clones it.
+  # test-live and permissions-drift need clones of terraform-provider-aws at
+  # each ref of TableProviderRefs, about 300 MB each. Both restore them from
+  # the Actions cache, keyed on those refs, so only the first run after a
+  # bump clones a ref.
   test-live:
     runs-on: ubuntu-latest
     steps:
@@ -48,19 +49,24 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Find the provider ref
+      # The key names every ref, so a change to either clones only what
+      # the restored cache lacks: the cache code checks each checkout and
+      # keeps the ones still at their ref.
+      - name: Find the provider refs
         id: provider
         run: |
-          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
-          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          default="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          refs="$(sed -n 's/^var TableProviderRefs = \[\]string{\(.*\)}$/\1/p' internal/provideraws/source.go | tr -d '" ' | sed "s/DefaultProviderRef/$default/")"
+          test -n "$default" && test -n "$refs" || { echo "::error::DefaultProviderRef or TableProviderRefs not found"; exit 1; }
+          echo "refs=$(echo "$refs" | tr ',' '-')" >> "$GITHUB_OUTPUT"
           echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
 
-      - name: Restore the provider clone
+      - name: Restore the provider clones
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/provider-cache
-          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
+          key: terraform-provider-aws-${{ steps.provider.outputs.refs }}
+          restore-keys: terraform-provider-aws-
 
       - name: Test (live CFN registry)
         run: go test ./... -count=1 -v
@@ -76,22 +82,27 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Find the provider ref
+      # The key names every ref, so a change to either clones only what
+      # the restored cache lacks: the cache code checks each checkout and
+      # keeps the ones still at their ref.
+      - name: Find the provider refs
         id: provider
         run: |
-          ref="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
-          test -n "$ref" || { echo "::error::DefaultProviderRef not found"; exit 1; }
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          default="$(sed -n 's/^const DefaultProviderRef = "\(.*\)"$/\1/p' internal/provideraws/source.go)"
+          refs="$(sed -n 's/^var TableProviderRefs = \[\]string{\(.*\)}$/\1/p' internal/provideraws/source.go | tr -d '" ' | sed "s/DefaultProviderRef/$default/")"
+          test -n "$default" && test -n "$refs" || { echo "::error::DefaultProviderRef or TableProviderRefs not found"; exit 1; }
+          echo "refs=$(echo "$refs" | tr ',' '-')" >> "$GITHUB_OUTPUT"
           echo "PERMCHECK_PROVIDER_CACHE_DIR=$RUNNER_TEMP/provider-cache" >> "$GITHUB_ENV"
 
-      - name: Restore the provider clone
+      - name: Restore the provider clones
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/provider-cache
-          key: terraform-provider-aws-${{ steps.provider.outputs.ref }}
+          key: terraform-provider-aws-${{ steps.provider.outputs.refs }}
+          restore-keys: terraform-provider-aws-
 
-      # Clones terraform-provider-aws at DefaultProviderRef, unless the cache
-      # restored it, and parses it.
+      # Clones terraform-provider-aws at each ref of TableProviderRefs, unless
+      # the cache restored it, parses each, and merges them.
       - name: Regenerate the embedded permissions table
         run: go run . generate-permissions --out internal/permdata/permissions.json
 

@@ -21,9 +21,16 @@ import (
 // Format: // @SDKResource("aws_instance", name="Instance")
 var sdkResourceAnnotationRE = regexp.MustCompile(`@SDKResource\("(aws_[^",]+)[",]`)
 
-// DefaultProviderRef is the pinned provider version used for parsing.
-// This is the framework-refactored codebase (v5+).
+// DefaultProviderRef is the newest provider version the embedded table is
+// generated from. A live parse uses it when the plan's provider version is
+// unknown.
 const DefaultProviderRef = "v6.72.0"
+
+// TableProviderRefs lists the provider versions the embedded table is
+// generated from, one per major version, oldest first. The table merges their
+// requirements and marks the ones that only some of them have. The last one is
+// DefaultProviderRef. CI keys its provider cache on this line.
+var TableProviderRefs = []string{"v5.100.0", DefaultProviderRef}
 
 // SourceProvider resolves AWS resource types by parsing the terraform-provider-aws
 // Go source code to extract the exact SDK API calls made by each resource.
@@ -33,19 +40,27 @@ const DefaultProviderRef = "v6.72.0"
 type SourceProvider struct {
 	mu        sync.RWMutex
 	repoPath  string
+	ref       string                 // the provider version ensureRepo checks out
 	schemas   map[string]*iam.Schema // tfType -> schema
 	parsed    bool
 	parseErr  error  // the error of the one parse, returned by every later Ensure
 	skipClone bool   // true when repoPath already has provider source
-	remoteURL string // where ensureRepo fetches DefaultProviderRef from
+	remoteURL string // where ensureRepo fetches ref from
 }
 
 // NewSourceProvider creates a new SourceProvider that clones the terraform-provider-aws
-// repository at DefaultProviderRef into the cache (see defaultCacheDir) and
+// repository at DefaultProviderRef into the cache (see cacheDir) and
 // extracts permissions from the source code.
 func NewSourceProvider() *SourceProvider {
+	return NewSourceProviderAt(DefaultProviderRef)
+}
+
+// NewSourceProviderAt is NewSourceProvider for the provider version ref, such
+// as "v5.100.0". Each ref has its own checkout in the cache.
+func NewSourceProviderAt(ref string) *SourceProvider {
 	return &SourceProvider{
-		repoPath:  defaultCacheDir(),
+		repoPath:  cacheDir(ref),
+		ref:       ref,
 		schemas:   make(map[string]*iam.Schema),
 		remoteURL: upstreamURL,
 	}
@@ -443,6 +458,37 @@ var schemaGates = []schemaGate{
 	// attribute does.
 	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "certificate_body", ValueGuarded: true}},
 	{tfType: "aws_acm_certificate", op: "create", action: "acm:ImportCertificate", gate: iam.Gate{Attribute: "private_key_wo", ValueGuarded: true}},
+
+	// From 6.x, resourceBucketCreate passes the tags to CreateBucket, which
+	// needs s3:TagResource. When the call fails with "is not authorized to
+	// perform: s3:TagResource", create calls CreateBucket again without
+	// tags and tags the bucket through PutBucketTagging. The UpdateTags of
+	// the s3 service package, which update and transparent tagging use, does
+	// the same: it tries TagResource and UntagResource through s3control and
+	// falls back to PutBucketTagging and DeleteBucketTagging when either is
+	// denied. A denied TagResource or UntagResource never fails the apply,
+	// so their paths are best-effort; the fallback keeps its own gates.
+	// Provider 5.x makes neither call, so these entries change nothing there.
+	{tfType: "aws_s3_bucket", op: "create", action: "s3:TagResource", gate: iam.Gate{Attribute: "tags", BestEffort: true}},
+	{tfType: "aws_s3_bucket", op: "update", action: "s3:TagResource", gate: iam.Gate{Attribute: "tags", BestEffort: true}},
+	{tfType: "aws_s3_bucket", op: "update", action: "s3:UntagResource", gate: iam.Gate{Attribute: "tags", BestEffort: true}},
+
+	// From 6.x, create, read and delete reach ListSecretVersionIds through
+	// findSecretVersionForExistence or the read's write-only branch. Both
+	// list versions only when the version holds a write-only value
+	// (secret_string_wo), whose GetSecretValue would return nothing, or when
+	// GetSecretValue fails because the KMS key is unavailable. The plan
+	// shows the first through the configured secret_string_wo. The second
+	// is a runtime failure no plan attribute shows, so a readable version
+	// does not need the permission. Update also lists versions to move
+	// AWSCURRENT, which it does only when version_stages changes; in 5.x
+	// that is the only call, and update runs only on that change, since
+	// every other argument forces a replacement.
+	{tfType: "aws_secretsmanager_secret_version", op: "create", action: "secretsmanager:ListSecretVersionIds", gate: iam.Gate{Attribute: "secret_string_wo", ValueGuarded: true}},
+	{tfType: "aws_secretsmanager_secret_version", op: "read", action: "secretsmanager:ListSecretVersionIds", gate: iam.Gate{Attribute: "secret_string_wo", ValueGuarded: true}},
+	{tfType: "aws_secretsmanager_secret_version", op: "delete", action: "secretsmanager:ListSecretVersionIds", gate: iam.Gate{Attribute: "secret_string_wo", ValueGuarded: true}},
+	{tfType: "aws_secretsmanager_secret_version", op: "update", action: "secretsmanager:ListSecretVersionIds", gate: iam.Gate{Changed: "version_stages"}},
+	{tfType: "aws_secretsmanager_secret_version", op: "update", action: "secretsmanager:ListSecretVersionIds", gate: iam.Gate{Attribute: "secret_string_wo", ValueGuarded: true}},
 }
 
 // applySchemaGates replaces the gate of the paths listed in schemaGates. Like

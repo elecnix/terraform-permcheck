@@ -33,18 +33,23 @@ func cacheBaseDir() (string, error) {
 }
 
 // defaultCacheDir is where the provider source for DefaultProviderRef is
-// cloned. The ref is part of the path, so two refs never share a checkout.
-// It returns "" when no cache directory can be found.
+// cloned.
 func defaultCacheDir() string {
+	return cacheDir(DefaultProviderRef)
+}
+
+// cacheDir is where the provider source for ref is cloned. The ref is part of
+// the path, so two refs never share a checkout. It returns "" when no cache
+// directory can be found.
+func cacheDir(ref string) string {
 	base, err := cacheBaseDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(base, DefaultProviderRef)
+	return filepath.Join(base, ref)
 }
 
-// ensureRepo makes sure p.repoPath holds a complete checkout of
-// DefaultProviderRef.
+// ensureRepo makes sure p.repoPath holds a complete checkout of p.ref.
 //
 // Several processes may share one cache, so the whole check-and-populate
 // sequence runs under an inter-process lock on a file next to the checkout.
@@ -71,7 +76,7 @@ func (p *SourceProvider) ensureRepo() error {
 	}
 	defer unlock()
 
-	if checkoutAtRef(dir, DefaultProviderRef) {
+	if checkoutAtRef(dir, p.ref) {
 		return nil
 	}
 	return p.populate(dir)
@@ -97,7 +102,7 @@ func checkoutAtRef(dir, ref string) bool {
 	return err == nil && status == ""
 }
 
-// populate clones DefaultProviderRef into a temporary sibling of dir, then
+// populate clones p.ref into a temporary sibling of dir, then
 // swaps it into place. The caller must hold the cache lock.
 func (p *SourceProvider) populate(dir string) error {
 	parent, name := filepath.Dir(dir), filepath.Base(dir)
@@ -123,9 +128,9 @@ func (p *SourceProvider) populate(dir string) error {
 	steps := [][]string{
 		{"-c", "init.defaultBranch=main", "init", "--quiet"},
 		{"remote", "add", "origin", p.remoteURL},
-		{"fetch", "--depth", "1", "--no-tags", "--quiet", "origin", DefaultProviderRef},
+		{"fetch", "--depth", "1", "--no-tags", "--quiet", "origin", p.ref},
 		// Record the ref locally so checkoutAtRef can resolve it later.
-		{"update-ref", "refs/tags/" + DefaultProviderRef, "FETCH_HEAD"},
+		{"update-ref", "refs/tags/" + p.ref, "FETCH_HEAD"},
 		{"-c", "advice.detachedHead=false", "checkout", "--quiet", "FETCH_HEAD"},
 	}
 	for _, args := range steps {
@@ -133,8 +138,8 @@ func (p *SourceProvider) populate(dir string) error {
 			return err
 		}
 	}
-	if !checkoutAtRef(tmp, DefaultProviderRef) {
-		return fmt.Errorf("provider checkout in %s is not at %s", tmp, DefaultProviderRef)
+	if !checkoutAtRef(tmp, p.ref) {
+		return fmt.Errorf("provider checkout in %s is not at %s", tmp, p.ref)
 	}
 
 	return installCheckout(tmp, dir)

@@ -27,9 +27,9 @@ const (
 	// SourceEmbedded reads the table built into the binary. It needs no
 	// clone and no parse. It is the default.
 	SourceEmbedded ProviderSource = "embedded"
-	// SourceLive clones terraform-provider-aws at DefaultProviderRef into
-	// the provider cache and parses its Go source, as releases before the
-	// embedded table did. It is for developing the parser.
+	// SourceLive clones terraform-provider-aws at the chosen provider ref
+	// into the provider cache and parses its Go source, as releases before
+	// the embedded table did. It is for developing the parser.
 	SourceLive ProviderSource = "live"
 )
 
@@ -49,41 +49,53 @@ func ParseProviderSource(s string) (ProviderSource, error) {
 	return "", fmt.Errorf("unknown provider source %q (supported: %s, %s)", s, SourceEmbedded, SourceLive)
 }
 
-// ResolverFor returns the resolver chain of a provider source. Each chain is
+// ResolverFor returns the resolver chain of a provider source for provider
+// ref, one of the embedded table's refs, or "" for the newest. Each chain is
 // built on the first call and shared for the life of the process, so the
 // table is decoded, or the provider source parsed, once however many checks
 // run. The live chain reads the provider cache directory when it is built.
-func ResolverFor(src ProviderSource) iam.Resolver {
-	r := &resolvers.embedded
-	if src == SourceLive {
-		r = &resolvers.live
+func ResolverFor(src ProviderSource, ref string) iam.Resolver {
+	resolvers.mu.Lock()
+	defer resolvers.mu.Unlock()
+	key := resolverKey{src, ref}
+	if r, ok := resolvers.chains[key]; ok {
+		return r
 	}
-	r.once.Do(func() {
-		r.resolver = cloud.NewChainProvider(providers(src)...)
-	})
-	return r.resolver
+	if resolvers.chains == nil {
+		resolvers.chains = make(map[resolverKey]iam.Resolver)
+	}
+	r := cloud.NewChainProvider(providers(src, ref)...)
+	resolvers.chains[key] = r
+	return r
 }
 
-// providers lists the chain of a provider source, most precise first. The
-// live parse replaces the embedded table rather than following it. Both list
-// the same operations, so a live parse after the table would fill the
-// table's incomplete operations with the same calls, mark them complete, and
-// keep CloudFormation from filling them.
-func providers(src ProviderSource) []iam.Resolver {
+// providers lists the chain of a provider source for provider ref, most
+// precise first. The live parse replaces the embedded table rather than
+// following it. Both list the same operations, so a live parse after the
+// table would fill the table's incomplete operations with the same calls,
+// mark them complete, and keep CloudFormation from filling them.
+func providers(src ProviderSource, ref string) []iam.Resolver {
 	var first iam.Resolver = permdata.Embedded()
+	if ref != "" {
+		first = permdata.Embedded().At(ref)
+	}
 	if src == SourceLive {
-		first = provideraws.NewSourceProvider()
+		if ref == "" {
+			ref = provideraws.DefaultProviderRef
+		}
+		first = provideraws.NewSourceProviderAt(ref)
 	}
 	return []iam.Resolver{first, cloud.NewAWSProvider()}
 }
 
-type sharedResolver struct {
-	once     sync.Once
-	resolver iam.Resolver
+type resolverKey struct {
+	src ProviderSource
+	ref string
 }
 
 var resolvers struct {
-	embedded, live sharedResolver
+	mu     sync.Mutex
+	chains map[resolverKey]iam.Resolver
 }
 
 // Filter holds the filter settings of the validate command.
@@ -244,7 +256,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 
 	resolver := opts.Resolver
 	if resolver == nil {
-		resolver = ResolverFor(SourceEmbedded)
+		resolver = ResolverFor(SourceEmbedded, "")
 	}
 	resolver = newMemoResolver(resolver)
 

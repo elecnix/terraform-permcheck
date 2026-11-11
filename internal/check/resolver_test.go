@@ -33,7 +33,7 @@ func TestParseProviderSource(t *testing.T) {
 // both hold the same operations, so a live parse after the table would mark
 // the table's incomplete operations complete and hide CloudFormation.
 func TestProviders_Order(t *testing.T) {
-	embedded := providers(SourceEmbedded)
+	embedded := providers(SourceEmbedded, "")
 	if len(embedded) != 2 {
 		t.Fatalf("embedded chain has %d providers, want 2", len(embedded))
 	}
@@ -44,7 +44,7 @@ func TestProviders_Order(t *testing.T) {
 		t.Errorf("embedded chain ends with %T, want *cloud.AWSProvider", embedded[1])
 	}
 
-	live := providers(SourceLive)
+	live := providers(SourceLive, "")
 	if len(live) != 2 {
 		t.Fatalf("live chain has %d providers, want 2", len(live))
 	}
@@ -62,7 +62,7 @@ func TestResolverFor_EmbeddedNoClone(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv(provideraws.CacheDirEnv, cache)
 
-	schema, err := ResolverFor(SourceEmbedded).Resolve("aws_s3_bucket")
+	schema, err := ResolverFor(SourceEmbedded, "").Resolve("aws_s3_bucket")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,10 +89,10 @@ func TestResolverFor_EmbeddedNoClone(t *testing.T) {
 }
 
 func TestResolverFor_SharedPerSource(t *testing.T) {
-	if ResolverFor(SourceLive) != ResolverFor(SourceLive) {
+	if ResolverFor(SourceLive, "") != ResolverFor(SourceLive, "") {
 		t.Error("ResolverFor(live) built a new resolver on the second call")
 	}
-	if ResolverFor(SourceLive) == ResolverFor(SourceEmbedded) {
+	if ResolverFor(SourceLive, "") == ResolverFor(SourceEmbedded, "") {
 		t.Error("live and embedded share one resolver")
 	}
 }

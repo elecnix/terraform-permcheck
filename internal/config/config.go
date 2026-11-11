@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/providerversion"
 )
 
 // Config is the permcheck config file schema (permcheck.json).
@@ -22,6 +23,10 @@ type Config struct {
 	// type no schema source knows is reported but does not fail the run.
 	// The flag, when given, overrides it.
 	AllowUnresolvedTypes bool `json:"allow_unresolved_types,omitempty"`
+	// AWSProviderVersion sets --aws-provider-version: the AWS provider
+	// version whose requirements the check reads, such as "5" or
+	// "5.100.0". The flag, when given, overrides it.
+	AWSProviderVersion string `json:"aws_provider_version,omitempty"`
 }
 
 // Load reads and validates the config file at filePath.
@@ -44,6 +49,11 @@ func parse(raw []byte) (*Config, error) {
 	}
 	if err := iam.ValidateNeeds(c.Needs); err != nil {
 		return nil, err
+	}
+	if v := c.AWSProviderVersion; v != "" {
+		if _, ok := providerversion.Major(v); !ok {
+			return nil, fmt.Errorf("aws_provider_version %q: want a provider version such as 5 or 5.100.0", v)
+		}
 	}
 	return &c, nil
 }

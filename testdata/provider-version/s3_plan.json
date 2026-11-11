@@ -1,0 +1,1 @@
+{"format_version":"1.2","terraform_version":"1.9.0","resource_changes":[{"address":"aws_s3_bucket.x","mode":"managed","type":"aws_s3_bucket","name":"x","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["create"],"before":null,"after":{"bucket":"example-bucket","tags":{"team":"example"},"force_destroy":false},"after_unknown":{}}}]}

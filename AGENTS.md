@@ -2,6 +2,16 @@
 
 This file is for coding agents that work in this repository. `CLAUDE.md` is a symlink to it.
 
+## Regenerating the permissions table
+
+`internal/permdata/permissions.json` merges two parses of terraform-provider-aws, one per major version: the refs of `TableProviderRefs` in `internal/provideraws/source.go`. Regenerate it after a parser change, after a change to those refs, and after a rebase onto a branch that changed it:
+
+```bash
+go run . generate-permissions --out internal/permdata/permissions.json
+```
+
+The command clones each ref into the provider cache on its first run. To parse checkouts you already have, pass `--provider-dir REF=DIR` once per ref. Never edit the JSON by hand, and never resolve a merge conflict in it by hand: regenerate it. The CI job `permissions-drift` regenerates the table from both refs and fails when the committed file differs from the generated one by a byte.
+
 ## Releasing
 
 A release is a pushed `v*` tag. The Release workflow runs GoReleaser, which publishes the GitHub release with its archives and `checksums.txt`. GoReleaser also pushes the Homebrew cask to `elecnix/homebrew-tap`. The workflow first checks that the tag matches the `version` constant in `main.go`, and it stops there when they differ.

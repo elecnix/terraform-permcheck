@@ -334,7 +334,7 @@ func sameSet(a, b []string) bool {
 // same embedded resolver, so the table is decoded once per process rather
 // than once per check.
 func TestResolverFor_SharedPerProcess(t *testing.T) {
-	if ResolverFor(SourceEmbedded) != ResolverFor(SourceEmbedded) {
+	if ResolverFor(SourceEmbedded, "") != ResolverFor(SourceEmbedded, "") {
 		t.Error("ResolverFor(SourceEmbedded) built a new resolver on the second call")
 	}
 }
