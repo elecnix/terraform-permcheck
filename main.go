@@ -83,8 +83,10 @@ func exitCode(err error) int {
 	}
 }
 
-// version is the single source of truth for the release version — bump it
-// here when tagging a release; the version test derives its expectation from
+// version is the single source of truth for the release version. Bump it in
+// its own pull request, then tag that pull request's merge commit with the
+// same value: the Release workflow refuses a tag that doesn't match. See
+// "Releasing" in README.md. The version test derives its expectation from
 // this constant.
 const version = "v0.10.1"
 
