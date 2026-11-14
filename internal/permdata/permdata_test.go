@@ -76,8 +76,16 @@ func TestEncode_Deterministic(t *testing.T) {
 	// Types come out sorted, and each requirement sits on its own line, so
 	// a regenerated table diffs line by line.
 	s := string(first)
-	if strings.Index(s, `"aws_gadget"`) > strings.Index(s, `"aws_widget"`) {
-		t.Errorf("resource types not sorted:\n%s", s)
+	last, prev := -1, ""
+	for _, tfType := range []string{"aws_new_gizmo", "aws_old_gadget", "aws_widget"} {
+		i := strings.Index(s, `"`+tfType+`": {`)
+		if i < 0 {
+			t.Fatalf("table lacks %s:\n%s", tfType, s)
+		}
+		if i < last {
+			t.Errorf("resource types not sorted: %s comes before %s:\n%s", tfType, prev, s)
+		}
+		last, prev = i, tfType
 	}
 	if !strings.Contains(s, "\n          {\"action\":\"demo:CreateWidget\"},\n") {
 		t.Errorf("requirement not on its own line:\n%s", s)

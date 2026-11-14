@@ -490,7 +490,7 @@ func generatePermissionsCmd(args []string) error {
 			src = provideraws.NewSourceProviderWithPath(dir)
 		}
 		wg.Add(1)
-		go func() {
+		go func(i int, ref string, src *provideraws.SourceProvider) {
 			defer wg.Done()
 			schemas, err := src.Schemas()
 			if err != nil {
@@ -498,7 +498,7 @@ func generatePermissionsCmd(args []string) error {
 				return
 			}
 			versions[i] = permdata.Version{Ref: ref, Schemas: schemas}
-		}()
+		}(i, ref, src)
 	}
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
