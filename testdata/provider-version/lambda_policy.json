@@ -1,0 +1,1 @@
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:CreateFunction","lambda:GetFunction","lambda:GetFunctionCodeSigningConfig","lambda:ListVersionsByFunction","lambda:GetPolicy","lambda:TagResource","lambda:ListTags","lambda:PutFunctionConcurrency","iam:PassRole"],"Resource":"*"}]}

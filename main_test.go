@@ -15,6 +15,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/report"
 
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
+	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
 // captureStdout runs fn while capturing everything written to os.Stdout.
@@ -1055,18 +1056,28 @@ func TestValidate_NeedsUnknownPrincipal(t *testing.T) {
 	}
 }
 
+// providerDirArgs names dir as the checkout of every ref the table is
+// generated from, so generate-permissions clones nothing.
+func providerDirArgs(dir string) []string {
+	var args []string
+	for _, ref := range provideraws.TableProviderRefs {
+		args = append(args, "--provider-dir", ref+"="+dir)
+	}
+	return args
+}
+
 // TestGeneratePermissions_FromProviderDir generates a table from a small
 // provider tree twice. Both runs must write the same bytes, and the table
-// must hold the tree's resource type.
+// must hold the tree's resource type for every ref.
 func TestGeneratePermissions_FromProviderDir(t *testing.T) {
 	dir := t.TempDir()
 	var outs [2][]byte
 	for i := range outs {
 		out := filepath.Join(dir, fmt.Sprintf("permissions-%d.json", i))
-		err := run([]string{"generate-permissions",
-			"--provider-dir", "internal/check/testdata/provider",
+		err := run(append(append([]string{"generate-permissions"},
+			providerDirArgs("internal/check/testdata/provider")...),
 			"--out", out,
-		})
+		))
 		if err != nil {
 			t.Fatalf("run(generate-permissions): %v", err)
 		}
@@ -1081,15 +1092,46 @@ func TestGeneratePermissions_FromProviderDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tbl.Schemas["aws_backup_vault"]; !ok || len(tbl.Schemas) != 1 {
-		t.Errorf("table types = %v, want only aws_backup_vault", tbl.Schemas)
+	if !reflect.DeepEqual(tbl.Refs, provideraws.TableProviderRefs) {
+		t.Errorf("table refs = %v, want %v", tbl.Refs, provideraws.TableProviderRefs)
+	}
+	for _, ref := range tbl.Refs {
+		if _, ok := tbl.Schemas[ref]["aws_backup_vault"]; !ok || len(tbl.Schemas[ref]) != 1 {
+			t.Errorf("%s types = %v, want only aws_backup_vault", ref, tbl.Schemas[ref])
+		}
+	}
+	// Every ref parsed the same tree, so nothing is version-specific.
+	if bytes.Contains(outs[0], []byte(`"providers"`)) {
+		t.Errorf("a table of identical versions marks providers:\n%s", outs[0])
+	}
+}
+
+// TestGeneratePermissions_ProviderDirFlag checks the REF=DIR form of
+// --provider-dir.
+func TestGeneratePermissions_ProviderDirFlag(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "permissions.json")
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no ref", []string{"--provider-dir", "internal/check/testdata/provider"}, "REF=DIR"},
+		{"unknown ref", []string{"--provider-dir", "v4.0.0=internal/check/testdata/provider"}, "v4.0.0"},
+		{"ref twice", []string{"--provider-dir", provideraws.DefaultProviderRef + "=a", "--provider-dir", provideraws.DefaultProviderRef + "=b"}, "twice"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := run(append(append([]string{"generate-permissions"}, tc.args...), "--out", out))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want one naming %q", err, tc.want)
+			}
+		})
 	}
 }
 
 // TestGeneratePermissions_EmptyDir fails rather than writing an empty table.
 func TestGeneratePermissions_EmptyDir(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "permissions.json")
-	err := run([]string{"generate-permissions", "--provider-dir", t.TempDir(), "--out", out})
+	err := run(append(append([]string{"generate-permissions"}, providerDirArgs(t.TempDir())...), "--out", out))
 	if err == nil {
 		t.Fatal("want an error for a tree with no resources")
 	}

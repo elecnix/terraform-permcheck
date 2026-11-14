@@ -68,7 +68,7 @@ destroyed, counts as complete.
 
 ### Unresolved resource types
 
-PermCheck can't check a resource type that neither the embedded table nor the CloudFormation registry knows. This happens for a resource type newer than the pinned provider tag, and for a Plugin Framework resource that the registry lacks. PermCheck reports each such type as unresolved, with the resources of that type, and counts it as a gap. The checked count in the summary line leaves out the resources of an unresolved type, in plan mode and in static mode. The run fails with exit code 1 and never prints `All required permissions covered`.
+PermCheck can't check a resource type that neither the embedded table nor the CloudFormation registry knows. This happens for a resource type newer than the pinned tag of the provider version the run checks, and for a Plugin Framework resource that the registry lacks. PermCheck reports each such type as unresolved, with the resources of that type, and counts it as a gap. The checked count in the summary line leaves out the resources of an unresolved type, in plan mode and in static mode. The run fails with exit code 1 and never prints `All required permissions covered`.
 
 Each output format reports unresolved types:
 
@@ -470,7 +470,9 @@ The config file also accepts `"strict_resources": true` at the top level. It
 turns on `--strict-resources`, described in
 [Strict resource scope](#strict-resource-scope). Likewise,
 `"allow_unresolved_types": true` turns on `--allow-unresolved-types`, described
-in [Unresolved resource types](#unresolved-resource-types).
+in [Unresolved resource types](#unresolved-resource-types). And
+`"aws_provider_version": "5"` sets `--aws-provider-version`, described in
+[Which provider version a run checks](#which-provider-version-a-run-checks).
 
 `operations` lets you suppress a permission for one operation only, so a role
 that must never delete a resource still gets checked on create and update. An
@@ -672,6 +674,7 @@ accepts `--policy-file` only.
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 | `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
+| `--aws-provider-version` | none | Check against the requirements of this AWS provider major version, such as `5` or `5.100.0`. Without it, PermCheck reads the version from the lock file or the plan (see [Which provider version a run checks](#which-provider-version-a-run-checks)). The config key `aws_provider_version` sets the default |
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when the tool cannot check the grant: its target ARN is unknown and the policy grants it only on some resources, or a condition on the grant names a key the plan does not supply (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 | `--allow-unresolved-types` | `false` | Report resource types that no schema source knows, but don't fail the run on them (see [Unresolved resource types](#unresolved-resource-types)). The config key `allow_unresolved_types` sets the default |
@@ -698,21 +701,33 @@ print to stdout.
 
 ### Embedded permissions table
 
-The binary embeds the permissions of every terraform-provider-aws resource type at a pinned tag, `v6.72.0`. The table is `internal/permdata/permissions.json`. For each resource type it lists, per operation, each IAM action and the attribute tests that guard the provider's call. It also marks the operations whose parse missed calls, and PermCheck adds CloudFormation permissions to those. A default run reads this table, so it doesn't need git, network access to GitHub, or a provider clone.
+The binary embeds the permissions of every terraform-provider-aws resource type at two pinned tags, `v5.100.0` and `v6.72.0`, one per major version. The table is `internal/permdata/permissions.json`. For each resource type it lists, per operation, each IAM action and the attribute tests that guard the provider's call. It also marks the operations whose parse missed calls, and PermCheck adds CloudFormation permissions to those. A default run reads this table, so it doesn't need git, network access to GitHub, or a provider clone.
 
-To bump the provider version, change `DefaultProviderRef` in `internal/provideraws/source.go`, then regenerate the table and commit it:
+The two parses go into one file. A requirement both versions share appears once, without a mark. A resource type, operation or requirement that only one version has carries `"providers": ["5"]` or `"providers": ["6"]`. The format is documented in `internal/permdata/format.go`.
+
+#### Which provider version a run checks
+
+PermCheck checks a plan against the requirements of the AWS provider major version the plan was made with. It looks for that version in this order:
+
+1. `--aws-provider-version`, such as `5` or `5.100.0`, or the config key `aws_provider_version`. The flag overrides the config. A major version the table lacks is a usage error.
+2. The `registry.terraform.io/hashicorp/aws` entry of the `.terraform.lock.hcl` in the `--terraform-root` directory. Terraform writes the exact version it installed there.
+3. The plan's version constraints, from `configuration.provider_config` in the plan JSON, when they admit only one of the table's major versions, such as `~> 5.0`. The plan JSON doesn't record the installed version.
+
+When none of these settles the version, PermCheck checks against the newest version in the table and prints one notice on stderr that says which version it used. A lock file that pins a major version the table lacks, such as 4.x, gets the nearest version in the table and a notice too.
+
+To change the provider versions, edit `TableProviderRefs` and `DefaultProviderRef` in `internal/provideraws/source.go`, then regenerate the table and commit it:
 
 ```bash
 go run . generate-permissions --out internal/permdata/permissions.json
 ```
 
-The command clones the new tag into the provider cache and parses it. To parse a checkout you already have, pass `--provider-dir DIR`. The checkout must be at `DefaultProviderRef`. Without `--out`, the command writes the table to stdout. The output is deterministic, so regenerating an unchanged tree writes the same bytes. A test fails when the table's tag differs from `DefaultProviderRef`, and the CI job `permissions-drift` regenerates the table and fails when it differs from the committed one. Regenerate the table after a parser change too.
+The command clones each tag into the provider cache and parses it. To parse a checkout you already have, pass `--provider-dir REF=DIR`, such as `--provider-dir v6.72.0=../terraform-provider-aws`, once per tag. Each checkout must be at its tag. Without `--out`, the command writes the table to stdout. The output is deterministic, so regenerating unchanged trees writes the same bytes. A test fails when the table's tags differ from `TableProviderRefs`, and the CI job `permissions-drift` regenerates the table from both tags and fails when it differs from the committed one. Regenerate the table after a parser change too.
 
 ### Live provider source
 
-Pass `--provider-source live`, or set `PERMCHECK_PROVIDER_SOURCE=live`, to clone and parse the provider source at run time. Use it to try a parser change without regenerating the table. The live parse takes the place of the embedded table, and CloudFormation still fills the gaps.
+Pass `--provider-source live`, or set `PERMCHECK_PROVIDER_SOURCE=live`, to clone and parse the provider source at run time. Use it to try a parser change without regenerating the table. The live parse takes the place of the embedded table, and CloudFormation still fills the gaps. It parses the tag of the provider version the run checks (see [Which provider version a run checks](#which-provider-version-a-run-checks)).
 
-The first live run makes a shallow clone of the pinned tag from GitHub. Later runs reuse the clone and do not fetch again.
+The first live run of a tag makes a shallow clone of it from GitHub. Later runs reuse the clone and do not fetch again.
 
 The clone goes in a directory named after the tag, under `terraform-permcheck/provider-aws` in your user cache directory. On Linux that is `$XDG_CACHE_HOME`, or `~/.cache` when it is unset. On macOS it is `~/Library/Caches`. Set `PERMCHECK_PROVIDER_CACHE_DIR` to use another base directory. The clone still goes in a subdirectory named after the tag.
 
