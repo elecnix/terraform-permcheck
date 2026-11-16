@@ -94,7 +94,7 @@ func exitCode(err error) int {
 // same value: the Release workflow refuses a tag that doesn't match. See
 // "Releasing" in AGENTS.md. The version test derives its expectation from
 // this constant.
-const version = "v0.10.2"
+const version = "v0.10.3"
 
 // usage is the top-level help text.
 const usage = `Usage: terraform-permcheck <command> [flags]
