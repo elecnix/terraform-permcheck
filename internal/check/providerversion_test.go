@@ -15,11 +15,11 @@ func TestChooseProviderRef(t *testing.T) {
 		name   string
 		hints  VersionHints
 		ref    string
-		notice string // a substring of the notice, or "" for none
+		notice string // a substring of the notice, or "" for any named source
 	}{
-		{"explicit major", VersionHints{Explicit: "5", Locked: "6.72.0"}, oldest, ""},
-		{"explicit version", VersionHints{Explicit: "v6.1.0", Constraints: []string{"~> 5.0"}}, newest, ""},
-		{"lock file", VersionHints{Locked: "5.99.1", Constraints: []string{">= 6.0"}}, oldest, ""},
+		{"explicit major", VersionHints{Explicit: "5", ExplicitFrom: ExplicitFromConfig, Locked: "6.72.0"}, oldest, `: aws_provider_version "5" in the config.`},
+		{"explicit version", VersionHints{Explicit: "v6.1.0", ExplicitFrom: "--aws-provider-version", Constraints: []string{"~> 5.0"}}, newest, ": --aws-provider-version v6.1.0."},
+		{"lock file", VersionHints{Locked: "5.99.1", LockFile: "envs/app/.terraform.lock.hcl", Constraints: []string{">= 6.0"}}, oldest, ": envs/app/.terraform.lock.hcl pins 5.99.1."},
 		{"lock file older than the table", VersionHints{Locked: "4.67.0"}, oldest, "pins AWS provider 4.67.0"},
 		{"lock file newer than the table", VersionHints{Locked: "99.0.0"}, newest, "pins AWS provider 99.0.0"},
 		{"constraint admits one", VersionHints{Constraints: []string{"~> 5.0"}}, oldest, ""},
@@ -30,13 +30,13 @@ func TestChooseProviderRef(t *testing.T) {
 		{"exact constraint", VersionHints{Constraints: []string{"= 5.100.0"}}, oldest, ""},
 		{"constraint the table ref does not meet", VersionHints{Constraints: []string{"~> 5.90.0"}}, oldest, ""},
 		{"exact constraint on 6.x", VersionHints{Constraints: []string{"6.1.0"}}, newest, ""},
-		{"constraints intersect", VersionHints{Constraints: []string{">= 4.0", "< 6.0"}}, oldest, ""},
+		{"constraints intersect", VersionHints{Constraints: []string{">= 4.0", "< 6.0"}}, oldest, `: the plan's constraints ">= 4.0" and "< 6.0".`},
 		{"constraint admits both", VersionHints{Constraints: []string{">= 5.0"}}, newest, `">= 5.0" admits provider`},
 		{"constraint below the table", VersionHints{Constraints: []string{"~> 4.0"}}, oldest, "admits no version"},
 		{"constraint above the table", VersionHints{Constraints: []string{">= 99.0"}}, newest, "admits no version"},
-		{"nothing, no root", VersionHints{}, newest, "no --terraform-root names a directory"},
-		{"nothing, plan mode with root", VersionHints{Root: "infra"}, newest, "infra has no .terraform.lock.hcl"},
-		{"nothing, static mode", VersionHints{Root: "infra", Static: true}, newest, "found: infra has no .terraform.lock.hcl."},
+		{"nothing, no root", VersionHints{Searched: []string{"the working directory"}}, newest, "and no .terraform.lock.hcl in the working directory."},
+		{"nothing, plan mode with root", VersionHints{Searched: []string{"infra", "the working directory"}}, newest, "no .terraform.lock.hcl in infra or the working directory."},
+		{"nothing, static mode", VersionHints{Searched: []string{"infra"}, Static: true}, newest, "found: no .terraform.lock.hcl in infra."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := ChooseProviderRef(tc.hints)
@@ -46,13 +46,16 @@ func TestChooseProviderRef(t *testing.T) {
 			if got.Ref != tc.ref {
 				t.Errorf("Ref = %s, want %s", got.Ref, tc.ref)
 			}
-			switch {
-			case tc.notice == "" && got.Notice != "":
-				t.Errorf("Notice = %q, want none", got.Notice)
-			case tc.notice != "" && !strings.Contains(got.Notice, tc.notice):
-				t.Errorf("Notice = %q, want it to hold %q", got.Notice, tc.notice)
-			case tc.notice != "" && !strings.Contains(got.Notice, got.Ref):
+			// Every choice says which version it reads. One the hints
+			// name says what named it, and the case gives that text.
+			if !strings.Contains(got.Notice, got.Ref) {
 				t.Errorf("Notice = %q does not name the version used, %s", got.Notice, got.Ref)
+			}
+			if tc.notice != "" && !strings.Contains(got.Notice, tc.notice) {
+				t.Errorf("Notice = %q, want it to hold %q", got.Notice, tc.notice)
+			}
+			if tc.notice == "" && !strings.HasPrefix(got.Notice, "terraform-permcheck: checking against AWS provider "+got.Ref+": ") {
+				t.Errorf("Notice = %q, want the line that names its source", got.Notice)
 			}
 		})
 	}

@@ -227,3 +227,111 @@ func TestValidate_ProviderVersionFlagRejectsBadValue(t *testing.T) {
 		t.Errorf("run error = %v, want a usage error naming the flag", err)
 	}
 }
+
+// providerVersionLine is the start of the line validate prints to say which
+// provider version it checks against and where that version came from.
+const providerVersionLine = "terraform-permcheck: checking against AWS provider "
+
+// runFrom runs validate with dir as the working directory and the plan on
+// stdin, as `terraform show -json plan.tfplan | terraform-permcheck validate`
+// does from a root module directory. The plan and policy paths are resolved
+// before the directory changes.
+func runFrom(t *testing.T, dir, plan, policy string, extra ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	raw, readErr := os.ReadFile(plan)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	absPolicy, absErr := filepath.Abs(policy)
+	if absErr != nil {
+		t.Fatal(absErr)
+	}
+	t.Chdir(dir)
+	args := append([]string{"validate", "--policy-file", absPolicy, "--cloud", "aws"}, extra...)
+	withStdin(t, string(raw), func() {
+		stdout, stderr = captureStreams(t, func() { err = run(args) })
+	})
+	return stdout, stderr, err
+}
+
+// TestValidate_ProviderVersionFromWorkingDirectoryLock checks a plan piped
+// from a root module directory, with no flags: the lock file in the working
+// directory names the version, since terraform show runs there.
+func TestValidate_ProviderVersionFromWorkingDirectoryLock(t *testing.T) {
+	const dir = "testdata/provider-version/"
+	lockDir, err := filepath.Abs(dir + "lock-v5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, runErr := runFrom(t, lockDir, dir+"lambda_plan.json", dir+"lambda_policy.json")
+	if runErr != nil {
+		t.Fatalf("run error = %v, want a pass on 5.x\n%s%s", runErr, stdout, stderr)
+	}
+	if want := providerVersionLine + "v5.100.0: .terraform.lock.hcl pins 5.100.0"; !strings.Contains(stderr, want) {
+		t.Errorf("stderr lacks %q:\n%s", want, stderr)
+	}
+}
+
+// TestValidate_ProviderVersionRootAtRepoLockInSubdirectory checks a
+// --terraform-root that names the repository root while the lock file sits
+// in the root module's subdirectory. The plan JSON does not name its root
+// module's directory, so the lock file of the working directory decides.
+func TestValidate_ProviderVersionRootAtRepoLockInSubdirectory(t *testing.T) {
+	const dir = "testdata/provider-version/"
+	repo, err := filepath.Abs(dir + "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("run from the root module directory", func(t *testing.T) {
+		stdout, stderr, runErr := runFrom(t, filepath.Join(repo, "envs", "app"), dir+"lambda_plan.json", dir+"lambda_policy.json",
+			"--plan-file", "-", "--terraform-root", repo)
+		if runErr != nil {
+			t.Fatalf("run error = %v, want a pass on 5.x\n%s%s", runErr, stdout, stderr)
+		}
+		if want := providerVersionLine + "v5.100.0: .terraform.lock.hcl pins 5.100.0"; !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, stderr)
+		}
+	})
+	t.Run("run from elsewhere", func(t *testing.T) {
+		stdout, stderr, runErr := runFrom(t, t.TempDir(), dir+"lambda_plan.json", dir+"lambda_policy.json",
+			"--plan-file", "-", "--terraform-root", repo)
+		if !errors.Is(runErr, errGapsFound) {
+			t.Fatalf("run error = %v, want the 6.x gap\n%s%s", runErr, stdout, stderr)
+		}
+		if !strings.Contains(stderr, providerVersionNotice) {
+			t.Errorf("no lock file was found, but the run printed no notice:\n%s", stderr)
+		}
+	})
+}
+
+// TestValidate_ProviderVersionSourceLine checks that the run names where the
+// version came from: the flag, the config, or the lock file of
+// --terraform-root.
+func TestValidate_ProviderVersionSourceLine(t *testing.T) {
+	const dir = "testdata/provider-version/"
+	config := filepath.Join(t.TempDir(), "permcheck.json")
+	if err := os.WriteFile(config, []byte(`{"aws_provider_version": "5"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"validate", "--plan-file", dir + "lambda_plan.json", "--policy-file", dir + "lambda_policy.json", "--cloud", "aws"}
+	for _, tc := range []struct {
+		name  string
+		extra []string
+		want  string
+	}{
+		{"flag", []string{"--aws-provider-version", "5.100.0"}, "v5.100.0: --aws-provider-version 5.100.0"},
+		{"config", []string{"--config", config}, `v5.100.0: aws_provider_version "5" in the config`},
+		{"lock file under --terraform-root", []string{"--terraform-root", dir + "lock-v6"}, "v6.72.0: " + filepath.Join(dir+"lock-v6", ".terraform.lock.hcl") + " pins 6.72.0"},
+		{"plan constraint", []string{"--plan-file", dir + "lambda_constraint_plan.json"}, `v5.100.0: the plan's constraint "~> 5.0"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr := captureStreams(t, func() { _ = run(append(append([]string{}, base...), tc.extra...)) })
+			if n := strings.Count(stderr, providerVersionLine); n != 1 {
+				t.Errorf("stderr holds the version line %d times, want once:\n%s", n, stderr)
+			}
+			if !strings.Contains(stderr, providerVersionLine+tc.want) {
+				t.Errorf("stderr lacks %q:\n%s", providerVersionLine+tc.want, stderr)
+			}
+		})
+	}
+}

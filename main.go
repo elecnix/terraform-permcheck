@@ -193,7 +193,7 @@ func validateCmd(args []string) error {
 	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
 	allowUnresolved := fs.Bool("allow-unresolved-types", false, "report resource types no schema source knows but do not fail the run on them (default: from config allow_unresolved_types)")
-	awsProviderVersion := fs.String("aws-provider-version", "", "check against the requirements of this AWS provider major version, such as 5 or 5.100.0 (default: from config aws_provider_version, else the version the .terraform.lock.hcl under --terraform-root pins, else the plan's version constraint, else the newest the embedded table holds)")
+	awsProviderVersion := fs.String("aws-provider-version", "", "check against the requirements of this AWS provider major version, such as 5 or 5.100.0 (default: from config aws_provider_version, else the version the .terraform.lock.hcl under --terraform-root or in the working directory pins, else the plan's version constraint, else the newest the embedded table holds)")
 	providerSource := fs.String("provider-source", os.Getenv(check.ProviderSourceEnv), "where provider-source permissions come from: embedded (the table built into the binary) or live (clone and parse terraform-provider-aws) (default: $"+check.ProviderSourceEnv+", else embedded)")
 
 	if err := parseFlags(fs, args); err != nil {
@@ -240,21 +240,18 @@ func validateCmd(args []string) error {
 
 		AllowUnresolvedTypes: allowUnresolvedTypes,
 	}
-	hints := check.VersionHints{Explicit: cfg.AWSProviderVersion, ExplicitFrom: "config aws_provider_version"}
+	hints := check.VersionHints{Explicit: cfg.AWSProviderVersion, ExplicitFrom: check.ExplicitFromConfig}
 	if *awsProviderVersion != "" {
 		hints.Explicit, hints.ExplicitFrom = *awsProviderVersion, "--aws-provider-version"
 	}
-	if *terraformRoot != "" && hints.Explicit == "" {
-		locked, _, err := providerversion.FromLockFile(*terraformRoot)
-		if err != nil {
-			return fmt.Errorf("read the AWS provider version: %w", err)
+	if hints.Explicit == "" {
+		if err := findLockedVersion(&hints, *terraformRoot); err != nil {
+			return err
 		}
-		hints.Locked = locked
 	}
-	hints.Root = *terraformRoot
-	// resolver picks the provider version the requirements come from. When
-	// nothing named it, the first lookup prints a notice that says which
-	// version the run reads.
+	// resolver picks the provider version the requirements come from. The
+	// first lookup prints the line that says which version the run reads and
+	// what named it, so a run with nothing to check prints nothing.
 	resolver := func(planRaw []byte, static bool) error {
 		hints.Static = static
 		if hints.Explicit == "" && hints.Locked == "" {
@@ -264,10 +261,7 @@ func validateCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		opts.Resolver = check.ResolverFor(source, choice.Ref)
-		if choice.Notice != "" {
-			opts.Resolver = &noticeResolver{Resolver: opts.Resolver, notice: choice.Notice}
-		}
+		opts.Resolver = &noticeResolver{Resolver: check.ResolverFor(source, choice.Ref), notice: choice.Notice}
 		return nil
 	}
 
@@ -347,6 +341,42 @@ func validateCmd(args []string) error {
 	}
 
 	return reportResult(res, outFormat, *exitZero, *showExcluded, locations)
+}
+
+// findLockedVersion reads the AWS provider version from a .terraform.lock.hcl
+// into hints: the one in the terraform root, else the one in the working
+// directory, where `terraform show -json` ran when the plan comes from a
+// pipe. A plan JSON does not name its root module's directory, so a
+// terraform root above several root modules cannot pick one of their lock
+// files. The directories searched without a lock file go in hints.Searched.
+func findLockedVersion(hints *check.VersionHints, root string) error {
+	type place struct{ dir, label string }
+	var places []place
+	if root != "" {
+		places = append(places, place{root, root})
+	}
+	if root == "" || !sameDir(root, ".") {
+		places = append(places, place{".", "the working directory"})
+	}
+	for _, p := range places {
+		locked, ok, err := providerversion.FromLockFile(p.dir)
+		if err != nil {
+			return fmt.Errorf("read the AWS provider version: %w", err)
+		}
+		if ok {
+			hints.Locked, hints.LockFile = locked, filepath.Join(p.dir, providerversion.LockFile)
+			return nil
+		}
+		hints.Searched = append(hints.Searched, p.label)
+	}
+	return nil
+}
+
+// sameDir reports whether two paths name the same directory.
+func sameDir(a, b string) bool {
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }
 
 // noticeResolver prints a notice to stderr the first time a check looks up a

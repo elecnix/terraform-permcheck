@@ -8,40 +8,44 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/providerversion"
 )
 
+// ExplicitFromConfig is the VersionHints.ExplicitFrom of a version the config
+// file set.
+const ExplicitFromConfig = "aws_provider_version"
+
 // VersionHints is what a run knows about the AWS provider version the plan
 // or the terraform root uses, most authoritative first.
 type VersionHints struct {
 	// Explicit is the version the user set, such as "5", "5.100.0" or
-	// "v6.72.0", or "". ExplicitFrom names where it was set, for errors.
+	// "v6.72.0", or "". ExplicitFrom is where: "--aws-provider-version" or
+	// ExplicitFromConfig.
 	Explicit, ExplicitFrom string
-	// Locked is the version the root's .terraform.lock.hcl pins, or "".
-	Locked string
+	// Locked is the version a .terraform.lock.hcl pins, or "", and LockFile
+	// is the path of that file.
+	Locked, LockFile string
 	// Constraints are the plan's version constraints for the provider.
 	Constraints []string
-	// Root is the --terraform-root directory, or "". Static is true in
-	// static HCL mode, which reads no plan. Both shape the notice.
-	Root   string
-	Static bool
+	// Searched lists the directories whose .terraform.lock.hcl was looked
+	// for and missing, as the notice should name them. Static is true in
+	// static HCL mode, which reads no plan.
+	Searched []string
+	Static   bool
 }
 
 // unknown says why the hints name no version, for the notice.
 func (h VersionHints) unknown() string {
-	lock := providerversion.LockFile
-	switch {
-	case h.Static:
-		return fmt.Sprintf("%s has no %s", h.Root, lock)
-	case h.Root != "":
-		return fmt.Sprintf("the plan sets no version constraint for it, and %s has no %s", h.Root, lock)
+	where := fmt.Sprintf("no %s in %s", providerversion.LockFile, strings.Join(h.Searched, " or "))
+	if h.Static {
+		return where
 	}
-	return fmt.Sprintf("the plan sets no version constraint for it, and no --terraform-root names a directory with a %s", lock)
+	return "the plan sets no version constraint for it, and " + where
 }
 
 // ProviderChoice is the provider version a run reads requirements for.
 type ProviderChoice struct {
 	// Ref is the embedded table's ref for that version, such as "v5.100.0".
 	Ref string
-	// Notice, when set, is a line to tell the user: the hints did not name a
-	// version the table has, so the run reads Ref instead.
+	// Notice is the line to tell the user: the version the run reads and
+	// what named it, or why nothing named a version the table has.
 	Notice string
 }
 
@@ -57,8 +61,11 @@ func ChooseProviderRef(h VersionHints) (ProviderChoice, error) {
 		return ProviderChoice{}, err
 	}
 	newest := tbl.Newest()
-	notice := func(format string, args ...any) ProviderChoice {
-		return ProviderChoice{Ref: newest, Notice: fmt.Sprintf("terraform-permcheck: "+format, args...)}
+	found := func(ref, source string) ProviderChoice {
+		return ProviderChoice{Ref: ref, Notice: fmt.Sprintf("terraform-permcheck: checking against AWS provider %s: %s.", ref, source)}
+	}
+	fallback := func(ref, format string, args ...any) ProviderChoice {
+		return ProviderChoice{Ref: ref, Notice: fmt.Sprintf("terraform-permcheck: "+format, args...)}
 	}
 
 	if h.Explicit != "" {
@@ -70,24 +77,25 @@ func ChooseProviderRef(h VersionHints) (ProviderChoice, error) {
 		if !ok {
 			return ProviderChoice{}, fmt.Errorf("%s %q: the embedded permissions table holds AWS provider %s only", h.ExplicitFrom, h.Explicit, strings.Join(tbl.Refs, " and "))
 		}
-		return ProviderChoice{Ref: ref}, nil
+		if h.ExplicitFrom == ExplicitFromConfig {
+			return found(ref, fmt.Sprintf("%s %q in the config", ExplicitFromConfig, h.Explicit)), nil
+		}
+		return found(ref, h.ExplicitFrom+" "+h.Explicit), nil
 	}
 
 	if h.Locked != "" {
 		major, ok := providerversion.Major(h.Locked)
 		if !ok {
-			return notice("the lock file pins AWS provider %q, which is not a version; checking against provider %s.", h.Locked, newest), nil
+			return fallback(newest, "%s pins AWS provider %q, which is not a version; checking against provider %s.", h.LockFile, h.Locked, newest), nil
 		}
 		if ref, ok := tbl.RefFor(major); ok {
-			return ProviderChoice{Ref: ref}, nil
+			return found(ref, fmt.Sprintf("%s pins %s", h.LockFile, h.Locked)), nil
 		}
 		nearest := newest
 		if oldest := tbl.Refs[0]; major < majorOf(oldest) {
 			nearest = oldest
 		}
-		c := notice("the lock file pins AWS provider %s, and the embedded table has no %d.x; checking against provider %s.", h.Locked, major, nearest)
-		c.Ref = nearest
-		return c, nil
+		return fallback(nearest, "%s pins AWS provider %s, and the embedded table has no %d.x; checking against provider %s.", h.LockFile, h.Locked, major, nearest), nil
 	}
 
 	if len(h.Constraints) > 0 {
@@ -99,12 +107,11 @@ func ChooseProviderRef(h VersionHints) (ProviderChoice, error) {
 		}
 		switch {
 		case len(admitted) == 1:
-			return ProviderChoice{Ref: admitted[0]}, nil
+			return found(admitted[0], "the plan's "+constraintPhrase(h.Constraints)), nil
 		case len(admitted) > 1:
-			c := notice("no AWS provider version found: the plan's constraint %s admits provider %s, and no lock file names one. Checking against provider %s; set --aws-provider-version to choose.",
-				quoteAll(h.Constraints), strings.Join(admitted, " and "), admitted[len(admitted)-1])
-			c.Ref = admitted[len(admitted)-1]
-			return c, nil
+			ref := admitted[len(admitted)-1]
+			return fallback(ref, "no AWS provider version found: the plan's %s admits provider %s, and %s. Checking against provider %s; set --aws-provider-version to choose.",
+				constraintPhrase(h.Constraints), strings.Join(admitted, " and "), h.missingLock(), ref), nil
 		}
 		// The constraints admit no major the table has. Read the version
 		// nearest to the ones they admit.
@@ -116,12 +123,15 @@ func ChooseProviderRef(h VersionHints) (ProviderChoice, error) {
 				break
 			}
 		}
-		c := notice("the plan's AWS provider constraint %s admits no version the embedded table has; checking against provider %s.", quoteAll(h.Constraints), nearest)
-		c.Ref = nearest
-		return c, nil
+		return fallback(nearest, "the plan's AWS provider %s admits no version the embedded table has; checking against provider %s.", constraintPhrase(h.Constraints), nearest), nil
 	}
 
-	return notice("no AWS provider version found: %s. Checking against provider %s; set --aws-provider-version to choose.", h.unknown(), newest), nil
+	return fallback(newest, "no AWS provider version found: %s. Checking against provider %s; set --aws-provider-version to choose.", h.unknown(), newest), nil
+}
+
+// missingLock says where no lock file was found.
+func (h VersionHints) missingLock() string {
+	return fmt.Sprintf("there is no %s in %s", providerversion.LockFile, strings.Join(h.Searched, " or "))
 }
 
 func majorOf(ref string) int {
@@ -129,10 +139,14 @@ func majorOf(ref string) int {
 	return m
 }
 
-func quoteAll(list []string) string {
+// constraintPhrase names the plan's constraints, such as `constraint "~> 5.0"`.
+func constraintPhrase(list []string) string {
 	q := make([]string, len(list))
 	for i, s := range list {
 		q[i] = fmt.Sprintf("%q", s)
 	}
-	return strings.Join(q, " and ")
+	if len(q) == 1 {
+		return "constraint " + q[0]
+	}
+	return "constraints " + strings.Join(q, " and ")
 }

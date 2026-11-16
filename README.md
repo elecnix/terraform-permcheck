@@ -674,7 +674,7 @@ accepts `--policy-file` only.
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
 | `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
-| `--aws-provider-version` | none | Check against the requirements of this AWS provider major version, such as `5` or `5.100.0`. Without it, PermCheck reads the version from the lock file or the plan (see [Which provider version a run checks](#which-provider-version-a-run-checks)). The config key `aws_provider_version` sets the default |
+| `--aws-provider-version` | none | Check against the requirements of this AWS provider major version, such as `5` or `5.100.0`. Without it, PermCheck reads the version from the lock file of `--terraform-root` or of the working directory, or from the plan (see [Which provider version a run checks](#which-provider-version-a-run-checks)). The config key `aws_provider_version` sets the default |
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when the tool cannot check the grant: its target ARN is unknown and the policy grants it only on some resources, or a condition on the grant names a key the plan does not supply (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |
 | `--allow-unresolved-types` | `false` | Report resource types that no schema source knows, but don't fail the run on them (see [Unresolved resource types](#unresolved-resource-types)). The config key `allow_unresolved_types` sets the default |
@@ -711,9 +711,12 @@ PermCheck checks a plan against the requirements of the AWS provider major versi
 
 1. `--aws-provider-version`, such as `5` or `5.100.0`, or the config key `aws_provider_version`. The flag overrides the config. A major version the table lacks is a usage error.
 2. The `registry.terraform.io/hashicorp/aws` entry of the `.terraform.lock.hcl` in the `--terraform-root` directory. Terraform writes the exact version it installed there.
-3. The plan's version constraints, from `configuration.provider_config` in the plan JSON, when they admit only one of the table's major versions, such as `~> 5.0`. The plan JSON doesn't record the installed version.
+3. The `.terraform.lock.hcl` in the working directory. `terraform show -json plan.tfplan | terraform-permcheck validate` run from a root module directory finds the version there with no flags.
+4. The plan's version constraints, from `configuration.provider_config` in the plan JSON, when they admit only one of the table's major versions, such as `~> 5.0`.
 
-When none of these settles the version, PermCheck checks against the newest version in the table and prints one notice on stderr that says which version it used. A lock file that pins a major version the table lacks, such as 4.x, gets the nearest version in the table and a notice too.
+The plan JSON doesn't record the installed version, or the directory of its root module. So when `--terraform-root` names a directory above several root modules, such as the repository root with lock files in `envs/<name>/`, run PermCheck from the root module's directory, or pass `--aws-provider-version`.
+
+On its first lookup, a run prints one line on stderr that names the version and what set it, such as `terraform-permcheck: checking against AWS provider v5.100.0: .terraform.lock.hcl pins 5.100.0.` When none of the sources names a version, PermCheck checks against the newest version in the table, and the line says so and names the directories it searched. A lock file that pins a major version the table lacks, such as 4.x, gets the nearest version in the table. A run with nothing to check prints no line.
 
 To change the provider versions, edit `TableProviderRefs` and `DefaultProviderRef` in `internal/provideraws/source.go`, then regenerate the table and commit it:
 
