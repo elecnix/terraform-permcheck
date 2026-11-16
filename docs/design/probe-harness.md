@@ -598,26 +598,45 @@ The account placeholders are the ones the AWS documentation uses in its
 examples, so a redacted ARN still has the ARN format and reads like the
 documentation's examples.
 
-The second pass replaces patterns. Any other 12-digit account ID in an ARN or
-in an `accountId`, `recipientAccountId` or `principalId` field becomes
-`999988887777`, an `o-` or `ou-` ID becomes `o-exampleorgid` or
-`ou-exampleouid`, an email address becomes `<email>`, and an access key ID
-becomes `<access-key-id>`.
+The second pass replaces patterns, wherever they appear in the text, so it
+also covers an ID in free text such as an error message:
+
+| Pattern | Placeholder |
+|---------|-------------|
+| Any other run of exactly 12 digits | `999988887777` |
+| An `o-` or `ou-` ID | `o-exampleorgid`, `ou-exampleouid` |
+| An email address | `<email>` |
+| An access key ID (`AKIA` or `ASIA` and 16 more characters) | `<access-key-id>` |
+| A bucket name with the harness prefix (`permcheck-trail-` or `permcheck-state-`) | `<trail-bucket>`, `<state-bucket>` |
+| An IAM Identity Center role name (`AWSReservedSSO_` and the rest of the name) | `<maintainer-role>` |
+
+The 12-digit rule also replaces a number that only looks like an account ID,
+such as a 12-digit request field. Over-redaction loses little, since the
+event ID and event name still identify the call.
 
 After both passes, a scan checks the output for each known value and each
-pattern again. If it finds one, the runner doesn't write, and prints the
-location of the match in the local raw file so the maintainer can extend the
-rules. The step is fail-closed, so the runner drops a write that it can't
+pattern again. The scan allows the placeholders that the passes insert,
+`111122223333`, `444455556666` and `999988887777`, and the bracketed
+placeholders. If it finds anything else, the runner doesn't write, and prints
+the location of the match in the local raw file so the maintainer can extend
+the rules. The step is fail-closed, so the runner drops a write that it can't
 redact.
 
 ### Checks on committed files
 
 A test in the repository scans `probe/`, `docs/design/probe-harness.md` and
-`testdata` files under `internal/probe` for 12-digit numbers, `o-` and `ou-`
-IDs, and email addresses. It allows the AWS documentation placeholders
-(`111122223333`, `123456789012`, `444455556666`, `999988887777`) and fails on
-any other match. It runs in the normal `go test` job, since it reads files and
-doesn't call AWS.
+`testdata` files under `internal/probe` with the patterns of the second pass:
+12-digit numbers, `o-` and `ou-` IDs, email addresses, access key IDs, bucket
+names with the harness prefix, and Identity Center role names. It allows the
+AWS documentation placeholders (`111122223333`, `123456789012`,
+`444455556666`, `999988887777`) and the bracketed placeholders, and fails on
+any other match. When `probe/local.json` exists, as on a maintainer's
+machine, the test also fails on each known value it lists. It runs in the
+normal `go test` job, since it reads files and doesn't call AWS.
+
+The harness prefixes are part of the design so that the scan can find a
+bucket name without knowing it: `probe/account/` names the trail and state
+buckets `permcheck-trail-` and `permcheck-state-` followed by a random suffix.
 
 `probe/account/`, `probe/org/scp.json` and `probe/nuke.yaml` take account IDs,
 role ARNs and bucket names as variables or placeholders. The values are in
@@ -798,7 +817,8 @@ Each code stage starts with a failing test.
 - **Comparison**: one case per category, the union of retry rounds, and an
   entry in `conditional.json` that turns `unseen` into `unseen_explained`.
 - **Redaction**: an event with each kind of sensitive value from the list
-  above, in an ARN, in a JSON field and in an error message. The output has
+  above, in an ARN, in a JSON field and in the free text of an error message.
+  A redacted ARN passes the scan. The output has
   each one replaced. A value that the passes miss on purpose makes the scan
   refuse the write. The committed-files scan fails on a planted account ID and
   passes on the documentation placeholders.
