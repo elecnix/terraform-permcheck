@@ -1,39 +1,46 @@
 # A probe harness that checks the permission table against AWS
 
-Status: proposal for [#204](https://github.com/elecnix/terraform-permcheck/issues/204), part of [#202](https://github.com/elecnix/terraform-permcheck/issues/202).
-Nobody writes code for it until the owner approves this document.
+Status: design for [#204](https://github.com/elecnix/terraform-permcheck/issues/204), part of [#202](https://github.com/elecnix/terraform-permcheck/issues/202).
+The owner approved it and answered its open questions. The answers are part of
+the design below, and one question is still open.
 
 PermCheck's embedded table comes from parsing the Go source of
 terraform-provider-aws. No test compares it with the calls AWS authorizes.
 So far a person has checked one requirement by hand in a real account, the
 Backup pair in [#179](https://github.com/elecnix/terraform-permcheck/issues/179).
 
-This document proposes a harness that makes that comparison for each resource
+This document describes a harness that makes that comparison for each resource
 type it covers. For one type, it applies a minimal configuration taken from the
 provider's acceptance tests. The apply runs under a role whose policy grants
 exactly what PermCheck says the plan needs. CloudTrail records the calls, the
 harness destroys the resources, and a comparison step sorts each action into a
 category: confirmed, missing, or granted but never called.
 
-The sections below answer the six questions in the issue, then cover how a finding
-becomes a fix, how the harness treats a call that the provider makes only
-under a runtime condition, and how it runs provider 5.x and 6.x against the one
-table from [#200](https://github.com/elecnix/terraform-permcheck/pull/200). It
-ends with open questions and the stages.
+The probe is a manual tool. A maintainer starts it by hand from their own
+machine, with their own short-lived credentials. It never runs in CI, and its
+results don't block a pull request or a release.
+
+The sections below answer the six questions in the issue, then cover how a
+finding becomes a fix, how the harness treats a call that the provider makes
+only under a runtime condition, how it runs provider 5.x and 6.x against the
+one table from [#200](https://github.com/elecnix/terraform-permcheck/pull/200),
+and how it keeps account details out of public output. It ends with the
+owner's decisions, the question still open, and the stages.
 
 ## Decisions at a glance
 
 | Question | Decision |
 |----------|----------|
-| 1. Guardrails | A member account used for the harness alone. Its SCP allows `us-east-1` only and denies purchases and long commitments. The same SCP denies expensive services to a principal without the `expensive` tier tag, and guards the harness's own roles and trail. At its cap, a monthly budget applies a deny policy. aws-nuke empties the account after each pass and every six hours. |
-| 2. Credentials | GitHub Actions gets a token from its OIDC provider and assumes a harness role. The role trusts one repository and one GitHub environment. The harness role creates a probe role per resource type, and the provider assumes it. Neither the repository nor the account keeps an access key. |
-| 3. Scope | About 30 types first. They include the types with hand-written corrections in `internal/provideraws/source.go` or recent bug reports, plus common types that are free or nearly free to keep for an hour. NAT gateways, RDS, EKS, OpenSearch, MSK and Redshift wait for an `expensive` tier that runs by hand, one type at a time. |
+| 1. Guardrails | A member account used for the harness alone, in `us-east-1` only. Its SCP denies purchases and long commitments. The same SCP denies expensive services to a principal without the `expensive` tier tag, and guards the harness's own roles and trail. A $30 monthly budget applies both a deny policy in the account and a deny-all SCP at its cap. aws-nuke empties the account before and after each run. |
+| 2. Credentials | A maintainer signs in on their own machine and gets short-lived credentials, then the runner assumes a harness role in the probe account. The harness role creates a probe role per resource type, and the provider assumes it. The runner refuses long-term access keys. The repository has no trust relationship with the account. |
+| 3. Scope | About 30 types first. They include the types with hand-written corrections in `internal/provideraws/source.go` or recent bug reports, plus common types that are free or nearly free to keep for an hour. NAT gateways, RDS, EKS, OpenSearch, MSK and Redshift form an `expensive` tier that a maintainer runs by hand, one type at a time. |
 | 4. Comparison | The harness reads the trail's log files from S3 and keeps the events whose `userIdentity.arn` matches a probe session. It maps each event to IAM actions through the AWS service reference, which `gen_iam_services.go` already reads. An access-denied message gives the action directly. For the resource types that a fixture declares, the trail also logs data events. |
-| 5. Cadence | Each pull request that changes `permissions.json` gets a run of the types whose rows changed. The weekly run covers the probed types outside the `expensive` tier, and the owner starts the `expensive` tier by hand. A `missing` finding fails that pull request's check and blocks a release tag. Other findings open issues and don't block anything. |
-| 6. Cost | Under $0.20 for a full run of the first 30 types on both provider majors, at list prices, and under $5 for one pass of the `expensive` tier. Each run prints an estimate in its job summary, and a job on the next day appends the billed amount from Cost Explorer. |
-| Findings to fixes | One issue per finding with the CloudTrail evidence. A fix is a parser change when the call pattern recurs across types, and a row in `schemaCorrections` or `schemaGates` otherwise. The fix's pull request reruns the probe for that type. |
-| Conditional calls | The plan decides attribute gates, so the policy leaves out a call whose gate doesn't hold. A granted action that the provider didn't call is a finding that doesn't block anything. It's closed by a fixture variant that makes the call, a source-cited entry in `probe/conditional.json`, or a fix. A best-effort call shows up as an expected denial. |
+| 5. Cadence | By hand only, when a maintainer judges a row worth checking, such as after a move to a new provider ref or a bug report about a row. Each finding opens an issue and doesn't block anything. |
+| 6. Cost | Under $0.20 for a full run of the first 30 types on both provider majors, at list prices, and under $5 for one pass of the `expensive` tier. The runner prints an estimate at the end of a run, and a `cost` command on the next day prints the billed amount from Cost Explorer. |
+| Findings to fixes | One issue per finding, with redacted CloudTrail evidence. When the call pattern recurs across types, the fix is a parser change, and otherwise a row in `schemaCorrections` or `schemaGates`. Before the fix merges, a maintainer reruns the probe for that type. |
+| Conditional calls | The plan decides attribute gates, so the policy leaves out a call whose gate doesn't hold. A granted action that the provider didn't call is a finding. A fixture variant that makes the call, a source-cited entry in `probe/conditional.json`, or a fix closes it. A best-effort call shows up as an expected denial. |
 | Provider 5.x and 6.x | Each fixture runs under v5.100.0 and v6.72.0, the refs in the table, and `validate --aws-provider-version` picks the matching view of the table. A finding records the major, and a fix that applies to one major gets a `providers` mark. |
+| Public output | Before the runner writes to an issue or to a file in the repository, a redaction step replaces account IDs, organization IDs, the maintainer's identity, bucket names and email addresses. If any of them remains, the scan that follows refuses the write. |
 
 ## Table contents and probe coverage
 
@@ -44,10 +51,10 @@ the provider calls. A requirement's gate can test a presence attribute
 requirement is `best_effort` when the provider ignores the call's failure. `validate`
 evaluates each gate against the plan and reports the actions whose gate holds.
 
-A probe checks the actions, not the resource ARNs. Its policy grants each
-action on `"Resource": "*"`, since the table lists actions and the ARN rules in
-`internal/iam/resource_scope.go` are a separate layer. Probing ARN scoping is
-open question 5.
+A probe checks the actions first. Its policy grants each action on
+`"Resource": "*"`, since the table lists actions and the ARN rules in
+`internal/iam/resource_scope.go` are a separate layer. A later stage adds
+probes with resource-scoped policies.
 
 A probe also checks the table through `validate`, not the parser alone. A
 finding can come from a parser gap, a hand-written correction, an implied
@@ -67,6 +74,8 @@ requirement in `internal/iam/implied.go`, or a gate. Triage tells them apart.
   encodes the run, type, major and phase.
 - **Finding**: one action in one phase of one type and major, with a category
   and the events behind it.
+- **Runner**: the `tools/probe` program that a maintainer starts on their
+  machine.
 
 ## Question 1: account guardrails
 
@@ -77,9 +86,9 @@ The owner keeps other workloads out of it. The account gets an alias that starts
 `permcheck-probe`, because aws-nuke refuses to run against an account without
 an alias.
 
-The harness runs in `us-east-1`. IAM, STS and Route 53 are global services
-whose events CloudTrail records in `us-east-1`, so one region keeps every event
-in one trail
+The harness runs in `us-east-1` only. IAM, STS and Route 53 are global
+services whose events CloudTrail records in `us-east-1`, so one region keeps
+every event in one trail
 ([global service events](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-concepts.html#cloudtrail-concepts-global-service-events)).
 
 ### Service control policy
@@ -89,7 +98,8 @@ account, including its root user, and don't apply to service-linked roles
 ([SCPs](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html)).
 The owner attaches one SCP to the account, from the management account. The
 repository keeps its text in `probe/org/scp.json` so that a pull request can
-review a change to it. It has five statements:
+review a change to it. The text uses placeholders for the role ARNs, and the
+owner fills them in when attaching it. It has five statements:
 
 1. **Region.** Deny every action outside `us-east-1`, with `NotAction` listing
    the global services, as in the AWS example
@@ -111,7 +121,7 @@ review a change to it. It has five statements:
    `rds:DatabaseClass` is `db.t4g.micro`. A fixture that needs an instance
    uses those sizes.
 5. **Harness protection.** Deny changes to the harness's own resources (the
-   OIDC provider, the harness and nuke roles, the trail, its bucket, and the
+   harness and nuke roles, the trail, its bucket, the state bucket, and the
    budget role) unless `aws:PrincipalArn` is one of the two harness roles. Deny
    `cloudtrail:StopLogging`, `cloudtrail:DeleteTrail` and
    `cloudtrail:PutEventSelectors` on the trail to everyone else, and deny
@@ -127,7 +137,7 @@ policy` ([access denied error message examples](https://docs.aws.amazon.com/IAM/
 The comparison reports such a denial as a `guardrail` error for the type, and
 someone fixes the fixture or the SCP.
 
-### Budget action
+### Budget actions
 
 AWS Budgets can run an action when a budget crosses a threshold, either
 automatically or after approval. The action can apply an IAM policy or an SCP,
@@ -135,17 +145,20 @@ or target EC2 and RDS instances. Only the management account can apply an SCP
 to another account
 ([budget actions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html)).
 
-The proposal is a monthly cost budget of $30 on the account. It sends an alert
-at 50 percent. At 100 percent it automatically attaches a deny-all IAM policy
-to the harness, nuke and probe roles. If the owner prefers, the same
-threshold can apply a deny-all SCP from the management account, which also
-covers a role the harness creates later.
+The account has a monthly cost budget of $30. It sends an alert at 50
+percent. At 100 percent two actions run automatically:
+
+- In the member account, a budget action attaches a deny-all IAM policy to the
+  harness, nuke and probe roles.
+- From the management account, a budget action attaches a deny-all SCP to the
+  probe account. It also covers a role that exists outside the first action's
+  list, such as a probe role created after the threshold.
 
 A budget reacts late. "AWS billing data, which Budgets uses to monitor
 resources, is updated at least once per day"
 ([Budgets update frequency](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-best-practices.html#budgets-best-practices-updates)).
-A leaked EKS cluster runs for up to a day before the action applies. The SCP
-and aws-nuke limit spending as it happens, and the budget action is the
+A leaked EKS cluster runs for up to a day before the actions apply. The SCP
+and aws-nuke limit spending as it happens, and the budget actions are the
 last line.
 
 ### aws-nuke
@@ -153,46 +166,71 @@ last line.
 The harness uses the maintained fork of aws-nuke
 ([ekristen/aws-nuke](https://github.com/ekristen/aws-nuke),
 [documentation](https://aws-nuke.ekristen.dev/)), downloaded at a pinned
-release and checked against its published checksum. The config in
-`probe/nuke.yaml` lists the account, `us-east-1` and the global region, and
-filters out the harness resources by name and by the tag
-`permcheck-harness=true`. The owner adds the management account to the
-blocklist.
+release and checked against its published checksum. The committed config in
+`probe/nuke.yaml` lists `us-east-1` and the global region, and filters out the
+harness resources by name and by the tag `permcheck-harness=true`. It uses
+placeholders for the account IDs. The runner fills in the probe account and
+the management account, which goes in the blocklist, from the maintainer's
+local config at run time.
 
-aws-nuke runs in three places:
+The runner runs aws-nuke at two points:
 
-- at the end of each run, after `terraform destroy`, to catch what a failed
-  destroy left;
-- every six hours on a schedule, to catch a run that crashed before its last
-  step;
-- before a run, when the previous nuke didn't finish.
+- before a run, to remove what an earlier run left if it stopped early;
+- at the end of a run, after `terraform destroy`, including when a phase
+  fails or the maintainer interrupts the run.
+
+The runner traps an interrupt, destroys what the run created, and runs
+aws-nuke before it exits. Leaving a run without cleanup takes a second
+interrupt, and the runner then prints a warning to run `tools/probe nuke`.
+If the maintainer's machine stops mid-run, the next run's first nuke removes
+the leftovers, and the budget actions limit the cost until then.
 
 The nuke role is separate from the harness role. It can delete resources but
 can't create any, and the probe roles can't assume it.
 
-## Question 2: credentials from GitHub Actions
+## Question 2: credentials
 
-GitHub Actions requests an OIDC token, and AWS STS exchanges it for role
-credentials, so the repository doesn't keep AWS keys
-([GitHub: OIDC in AWS](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services),
-[AWS: create an OIDC provider](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html)).
+### A maintainer's machine, not CI
 
-The account has an IAM OIDC provider for `token.actions.githubusercontent.com`
-with the audience `sts.amazonaws.com`. These roles trust it:
+The probe never runs in CI, as the owner decided. The issue asked about
+GitHub Actions with OIDC, and the design keeps the probe on a maintainer's
+machine, without a `workflow_dispatch` path, for these reasons:
 
-| Role | Trust condition on `token.actions.githubusercontent.com:sub` | Permissions |
-|------|--------------------------------------------------------------|-------------|
-| `permcheck-harness` | `repo:elecnix/terraform-permcheck:environment:probe` | Apply support roots, create and delete probe roles, read the trail bucket, call Cost Explorer |
-| `permcheck-harness-expensive` | `repo:elecnix/terraform-permcheck:environment:probe-expensive` | The same, plus tagging a probe role with `permcheck-tier=expensive` |
-| `permcheck-nuke` | `repo:elecnix/terraform-permcheck:environment:probe` | Delete resources, as aws-nuke needs |
+- **Public output.** The repository is public, and so are its Actions logs and
+  job summaries. Terraform, the AWS SDK and CloudTrail print ARNs that contain
+  the account ID, and error messages quote the caller's identity. On a
+  maintainer's machine, raw output remains on that machine, and only redacted
+  findings leave it.
+- **Account access.** An OIDC trust lets a workflow in a public repository
+  assume a role in the account. The trust conditions can limit it to one
+  environment, but local runs avoid the trust relationship entirely.
+- **What CI adds.** A `workflow_dispatch` run is still a run that a person
+  starts by hand. CI would add a clean runner and a log, and the redaction
+  step covers the log's purpose for findings.
 
-Each trust policy also requires `token.actions.githubusercontent.com:aud`
-to equal `sts.amazonaws.com`, as the AWS page on roles for OIDC providers
-recommends
-([GitHub OIDC trust conditions](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html)).
-The `probe-expensive` environment requires the owner's approval before a job
-starts. GitHub doesn't give an OIDC token to a workflow that runs for a pull
-request from a fork, so only branches in the repository can start a probe.
+### Short-lived credentials
+
+The maintainer signs in through IAM Identity Center or another federated
+sign-in, and gets temporary credentials
+([temporary security credentials](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html)).
+The runner checks the access key ID before it makes any call. A key that
+starts with `ASIA` is temporary, and one that starts with `AKIA` is a
+long-term key
+([unique ID prefixes](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-prefixes)).
+The runner refuses a long-term key and stops.
+
+From those credentials, the runner assumes one of these roles in the probe
+account:
+
+| Role | Who can assume it | Permissions |
+|------|-------------------|-------------|
+| `permcheck-harness` | The maintainers' sign-in roles | Apply support roots, create and delete probe roles, read the trail bucket, call Cost Explorer |
+| `permcheck-harness-expensive` | The same, with `--tier expensive` | The same, plus tagging a probe role with `permcheck-tier=expensive` |
+| `permcheck-nuke` | The same | Delete resources, as aws-nuke needs |
+
+`probe/account/` declares the trust policies with a variable for the
+maintainers' sign-in role ARNs. The owner sets it from a local file when
+applying, so the repository never contains those ARNs.
 
 ### Probe roles
 
@@ -257,6 +295,9 @@ A variant for a gated requirement is a second probe root, such as
 `probe-kms/` that sets `kms_master_key_id` on `aws_sqs_queue`. The run report
 gives, per type, how many gated requirements a fixture exercised.
 
+Resource names in a fixture use the prefix `permcheck-` and the run ID, so a
+name doesn't identify a person or an organization.
+
 ### First types
 
 The first batch is about 30 types, picked for three reasons:
@@ -286,14 +327,14 @@ validation.
 One probe of a NAT gateway, RDS, EKS, OpenSearch, MSK or Redshift costs a
 few cents. Their risks are a leak, since a cluster left running bills by the hour
 until aws-nuke runs, and a create time of 10 to 30 minutes. They form the
-`expensive` tier:
+`expensive` tier, which runs by hand only:
 
 - The SCP denies their create actions to any role without the tier tag, and
   only `permcheck-harness-expensive` can set it.
-- The tier runs by hand through `workflow_dispatch`, one type per job, in the
-  `probe-expensive` environment that asks for the owner's approval.
-- The job destroys the resources and runs aws-nuke in a step that runs
-  whether earlier steps fail or not.
+- The runner assumes that role only when the maintainer passes
+  `--tier expensive`, and it then runs one type per invocation.
+- The runner destroys the resources and runs aws-nuke on exit, after an error
+  or an interrupt too.
 - A fixture uses the smallest size that the SCP allows.
 
 The table has other types that cost money by the hour (SageMaker, Elastic
@@ -410,7 +451,7 @@ The harness checks such an action by ablation. It reruns the phase with the
 action removed and expects the apply to fail with that action in an
 access-denied message. Ablation costs one more apply per action, so it runs
 for permission-only actions, for dependent actions, and for `unseen` actions
-that an owner marks for it. The harness caches a result per type, major,
+that a maintainer marks for it. The harness caches a result per type, major,
 action and table hash.
 
 ### Comparison
@@ -421,7 +462,7 @@ granted with the events it kept, and puts each action in one category:
 | Category | Meaning | Effect |
 |----------|---------|--------|
 | `confirmed` | Granted, and an event used it | none |
-| `missing` | Denied because the probe policy lacks it, and the apply failed | blocking finding |
+| `missing` | Denied because the probe policy lacks it, and the apply failed | finding, labelled `probe-missing` |
 | `missing_tolerated` | Denied, the apply succeeded, and the table doesn't list it as best-effort | finding |
 | `expected_denial` | Denied, and the table lists it as best-effort, which `validate` doesn't report | none |
 | `unseen` | Granted, and no event or explanation accounts for it | finding |
@@ -438,39 +479,38 @@ that still fails after five rounds is a run error.
 
 ## Question 5: cadence and blocking
 
-| Trigger | Types | Majors | Blocks |
-|---------|-------|--------|--------|
-| A pull request from a repository branch that changes `internal/permdata/permissions.json` | The covered types whose rows changed | Those the rows changed | The pull request's `probe` check fails on `missing` |
-| Weekly schedule | Every covered type outside the `expensive` tier | 5 and 6 | A release tag while a `missing` issue is open |
-| `workflow_dispatch` | Any listed types, including `expensive` ones in their own environment | Chosen | Nothing |
-| Every six hours | None (aws-nuke only) | None | Nothing |
+The probe runs by hand only. A maintainer starts it with
+`go run ./tools/probe run`, naming the types and majors, or `--all` for the
+types outside the `expensive` tier. It isn't a pull request check or a
+required check, and its results don't block a pull request or a release tag.
 
-The table changes only through `generate-permissions`, so the pull request
-run covers each change to a probed type. The weekly run catches a change on
-the AWS side, such as a service that starts to authorize a new action for an
-existing call.
+A maintainer runs it when a row's evidence matters:
+
+- after `generate-permissions` moves the table to a new provider ref, for the
+  types whose rows changed;
+- before a release, for the rows that changed since the last probe of them;
+- when a bug report questions a row;
+- to confirm a fix before its pull request merges.
 
 A `missing` finding means a user who grants what PermCheck reports gets an
-access-denied error in their apply. The project counts that as worse than a
-false positive, so it alone blocks. It fails the `probe` check of the pull
-request, and the release workflow refuses a tag while an issue labelled
-`probe-missing` is open. The other categories open an issue and don't block
-anything. A run error (`guardrail`, `unmapped`, a type with zero events, a
-failed destroy) fails that run and doesn't block anything, since it says
-nothing about the table.
+access-denied error in their apply. Its issue has the `probe-missing`
+label, and triage treats it like a bug report from a user. A run error
+(`guardrail`, `unmapped`, a type with zero events, a failed destroy) says
+nothing about the table, so the runner prints it and doesn't open an issue.
 
-The probe check runs on each pull request and passes at once when the table
-didn't change, so it can be a required check.
+Only one run uses the account at a time. The runner takes a lock before its
+first nuke: it writes `lock.json` to the harness's state bucket with the
+`If-None-Match: *` header, which S3 rejects with `412 Precondition Failed`
+when the object exists
+([conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)).
+The lock records the run ID and start time, and the runner deletes it at the
+end. `tools/probe unlock` removes a lock that a stopped run left. Within a run,
+up to eight types run in parallel, each with its own probe roles and state.
 
-Only one run uses the account at a time: the workflows share one
-`concurrency` group, and the scheduled aws-nuke joins it. Within a run, up to
-eight type jobs run in parallel, each with its own probe roles and state.
-
-## Question 6: cost per run and cost reports
+## Question 6: cost per run, and cost reports
 
 ### Estimate
 
-GitHub Actions minutes on standard runners are free for a public repository.
 The AWS cost of a run of the first 30 types on both majors, at list prices:
 
 | Item | Estimate |
@@ -487,37 +527,110 @@ these services bill by the hour. An EKS cluster is $0.10 per hour
 ([EKS pricing](https://aws.amazon.com/eks/pricing/)) and a NAT gateway $0.045
 per hour in `us-east-1` ([VPC pricing](https://aws.amazon.com/vpc/pricing/)).
 The smallest RDS, OpenSearch, MSK and Redshift configurations add a few
-dollars together. A pass on both majors comes to under $5. Stage 10 confirms
-these figures against each pricing page before the tier runs.
+dollars together. A pass on both majors comes to under $5. The expensive
+stage confirms these figures against each pricing page before the tier runs.
 
-The weekly run with pull request runs comes to a few dollars a month. The $30
-budget leaves room for one leaked expensive resource for the six hours until
-aws-nuke removes it.
+The $30 budget leaves room for one leaked expensive resource for most of a
+day, until the next run's first nuke or the budget actions stop it.
 
 ### Reporting
 
-Each run writes three things:
+The runner writes its report locally, in `.probe/runs/<run-id>/` under the
+repository, which `.gitignore` excludes:
 
-- **Job summary.** A table per type and major with the phase durations, the
-  categories, and an estimate: the hours each resource existed times its price
-  in `probe/prices.json`, which lists the hourly price of each priced type and
-  zero for the rest.
-- **Artifact.** `probe-report.json` with each finding, its events, and the
-  estimate. Later tools read it.
+- **Terminal summary.** A table per type and major with the phase durations,
+  the categories, and an estimate: the hours each resource existed times its
+  price in `probe/prices.json`, which lists the hourly price of each priced
+  type and zero for the rest.
+- **`report.json`.** Each finding, its events, and the estimate. The raw
+  version remains on the machine. A redacted copy, `report.public.json`, is what a
+  maintainer may attach to an issue or a pull request.
 - **Billed cost.** Cost Explorer data refreshes at least once every 24 hours
   ([Cost Explorer](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-what-is.html)).
-  A `probe-cost` job runs the next day, calls `GetCostAndUsage` for the
-  account by service for the run's day, and writes the result to its own job
-  summary with a link to the run. The owner keeps other workloads out of the
-  account, so its cost for the day is the harness's cost.
+  On the next day, `tools/probe cost <run-id>` calls `GetCostAndUsage` for the
+  account by service for the run's day and prints it. The owner keeps other
+  workloads out of the account, so its cost for the day is the harness's cost.
+  The amount is a dollar figure, which redaction leaves as it is.
+
+## Public output and redaction
+
+The project is public. Findings, issues, terminal summaries that a maintainer
+pastes, committed files, and this document must never show any of these:
+
+- an AWS account ID, alone or inside an ARN;
+- an organization ID (`o-` followed by 10 to 32 characters) or an
+  organizational unit ID (`ou-`);
+- a role name or session name that identifies the owner or a maintainer, such
+  as an IAM Identity Center role or a session named after a person;
+- a bucket name, including the trail and state buckets;
+- an email address;
+- an access key ID.
+
+### Where data goes
+
+Raw data remains on the maintainer's machine: terraform output and state,
+CloudTrail log files, `report.json`, and the local config. These outputs leave
+the machine: what the runner writes to GitHub (issue bodies and comments),
+and the files that someone commits, such as fixtures and
+`probe/conditional.json`. The runner writes to GitHub with the maintainer's
+own `gh` session, and each of those writes goes through redaction first. A
+test scans the committed files.
+
+### The redaction step
+
+`internal/probe/redact` replaces sensitive values in a string before the runner
+writes it to GitHub or to `report.public.json`. It works in two passes.
+
+The first pass replaces known values, read from the local config at run time:
+the probe account ID, the management account ID, the organization ID, the
+bucket names, and the maintainer's sign-in role and session names. Each value
+gets a fixed placeholder:
+
+| Value | Placeholder |
+|-------|-------------|
+| Probe account ID | `111122223333` |
+| Management account ID | `444455556666` |
+| Organization ID | `o-exampleorgid` |
+| Trail bucket, state bucket | `<trail-bucket>`, `<state-bucket>` |
+| Maintainer's role and session | `<maintainer-role>`, `<maintainer-session>` |
+
+The account placeholders are the ones the AWS documentation uses in its
+examples, so a redacted ARN still has the ARN format and reads like the
+documentation's examples.
+
+The second pass replaces patterns. Any other 12-digit account ID in an ARN or
+in an `accountId`, `recipientAccountId` or `principalId` field becomes
+`999988887777`, an `o-` or `ou-` ID becomes `o-exampleorgid` or
+`ou-exampleouid`, an email address becomes `<email>`, and an access key ID
+becomes `<access-key-id>`.
+
+After both passes, a scan checks the output for each known value and each
+pattern again. If it finds one, the runner doesn't write, and prints the
+location of the match in the local raw file so the maintainer can extend the
+rules. The step is fail-closed, so the runner drops a write that it can't
+redact.
+
+### Checks on committed files
+
+A test in the repository scans `probe/`, `docs/design/probe-harness.md` and
+`testdata` files under `internal/probe` for 12-digit numbers, `o-` and `ou-`
+IDs, and email addresses. It allows the AWS documentation placeholders
+(`111122223333`, `123456789012`, `444455556666`, `999988887777`) and fails on
+any other match. It runs in the normal `go test` job, since it reads files and
+doesn't call AWS.
+
+`probe/account/`, `probe/org/scp.json` and `probe/nuke.yaml` take account IDs,
+role ARNs and bucket names as variables or placeholders. The values are in
+`probe/local.json`, which `.gitignore` excludes, and
+`probe/local.example.json` shows its format with placeholders.
 
 ## From a finding to a fix
 
-The harness opens one issue per finding, keyed by type, major, operation,
+The runner opens one issue per finding, keyed by type, major, operation,
 action and category. A later run that reports the same finding comments on the
-issue, and a run that no longer reports it closes the issue. The issue body
-gives the event ID, event name, error code and message, the session name, the
-table's requirement and gate for the action, and a link to the run.
+issue, and a run that no longer reports it closes the issue. The redacted
+issue body gives the event ID, event name, error code and message, the session
+name, the table's requirement and gate for the action, and the run ID.
 
 Triage follows the category.
 
@@ -532,7 +645,7 @@ the call.
   or more types is always a parser fix.
 - If the call depends on a runtime value that no parser can follow, add the
   requirement through a correction with a comment that cites the provider
-  function and the probe run.
+  function and the issue.
 - If the action is a dependent action, it goes into the dependent-action table
   from [#180](https://github.com/elecnix/terraform-permcheck/pull/180).
 - If the apply succeeded despite the denial, the requirement goes in with
@@ -551,9 +664,9 @@ the call.
 - If the provider never calls it, remove it with a parser fix or a
   `schemaCorrections` row.
 
-The fix's pull request changes `permissions.json`, so its `probe` check reruns
-that type and shows the finding gone. The fix's pull request body links the
-issue, and the issue closes on merge only when that check passes.
+Before the fix merges, a maintainer reruns the probe for that type on the
+fix's branch. The runner closes the issue when the finding is gone and
+comments on the pull request with the redacted result.
 
 ## Calls the provider makes only under a condition
 
@@ -657,17 +770,19 @@ that create left.
 | Path | Contents |
 |------|----------|
 | `internal/probe` | Event selection, the event-to-action mapping, the comparison and the report, in Go whose unit tests don't call AWS. |
-| `tools/probe` | The runner, which creates probe roles, runs the phases, retry rounds and ablations, and updates issues. |
+| `internal/probe/redact` | The redaction passes and the scan after them. |
+| `tools/probe` | The runner. It checks credentials and takes the lock, then creates probe roles, runs the phases, retry rounds and ablations, and updates issues. |
 | `probe/fixtures/<type>/` | `fixture.json`, `support/`, `probe/`, variants. |
 | `probe/conditional.json` | Runtime-conditional actions, each with a provider source citation. |
 | `probe/prices.json` | Hourly prices for the estimate. |
-| `probe/nuke.yaml` | aws-nuke config. |
-| `probe/account/` | Terraform for the OIDC provider, the harness and nuke roles, the trail with its bucket, and the budget with its action. The owner applies it once with their own credentials. |
-| `probe/org/scp.json` | The SCP text that the owner attaches from the management account. |
-| `.github/workflows/probe.yml` | The triggers in question 5. |
+| `probe/nuke.yaml` | aws-nuke config, with placeholders for the account IDs. |
+| `probe/account/` | Terraform for the harness and nuke roles, the trail with its bucket, the state bucket, and the budget with its in-account action. The owner applies it with their own credentials. |
+| `probe/org/` | The SCP text and the management-account budget action, with placeholders, which the owner applies from the management account. |
+| `probe/local.example.json` | The format of the local config, with placeholders. |
+| `.probe/` | Local run output, excluded by `.gitignore`. |
 
 `tools/probe` is a separate main package in the same module. The released
-binary doesn't include it.
+binary doesn't include it, and no workflow runs it.
 
 ## Test plan
 
@@ -682,60 +797,85 @@ Each code stage starts with a failing test.
   nothing, and an operation that the service reference maps to two actions.
 - **Comparison**: one case per category, the union of retry rounds, and an
   entry in `conditional.json` that turns `unseen` into `unseen_explained`.
+- **Redaction**: an event with each kind of sensitive value from the list
+  above, in an ARN, in a JSON field and in an error message. The output has
+  each one replaced. A value that the passes miss on purpose makes the scan
+  refuse the write. The committed-files scan fails on a planted account ID and
+  passes on the documentation placeholders.
 - **Policy building**: a `validate` JSON report becomes the expected policy
   document, and a best-effort action stays out.
-- **Runner**: the phase order and session names, against a fake that records
-  terraform invocations.
-- **Infrastructure**: the canary in stage 3, run on each pass before other
-  types, with a known expected report. If it fails, the run stops and reports
-  nothing about the table.
+- **Credentials**: an `AKIA` key stops the runner before its first call, and
+  an `ASIA` key passes.
+- **Runner**: the phase order and session names, plus the lock and cleanup on
+  an interrupt, against a fake that records terraform and AWS calls.
+- **Infrastructure**: the canary in stage 3, run first on each pass, with a
+  known expected report. If it fails, the run stops and reports nothing about
+  the table.
 
 ## Stages
 
 1. **Account and guardrails (owner).** Create the member account and its
-   alias, attach the SCP, apply `probe/account/`, create the `probe` and
-   `probe-expensive` environments. The later stages need this account to
-   run against AWS.
-2. **Mapping and comparison.** `internal/probe` with the event, mapping and
-   comparison tests above. No AWS calls.
-3. **The first probe.** `tools/probe` and `probe.yml` with
-   `workflow_dispatch`, `aws_sqs_queue` under 6.x, create and delete only,
-   aws-nuke at the end. This type becomes the canary. Red: the comparison test
-   for its recorded events.
+   alias, attach the SCP, set up both budget actions, and apply
+   `probe/account/`. The later stages need this account to run against AWS.
+2. **Mapping, comparison and redaction.** `internal/probe` and
+   `internal/probe/redact` with the tests above, and the committed-files scan.
+   No AWS calls. Redaction comes before any stage that writes to GitHub.
+3. **The first probe.** `tools/probe` with the credential check, the lock,
+   `aws_sqs_queue` under 6.x, create and delete only, and aws-nuke before and
+   after. This type becomes the canary. Red: the comparison test for its
+   recorded events.
 4. **Read, update, import, and retry rounds.** Red: a fake terraform that
    fails with an access-denied error on round one and passes on round two.
 5. **Provider 5.x.** `versions.tf` generation and `--aws-provider-version`.
    Red: the runner skips a type with a `providers` mark under the other major.
-6. **The first batch and findings as issues.** About 30 fixtures, the issue
-   updates, the job summary and the cost estimate.
+6. **The first batch and findings as issues.** About 30 fixtures, one issue per
+   finding through redaction, the terminal summary, and the cost estimate and
+   `cost` command.
 7. **Ablation.** For permission-only and dependent actions, starting with
    `iam:PassRole` on `aws_lambda_function`.
 8. **Data events.** `aws_s3_object`, `aws_lambda_invocation`,
    `aws_dynamodb_table_item`, with selectors set per run.
-9. **Cadence and blocking.** The weekly schedule, the pull request trigger,
-   the required check, the release gate on `probe-missing`, and the
-   `probe-cost` job.
-10. **The expensive tier.** One type per pull request, each with its prices
-    confirmed.
+9. **The expensive tier.** One type per pull request, each with its prices
+   confirmed.
+10. **Resource-scoped policies.** A second probe policy per phase that grants
+    each action only on the ARNs that `--strict-resources` derives for the
+    plan, so that a probe tests `internal/iam/resource_scope.go`. A denial
+    that the `"Resource": "*"` run doesn't show is a finding about an ARN rule.
 
-## Open questions for the owner
+## The owner's decisions
 
-1. Is `us-east-1` alone acceptable? A second region would test region-aware
-   code in 6.x but doubles the SCP's region list and the trail's scope.
-2. Should the budget action be the IAM policy in the member account, the SCP
-   from the management account, or both? Is $30 a month the right cap?
-3. Should a `missing` finding block the release tag, or only the pull request
-   that changed the type's row?
-4. Should branch protection require the `probe` check on pull requests? It passes at once
-   when the table doesn't change, but it fails when the account is out of
-   service.
-5. Should a later stage also probe resource ARNs, with a policy scoped to the
-   ARNs that `--strict-resources` derives, so that a probe tests
-   `internal/iam/resource_scope.go`?
-6. How often should the `expensive` tier run: monthly, or only by hand?
-7. Is the `list` operation (`terraform query`) in scope for 1.0, or does the
-   harness skip it?
-8. One issue per finding, or one issue per run with a checklist?
+1. **Region.** `us-east-1` only.
+2. **Budget.** Both actions, the deny policy in the member account and the
+   deny-all SCP from the management account, at $30 a month.
+3. **Cadence.** The probe runs by hand, never in CI. It isn't a pull request
+   check or a required check, and it doesn't block a pull request or a release
+   tag. It runs from a maintainer's machine with their own short-lived
+   credentials, as question 2 explains.
+4. **Resource-scoped policies.** Yes, as a later stage (stage 10).
+5. **Expensive types.** By hand only.
+6. **Issues.** One issue per finding.
+7. **Public output.** Public output never shows an account ID, an ARN with an
+   account ID, an organization ID, a role name that identifies the owner, a
+   bucket name or an email address. The redaction step enforces it.
+
+## The question still open
+
+Should the harness cover the `list` operation, for `terraform query`?
+
+`terraform query` reads `list` blocks from `.tfquery.hcl` files. A `list` block
+asks a provider to find existing resources of one type, so that a user can
+import them ([`list` block](https://developer.hashicorp.com/terraform/language/block/tfquery/list)).
+The AWS provider's list resource for a type calls the service's paginated
+`List` or `Describe` API. With `include_resource = true`, the result contains
+the full resource, so the provider also makes the type's read calls for each
+result.
+
+The table already records a `list` operation for some types. To cover it,
+PermCheck needs an input that reads `list` blocks from the query files, as
+static mode reads HCL, because `terraform query` doesn't write a plan. Each block's
+type then requires the table's `list` actions, plus its `read` actions when
+`include_resource` is set. The probe would add a `list` phase that runs
+`terraform query` under a policy built the same way.
 
 ## References
 
@@ -744,8 +884,8 @@ Each code stage starts with a failing test.
 - AWS, [Organizations quotas](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_reference_limits.html)
 - AWS, [Configuring budget actions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html)
 - AWS, [Best practices for AWS Budgets](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-best-practices.html)
-- AWS, [Create an OpenID Connect identity provider](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html)
-- AWS, [Create a role for OIDC federation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-idp_oidc.html)
+- AWS, [Temporary security credentials](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html)
+- AWS, [IAM identifiers: unique ID prefixes](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html#identifiers-prefixes)
 - AWS, [Roles terms and concepts: role chaining](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_terms-and-concepts.html#iam-term-role-chaining)
 - AWS, [Troubleshoot IAM: eventual consistency](https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency)
 - AWS, [IAM quotas](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html)
@@ -764,9 +904,10 @@ Each code stage starts with a failing test.
 - AWS, [CloudTrail pricing](https://aws.amazon.com/cloudtrail/pricing/)
 - AWS, [Logging Lambda API calls with CloudTrail](https://docs.aws.amazon.com/lambda/latest/dg/logging-using-cloudtrail.html)
 - AWS, [Logging S3 API calls with CloudTrail](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html)
+- AWS, [S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 - AWS, [Service Authorization Reference: service reference](https://docs.aws.amazon.com/service-authorization/latest/reference/service-reference.html)
 - AWS, [Cost Explorer](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-what-is.html)
 - AWS pricing: [KMS](https://aws.amazon.com/kms/pricing/), [Route 53](https://aws.amazon.com/route53/pricing/), [EKS](https://aws.amazon.com/eks/pricing/), [VPC](https://aws.amazon.com/vpc/pricing/), [Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/pricing/)
-- GitHub, [Configuring OpenID Connect in Amazon Web Services](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - HashiCorp, [Running and writing acceptance tests](https://hashicorp.github.io/terraform-provider-aws/running-and-writing-acceptance-tests/)
+- HashiCorp, [`list` block reference](https://developer.hashicorp.com/terraform/language/block/tfquery/list)
 - aws-nuke, [ekristen/aws-nuke](https://github.com/ekristen/aws-nuke)
