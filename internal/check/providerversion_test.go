@@ -23,6 +23,13 @@ func TestChooseProviderRef(t *testing.T) {
 		{"lock file older than the table", VersionHints{Locked: "4.67.0"}, oldest, "pins AWS provider 4.67.0"},
 		{"lock file newer than the table", VersionHints{Locked: "99.0.0"}, newest, "pins AWS provider 99.0.0"},
 		{"constraint admits one", VersionHints{Constraints: []string{"~> 5.0"}}, oldest, ""},
+		// A constraint at minor or patch level picks its major's table.
+		// The table's ref need not meet it: ~> 5.90 admits no 5.100.x,
+		// yet the 5.x table is the one that applies.
+		{"pessimistic patch constraint", VersionHints{Constraints: []string{"~> 5.100.0"}}, oldest, ""},
+		{"exact constraint", VersionHints{Constraints: []string{"= 5.100.0"}}, oldest, ""},
+		{"constraint the table ref does not meet", VersionHints{Constraints: []string{"~> 5.90.0"}}, oldest, ""},
+		{"exact constraint on 6.x", VersionHints{Constraints: []string{"6.1.0"}}, newest, ""},
 		{"constraints intersect", VersionHints{Constraints: []string{">= 4.0", "< 6.0"}}, oldest, ""},
 		{"constraint admits both", VersionHints{Constraints: []string{">= 5.0"}}, newest, `">= 5.0" admits provider`},
 		{"constraint below the table", VersionHints{Constraints: []string{"~> 4.0"}}, oldest, "admits no version"},
