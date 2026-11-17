@@ -74,6 +74,15 @@ type Applied struct {
 	// of policy that the plan may not show, UnlistedInline and
 	// UnlistedManaged. This source has no address and unknown text.
 	Unlisted []string
+	// ResourceOutside is set on the implicit source of a resource whose
+	// resource policy must allow a need and that the plan doesn't show, such
+	// as a KMS key outside the plan (see requiredResourcePolicy). This source
+	// has no address and unknown text.
+	ResourceOutside bool
+	// Resource is the need's resource of a source with ResourceOutside. It
+	// is empty for a need without resources, which may act on any resource
+	// of the service.
+	Resource string
 }
 
 // Result is the outcome of Check.
@@ -119,7 +128,7 @@ type Result struct {
 func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusives []plan.Exclusive, strict bool) (Result, error) {
 	docs := make([]*policy.Document, len(sources))
 	for i, s := range sources {
-		if s.Unknown {
+		if s.Unknown || s.DefaultKeyPolicy {
 			continue
 		}
 		doc, err := policy.Parse([]byte(s.Text))
@@ -141,14 +150,23 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 
 	identity := p.Identity()
 	applied := make([]plan.LinkMatch, len(sources))
+	var outside []Applied
+	outsideSeen := map[string]bool{}
 	grantsFor := func(action, resource string) iam.Grants {
 		var set Set
-		var merged []*policy.Document
+		var merged, resourceSide []*policy.Document
+		service, _, _ := strings.Cut(action, ":")
+		service = strings.ToLower(service)
+		required := requiredResourcePolicy[service] && resource != "*"
+		found := false
 		for i, s := range sources {
 			m := links[i]
 			var resourceDoc *policy.Document
 			if s.Kind == plan.KindResource {
-				m, resourceDoc = resourcePolicy(s, docs[i], identity, action, resource)
+				r := resourcePolicy(s, docs[i], identity, action, resource, required)
+				m, resourceDoc = r.match, r.principalSide
+				resourceSide = append(resourceSide, r.resourceSide)
+				found = found || r.on
 			}
 			if m == plan.LinkNo {
 				continue
@@ -179,7 +197,29 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 		for range extra {
 			merged = append(merged, policy.UnknownSource())
 		}
+		if required && !found {
+			// The plan doesn't show the resource's policy, which may grant
+			// the principal itself (see requiredResourcePolicy).
+			merged = append(merged, policy.UnknownSource())
+			resourceSide = append(resourceSide, policy.UnknownSource())
+			if !outsideSeen[resource] {
+				outsideSeen[resource] = true
+				match := plan.LinkYes
+				if resource == "" {
+					match = plan.LinkMaybe
+				}
+				outside = append(outside, Applied{
+					PolicySource:    plan.PolicySource{Kind: plan.KindResource, Service: service, Unknown: true, OutsidePlan: true},
+					Match:           match,
+					ResourceOutside: true,
+					Resource:        resource,
+				})
+			}
+		}
 		set.Policies = policy.Merge(merged...)
+		if required {
+			set.ResourceSide = policy.Merge(resourceSide...)
+		}
 		return set
 	}
 
@@ -196,8 +236,56 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 	if len(needs) > 0 {
 		res.Sources = append(res.Sources, extra...)
 	}
+	res.Sources = append(res.Sources, outside...)
 	return res, nil
 }
+
+// requiredResourcePolicy lists the services whose resource policy must allow
+// a request before an identity policy has any effect. For most resources an
+// Allow in an identity policy or in a resource policy is enough, and "KMS
+// key policies are exceptions to this logic, because they must explicitly
+// allow access for principals"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+// Check evaluates a need of such a service on two sides, and the need is
+// covered only when both allow it (see Set.ResourceSide):
+//
+//   - The principal side merges the identity policies with the statements
+//     of the resource policies that allow the principal itself, and with
+//     the KMS grants of the plan.
+//   - The resource side merges the resource policies, where a statement
+//     for the principal's account grants too (see policy.ResourceSide), and
+//     the grants.
+//
+// A definite Deny in either side makes the need missing. The two sides give
+// AWS's rule for a key: a key policy statement for the principal grants by
+// itself, and a statement for the account grants only the actions it
+// allows, and only when an identity policy allows them too. "Unless the key
+// policy explicitly allows it, you cannot use IAM policies to allow access
+// to a KMS key"
+// (https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html),
+// and an account statement lets the account "use IAM policies to delegate
+// the permissions specified in the key policy"
+// (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html#key-policy-elements).
+//
+// A grant allows access "along with key policies and IAM policies"
+// (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html), so
+// it joins both sides. The check can't tell whether a grant is still in
+// place when the need runs, since its retiring principal may retire it, so
+// a grant's Allow is a grant the tool can't check, with the reason
+// condition.
+//
+// Every key has a key policy, so the closed-world assumption of the other
+// services, "no policy in the plan means no resource policy", doesn't hold
+// for a key. When the need's resource is no key of the plan, or the need has
+// no resources, the key policy is an unknown source on both sides: it may
+// allow the principal itself. Such a need is covered by default unless a
+// definite Deny applies, and unverified with the reason policy_unknown under
+// --strict-resources, even when an identity policy allows it. A need on "*"
+// acts on no particular key, such as kms:CreateKey, which a key policy can't
+// control
+// (https://docs.aws.amazon.com/kms/latest/developerguide/iam-policies.html),
+// so the identity policies decide it.
+var requiredResourcePolicy = map[string]bool{"kms": true}
 
 // identityLink reports whether an identity or boundary source applies to
 // the principal: its link matches the role.
@@ -210,16 +298,36 @@ func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
 	return m
 }
 
+// appliedResourcePolicy is what a resource policy source adds to the
+// check of one action and one resource of a need (see resourcePolicy).
+type appliedResourcePolicy struct {
+	// match says whether the source applies to the need.
+	match plan.LinkMatch
+	// principalSide holds the statements that join the principal's
+	// policies.
+	principalSide *policy.Document
+	// resourceSide holds the statements of the resource side of a service
+	// whose resource policy is required (see requiredResourcePolicy). It is
+	// nil for any other service.
+	resourceSide *policy.Document
+	// on is true when the need's resource is provably the resource that
+	// the source attaches to, and the source is a policy of that resource,
+	// not a grant.
+	on bool
+}
+
 // resourcePolicy returns whether a resource policy source applies to a need
 // of the principal, for one action and one resource of the need, and the
-// statements it adds to the merged document. It applies the same-account
-// rule of the design of issue #175: an Allow in an identity policy or in a
-// resource policy grants, and an explicit Deny in either overrides it
+// statements it adds to the check. It applies the same-account rule of the
+// design of issue #175: an Allow in an identity policy or in a resource
+// policy grants, and an explicit Deny in either overrides it
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp).
 // Secrets Manager applies the same rule to a secret's resource policy
 // (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html).
 // The table of source types in package plan cites the page of each other
-// service it reads.
+// service it reads. When required is set, the service's resource policy
+// must allow the need too, and the source also gives the statements of the
+// resource side (see requiredResourcePolicy).
 //
 // A source of another service doesn't apply. A source of a type this version
 // doesn't read yet applies to every action of its service, as an unknown
@@ -234,7 +342,9 @@ func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
 //     needs a grant on every resource, which
 //     the policy of one resource can't give, and a Deny on one resource
 //     doesn't deny every resource. So no resource policy applies to it, and
-//     the identity policies decide it.
+//     the identity policies decide it. A need may name a KMS key by an
+//     alias that the plan points to the key (see
+//     plan.AttachedResource.AliasMatch).
 //  2. A source whose text the plan doesn't show is an unknown source.
 //  3. Otherwise the statements whose Principal or NotPrincipal may match the
 //     principal are kept (see policy.Document.ForPrincipal), and each one is
@@ -245,35 +355,50 @@ func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
 //     its Denies are dropped (see policy.Document.MayGrant). For a need
 //     without resources, the target is unknown, and Coverage applies a Deny
 //     only when it denies every resource, which a rewritten Deny never does.
+//  5. A source that may not be the resource's policy (see
+//     plan.PolicySource.PolicyMaybe), and a KMS grant, give grants the tool
+//     can't check, with the reason condition. The default key policy of a
+//     KMS key gives the resource side an Allow of every action, and the
+//     principal side nothing (see plan's keyPolicyOfKey).
 //
 // The plan is taken to list every policy, of principals and of resources. A
 // resource that the plan doesn't contain, or whose policy no source of the
 // plan sets, has no resource policy that the check can see, so the identity
-// policies decide its needs.
-func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.Principal, action, resource string) (plan.LinkMatch, *policy.Document) {
+// policies decide its needs. A required resource policy is the exception
+// (see requiredResourcePolicy).
+func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.Principal, action, resource string, required bool) appliedResourcePolicy {
 	service, _, _ := strings.Cut(action, ":")
 	switch {
 	case !strings.EqualFold(service, s.Service):
-		return plan.LinkNo, nil
+		return appliedResourcePolicy{}
 	case s.Unread:
-		return plan.LinkMaybe, policy.UnknownSource()
+		return appliedResourcePolicy{match: plan.LinkMaybe, principalSide: policy.UnknownSource(), resourceSide: sideOf(required, policy.UnknownSource())}
 	case resource == "*":
-		return plan.LinkNo, nil
+		return appliedResourcePolicy{}
 	}
 	attached := s.Resources
 	if s.ResourceUnknown {
 		attached = []plan.AttachedResource{{Match: plan.LinkMaybe}}
 	}
-	best := plan.LinkNo
-	var docs []*policy.Document
+	out := appliedResourcePolicy{}
+	var principalSide, resourceSide []*policy.Document
 	for _, a := range attached {
 		patterns := attachedPatterns(s.Link.Type, a)
 		m := a.Match
 		as := patterns
+		on := false
 		switch {
 		case resource == "":
 			// The need acts on an unknown resource.
 			m = plan.LinkMaybe
+		case a.AliasMatch(resource) != plan.LinkNo:
+			// The need names the key by an alias that the plan points to
+			// the key.
+			if a.AliasMatch(resource) == plan.LinkMaybe {
+				m = plan.LinkMaybe
+			}
+			patterns, as = []string{resource}, []string{resource}
+			on = m == plan.LinkYes
 		case patterns == nil:
 			// The resource's ARN and pattern are both unknown.
 			m = plan.LinkMaybe
@@ -291,32 +416,84 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 				// statement on the whole resource is a statement on the
 				// need's resource.
 				as = []string{resource}
+				on = true
 			}
 		}
-		if best == plan.LinkNo || m == plan.LinkYes {
-			best = m
+		if out.match == plan.LinkNo || m == plan.LinkYes {
+			out.match = m
 		}
+		out.on = out.on || (on && !s.Grant)
 		if s.Unknown {
 			continue
 		}
-		d := doc.ForPrincipal(identity)
-		switch {
-		case patterns == nil:
-			d = d.MayGrant(policy.ReasonResourceScope)
-		case resource != "" && m == plan.LinkMaybe:
-			d = d.OnResource(patterns, nil).MayGrant(policy.ReasonResourceScope)
-		default:
-			d = d.OnResource(patterns, as)
+		shape := func(d *policy.Document) *policy.Document {
+			switch {
+			case patterns == nil:
+				d = d.MayGrant(policy.ReasonResourceScope)
+			case resource != "" && m == plan.LinkMaybe:
+				d = d.OnResource(patterns, nil).MayGrant(policy.ReasonResourceScope)
+			default:
+				d = d.OnResource(patterns, as)
+			}
+			if s.PolicyMaybe || s.Grant {
+				d = d.MayGrant(policy.ReasonCondition)
+			}
+			return d
 		}
-		docs = append(docs, d)
+		switch {
+		case s.DefaultKeyPolicy:
+			resourceSide = append(resourceSide, shape(defaultKeyPolicy))
+		case s.Grant:
+			// A grant's grantee may be an account, which a grant
+			// allows as a key policy statement does.
+			d := shape(doc.ForPrincipal(identity, policy.ResourceSide()))
+			principalSide = append(principalSide, d)
+			resourceSide = append(resourceSide, d)
+		default:
+			principalSide = append(principalSide, shape(doc.ForPrincipal(identity)))
+			if required {
+				resourceSide = append(resourceSide, shape(doc.ForPrincipal(identity, policy.ResourceSide())))
+			}
+		}
 	}
-	if best == plan.LinkNo {
-		return plan.LinkNo, nil
+	switch {
+	case out.match == plan.LinkNo:
+		return appliedResourcePolicy{}
+	case s.Unknown:
+		out.principalSide = policy.UnknownSource()
+		out.resourceSide = sideOf(required, policy.UnknownSource())
+	default:
+		out.principalSide = policy.Merge(principalSide...)
+		out.resourceSide = sideOf(required, policy.Merge(resourceSide...))
 	}
-	if s.Unknown {
-		return best, policy.UnknownSource()
+	return out
+}
+
+// sideOf returns the document of the resource side when the resource policy
+// is required, and nil otherwise.
+func sideOf(required bool, d *policy.Document) *policy.Document {
+	if !required {
+		return nil
 	}
-	return best, policy.Merge(docs...)
+	return d
+}
+
+// defaultKeyPolicy is the resource side of AWS's default key policy, which
+// "gives the AWS account that owns the KMS key permission to use IAM
+// policies to allow access to all AWS KMS operations on the KMS key"
+// (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html).
+// Its one statement allows the account every action, and the check assumes
+// that the key is in the principal's account, as the same-account rule
+// does. It allows the principal nothing by itself.
+var defaultKeyPolicy = mustParse(`{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "kms:*", "Resource": "*"}]}`)
+
+// mustParse parses a policy text of this package.
+func mustParse(text string) *policy.Document {
+	d, err := policy.Parse([]byte(text))
+	if err != nil {
+		panic(err)
+	}
+	return d
 }
 
 // attachedPatterns returns the ARN patterns of a resource of type typ that a
@@ -500,16 +677,25 @@ func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicyS
 // categories"
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-bound).
 // So Set's verdict is the worst of the merged verdict and each boundary's.
+//
+// ResourceSide holds the resource policies that must allow the action as
+// well, apart from the merged policies, such as a KMS key policy (see
+// requiredResourcePolicy). It is nil when the action needs no such Allow.
+// When it is set, Set's verdict is also no better than its verdict.
 type Set struct {
-	Policies   *policy.Document
-	Boundaries []*policy.Document
+	Policies     *policy.Document
+	ResourceSide *policy.Document
+	Boundaries   []*policy.Document
 }
 
 // Coverage reports whether the set grants action on a resource matching any
-// of the target ARN patterns: the worst of the merged policies' verdict and
-// each boundary's.
+// of the target ARN patterns: the worst of the merged policies' verdict, the
+// resource side's and each boundary's.
 func (s Set) Coverage(action string, targets []string, conds policy.Conditions, strict bool) policy.Result {
 	res := s.Policies.Coverage(action, targets, conds, strict)
+	if s.ResourceSide != nil {
+		res = worst(res, s.ResourceSide.Coverage(action, targets, conds, strict))
+	}
 	for _, b := range s.Boundaries {
 		res = worst(res, b.Coverage(action, targets, conds, strict))
 	}
@@ -517,9 +703,13 @@ func (s Set) Coverage(action string, targets []string, conds policy.Conditions, 
 }
 
 // CoverageOfEveryResource reports whether the set grants action on every
-// resource: the worst of the merged policies' verdict and each boundary's.
+// resource: the worst of the merged policies' verdict, the resource side's
+// and each boundary's.
 func (s Set) CoverageOfEveryResource(action string, strict bool) policy.Result {
 	res := s.Policies.CoverageOfEveryResource(action, strict)
+	if s.ResourceSide != nil {
+		res = worst(res, s.ResourceSide.CoverageOfEveryResource(action, strict))
+	}
 	for _, b := range s.Boundaries {
 		res = worst(res, b.CoverageOfEveryResource(action, strict))
 	}
@@ -535,7 +725,8 @@ func (s Set) GrantedResources(action string) []string {
 
 // worst returns the result that allows less: Missing before Unverified
 // before Covered. Between two unverified results it keeps the first, so the
-// reason of the merged policies comes before a boundary's.
+// reason of the merged policies comes before the resource side's and a
+// boundary's.
 func worst(a, b policy.Result) policy.Result {
 	if rank(b.Verdict) > rank(a.Verdict) {
 		return b

@@ -183,6 +183,7 @@ var ownARNPatterns = map[string]ownARN{
 	"aws_sqs_queue":             {derive: sqsQueueARNPatterns, value: sqsQueueURLPatterns},
 	"aws_sns_topic":             {derive: snsTopicARNPatterns},
 	"aws_ecr_repository":        {derive: attributePatterns("name", ecrRepositoryARNPatterns), value: ecrRepositoryARNPatterns},
+	"aws_kms_key":               {derive: attributePatterns("key_id", kmsKeyARNPatterns), value: kmsKeyARNPatterns},
 }
 
 // ResourceARNPatterns returns the ARN patterns of a planned resource that a
@@ -290,4 +291,15 @@ func snsTopicARNPatterns(topic *plan.ResourceChange) []string {
 // named name: arn:aws:ecr:REGION:ACCOUNT:repository/name.
 func ecrRepositoryARNPatterns(name string) []string {
 	return []string{"arn:*:ecr:*:*:repository/" + name}
+}
+
+// kmsKeyARNPatterns builds the ARN pattern of the KMS key whose key id is
+// id: arn:aws:kms:REGION:ACCOUNT:key/id. AWS assigns the id when it creates
+// the key, so a key that the plan creates has no pattern. A key ARN in the
+// value gives itself.
+func kmsKeyARNPatterns(id string) []string {
+	if isARN(id) {
+		return []string{id}
+	}
+	return []string{"arn:*:kms:*:*:key/" + id}
 }

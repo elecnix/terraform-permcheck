@@ -87,9 +87,9 @@ func TestCheck_UnknownBoundary(t *testing.T) {
 	}
 }
 
-// A resource policy applies to the actions of its service only. A key
-// policy is an unknown source, since this version doesn't read KMS key
-// policies yet.
+// A resource policy applies to the actions of its service only. A need
+// without resources may act on a key outside the plan, whose key policy is
+// unknown: the check adds an implicit source for it.
 func TestCheck_ResourcePolicyByService(t *testing.T) {
 	raw := `{"resource_changes": [
 		{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
@@ -104,8 +104,9 @@ func TestCheck_ResourcePolicyByService(t *testing.T) {
 	if got, want := verdicts(res.Missing), "Decrypt kms:Decrypt policy_unknown; Read s3:GetObject"; got != want {
 		t.Errorf("strict: %q, want %q", got, want)
 	}
-	if len(res.Sources) != 1 || res.Sources[0].Address != "aws_kms_key_policy.k" || res.Sources[0].Match != plan.LinkMaybe {
-		t.Errorf("sources = %+v, want the key policy as a maybe", res.Sources)
+	if len(res.Sources) != 2 || res.Sources[0].Address != "aws_kms_key_policy.k" || res.Sources[0].Match != plan.LinkMaybe ||
+		!res.Sources[1].ResourceOutside || res.Sources[1].Resource != "" || !res.Sources[1].Unknown {
+		t.Errorf("sources = %+v, want the key policy as a maybe, then the key outside the plan", res.Sources)
 	}
 }
 

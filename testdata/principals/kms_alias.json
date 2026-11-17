@@ -1,0 +1,182 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_kms_key.data",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "arn": "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+          "key_id": "1234abcd-12ab-34cd-56ef-1234567890ab",
+          "id": "1234abcd-12ab-34cd-56ef-1234567890ab",
+          "description": "app data",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:root\"}, \"Action\": \"kms:*\", \"Resource\": \"*\"}]}"
+        },
+        "after": {
+          "arn": "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+          "key_id": "1234abcd-12ab-34cd-56ef-1234567890ab",
+          "id": "1234abcd-12ab-34cd-56ef-1234567890ab",
+          "description": "app data",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:root\"}, \"Action\": \"kms:*\", \"Resource\": \"*\"}]}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_kms_key_policy.data",
+      "mode": "managed",
+      "type": "aws_kms_key_policy",
+      "name": "data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "key_id": "1234abcd-12ab-34cd-56ef-1234567890ab",
+          "bypass_policy_lockout_safety_check": false,
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:role/app-task\"}, \"Action\": \"kms:Decrypt\", \"Resource\": \"*\"}]}"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "aws_kms_alias.data",
+      "mode": "managed",
+      "type": "aws_kms_alias",
+      "name": "data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "alias/app-data",
+          "target_key_id": "1234abcd-12ab-34cd-56ef-1234567890ab"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "target_key_arn": true,
+          "name_prefix": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-task"
+            }
+          }
+        },
+        {
+          "address": "aws_kms_key.data",
+          "mode": "managed",
+          "type": "aws_kms_key",
+          "name": "data",
+          "provider_config_key": "aws",
+          "expressions": {
+            "description": {
+              "constant_value": "app data"
+            }
+          }
+        },
+        {
+          "address": "aws_kms_key_policy.data",
+          "mode": "managed",
+          "type": "aws_kms_key_policy",
+          "name": "data",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "key_id": {
+              "references": [
+                "aws_kms_key.data.key_id",
+                "aws_kms_key.data"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_kms_alias.data",
+          "mode": "managed",
+          "type": "aws_kms_alias",
+          "name": "data",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "alias/app-data"
+            },
+            "target_key_id": {
+              "references": [
+                "aws_kms_key.data.key_id",
+                "aws_kms_key.data"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -641,10 +641,10 @@ This version reads the policy text of `aws_iam_role_policy` and of the
 that `aws_iam_role_policy_attachment`, the `roles` of
 `aws_iam_policy_attachment`, the `managed_policy_arns` of `aws_iam_role`, and
 the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach, and
-the resource policies of Secrets Manager, S3, SQS, SNS and ECR (see
-[Resource policies](#resource-policies)). PermCheck merges them as AWS does in one account: any `Allow` grants,
+the resource policies of Secrets Manager, S3, SQS, SNS and ECR, and KMS key
+policies and grants (see [Resource policies](#resource-policies)). PermCheck merges them as AWS does in one account: any `Allow` grants,
 and a definite `Deny` overrides it. It knows the other policy sources of a
-role, such as a permissions boundary and KMS key policies, but doesn't read
+role, such as a permissions boundary, but doesn't read
 their text yet. Each one that may apply to
 a need is an unknown source, and so is a policy whose text terraform computes
 at apply time.
@@ -778,8 +778,52 @@ after its documentation confirms the rule:
 | SNS | `aws_sns_topic_policy`, the `policy` of `aws_sns_topic` | [IAM and Amazon SNS policies together](https://docs.aws.amazon.com/sns/latest/dg/sns-using-identity-based-policies.html#iam-and-sns-policies) |
 | ECR | `aws_ecr_repository_policy` | [Repository policies vs IAM policies](https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html#repository-policy-vs-iam-policy) |
 
-PermCheck doesn't read KMS key policies yet. A key policy must allow the role
-or its account before an identity policy counts, so it needs its own rule.
+KMS key policies follow their own rule. The IAM guide says key policies "must
+explicitly allow access for principals"
+([enforcement code logic](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html)),
+and the KMS guide says "Without permission from the key policy, IAM policies
+that allow permissions have no effect"
+([key policies](https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html)).
+PermCheck covers a need on a key when the key policy allows the role itself,
+or when it allows the role's account and an identity policy allows the action.
+A statement for the account, such as `arn:aws:iam::123456789012:root`, lets
+the account's IAM policies grant only the actions that the statement lists
+([elements in a key policy](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html#key-policy-elements)).
+So a key policy that gives the account `kms:Describe*` doesn't let an identity
+policy grant `kms:Decrypt`. A definite `Deny` in the key policy or in an
+identity policy makes the need missing.
+
+PermCheck reads the key policy from the `policy` of `aws_kms_key` or from
+`aws_kms_key_policy`. When the configuration of a key leaves out its policy and
+no `aws_kms_key_policy` sets it, AWS attaches the default key policy
+([CreateKey](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html#KMS-CreateKey-request-Policy)).
+That policy lets the account's IAM policies allow every action
+([default key policy](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html#key-policy-default-allow-root-enable-iam)),
+so PermCheck checks the need against the identity policies. When both the key's `policy` and an
+`aws_kms_key_policy` set the policy, each apply writes one of them. PermCheck
+then counts the grants of each as grants it can't check. A need's resource
+may be an alias ARN, such as `arn:aws:kms:us-east-1:123456789012:alias/app-data`.
+When an `aws_kms_alias` of the plan points to the key through
+`target_key_id`, PermCheck checks the need against the key's policy.
+
+AWS requires a key policy on each key, so PermCheck can't read a missing key
+policy as an empty one. When the need's ARN matches no key of the plan, or the
+need has no `resources`, the key policy is unknown. It may allow the role
+itself. PermCheck then counts the need as covered by default. Under
+`--strict-resources` it reports the need unverified with the reason
+`policy_unknown`, even when an identity policy allows the action. The run
+prints a notice for the key. A definite `Deny` in an identity policy still
+makes the need missing. A need on `"*"`, such as `kms:CreateKey`, acts on no
+key, so PermCheck checks it against the identity policies alone
+([IAM policies for KMS](https://docs.aws.amazon.com/kms/latest/developerguide/iam-policies.html)).
+
+A grant gives access to a key apart from key policies and IAM policies
+([grants](https://docs.aws.amazon.com/kms/latest/developerguide/grants.html)).
+PermCheck counts an `aws_kms_grant` of the plan whose grantee may be the role
+as a grant of its operations that it can't check, with the reason `condition`.
+A retiring principal can retire the grant at any time. PermCheck can't see
+grants that AWS services or other stacks create. It may report a need as
+missing when such a grant allows it.
 
 PermCheck adds the statements of each resource policy that applies to the
 role's policies, and checks the need against the result. A resource policy

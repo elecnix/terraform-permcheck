@@ -162,7 +162,7 @@ func TestForPrincipal_AccountGrantsOnTheResourceSideOfACrossAccountNeed(t *testi
 		{"another account", `{"AWS":"123456789012"}`, otherAccountRole, dropped, dropped},
 		{"an account the tool cannot compare", `{"AWS":"444455556666"}`, taskRoleNameOnly, mayGrant, dropped},
 		{"the role ARN", `{"AWS":"arn:aws:iam::444455556666:role/app-task"}`, otherAccountRole, grants, definite},
-	}, CrossAccountResourceSide())
+	}, ResourceSide())
 }
 
 // The NotPrincipal cases of the "Principal matching" item of the test plan.

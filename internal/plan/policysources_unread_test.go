@@ -21,8 +21,6 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 		{"aws_iam_group_policy", `"group": "ops", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_group_policy_attachment", `"group": "ops", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_user", `"name": "ci", "permissions_boundary": "arn:aws:iam::123456789012:policy/b"`, "permissions_boundary", KindBoundary, "", "aws_iam_user"},
-		{"aws_kms_key", `"policy": "{}"`, "policy", KindResource, "kms", "aws_kms_key"},
-		{"aws_kms_key_policy", `"key_id": "1234abcd-12ab-34cd-56ef-1234567890ab", "policy": "{}"`, "policy", KindResource, "kms", "aws_kms_key"},
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {

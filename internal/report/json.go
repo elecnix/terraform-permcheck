@@ -89,6 +89,11 @@ type JSONPolicySource struct {
 	// other stacks may attach to a role outside the plan. It is set on the
 	// implicit source of that role only.
 	Unlisted []string `json:"unlisted,omitempty"`
+	// Resource is set on the implicit source of a KMS key outside the plan:
+	// the need's resource, whose key policy the plan doesn't show. Its
+	// unknown_reason is "outside_plan". The source of a need without
+	// resources has no resource.
+	Resource string `json:"resource,omitempty"`
 	// Policy is the address of the aws_iam_policy resource, or of the
 	// data "aws_iam_policy" source, whose text the check read for the
 	// managed policy the source attaches. It is absent for a source that
@@ -279,6 +284,7 @@ func jsonPolicySource(s principal.Applied) JSONPolicySource {
 		PolicyName: s.PolicyName,
 		Policy:     s.Policy,
 		Unlisted:   s.Unlisted,
+		Resource:   s.Resource,
 		Link:       s.Match.String(),
 	}
 	if s.Unknown {

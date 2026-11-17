@@ -24,7 +24,10 @@ func TestResourceARNPatterns(t *testing.T) {
 		{"aws_sns_topic", map[string]string{"name": "app-events.fifo"}, "arn:*:sns:*:*:app-events.fifo"},
 		{"aws_sns_topic", map[string]string{"arn": "arn:aws:sns:us-east-1:123456789012:app-events"}, "arn:aws:sns:us-east-1:123456789012:app-events"},
 		{"aws_ecr_repository", map[string]string{"name": "team/app"}, "arn:*:ecr:*:*:repository/team/app"},
-		{"aws_kms_key", map[string]string{"key_id": "1234"}, ""},
+		{"aws_kms_key", map[string]string{"key_id": "1234abcd-12ab-34cd-56ef-1234567890ab"}, "arn:*:kms:*:*:key/1234abcd-12ab-34cd-56ef-1234567890ab"},
+		// AWS assigns the key id, so a key that the plan creates has no
+		// pattern.
+		{"aws_kms_key", map[string]string{}, ""},
 	} {
 		rc := &plan.ResourceChange{Type: c.typ, AttributeValues: c.attrs}
 		if got := strings.Join(ResourceARNPatterns(rc), " "); got != c.want {
@@ -49,6 +52,7 @@ func TestLinkValueARNPatterns(t *testing.T) {
 		{"aws_sqs_queue", "https://sqs.us-east-1.amazonaws.com/app-jobs", ""},
 		{"aws_ecr_repository", "app", "arn:*:ecr:*:*:repository/app"},
 		{"aws_sns_topic", "app-events", ""},
+		{"aws_kms_key", "1234abcd-12ab-34cd-56ef-1234567890ab", "arn:*:kms:*:*:key/1234abcd-12ab-34cd-56ef-1234567890ab"},
 	} {
 		if got := strings.Join(LinkValueARNPatterns(c.typ, c.value), " "); got != c.want {
 			t.Errorf("%s %q: patterns = %q, want %q", c.typ, c.value, got, c.want)

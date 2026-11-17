@@ -216,14 +216,21 @@ type principalOptions struct {
 	accountGrants bool
 }
 
-// CrossAccountResourceSide makes ForPrincipal read a resource policy for the
-// resource side of a cross-account need. There, a statement whose Principal
-// is the principal's account grants, since the identity side has already
-// allowed the call: "AWS performs two evaluations" and "The request is
-// allowed only if both evaluations return a decision of Allow"
-// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html).
-// An account the tool cannot compare with the principal's may grant.
-func CrossAccountResourceSide() PrincipalOption {
+// ResourceSide makes ForPrincipal read a resource policy for the resource
+// side of a request that the identity side must allow on its own. There, a
+// statement whose Principal is the principal's account grants, since the
+// identity side checks the account's IAM policies. An account the tool
+// cannot compare with the principal's may grant. Two evaluations have that
+// shape:
+//
+//   - A cross-account request: "AWS performs two evaluations" and "The
+//     request is allowed only if both evaluations return a decision of
+//     Allow"
+//     (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html).
+//   - A KMS key policy, whose account statement lets the account "use IAM
+//     policies to delegate the permissions specified in the key policy"
+//     (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html#key-policy-elements).
+func ResourceSide() PrincipalOption {
 	return func(o *principalOptions) { o.accountGrants = true }
 }
 
@@ -252,8 +259,8 @@ func CrossAccountResourceSide() PrincipalOption {
 // account: it "delegates authority to the account" and the account's
 // administrator "must then grant access to an identity"
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html#principal-accounts).
-// CrossAccountResourceSide changes that for the resource side of a
-// cross-account need.
+// ResourceSide changes that for the resource side of a two-sided
+// evaluation.
 func (d *Document) ForPrincipal(p Principal, opts ...PrincipalOption) *Document {
 	var o principalOptions
 	for _, opt := range opts {

@@ -45,6 +45,9 @@ func sourceNotice(p check.PrincipalSources, s principal.Applied) string {
 	if len(s.Unlisted) > 0 {
 		return outsideRoleNotice(p, s.Unlisted)
 	}
+	if s.ResourceOutside {
+		return outsideKeyNotice(p, s.Resource)
+	}
 	var why, fix string
 	switch unknownReason(s) {
 	case reasonOutsidePlan:
@@ -102,6 +105,17 @@ func outsideRoleNotice(p check.PrincipalSources, unlisted []string) string {
 	}
 	return fmt.Sprintf("notice: role %s is outside the plan, and other stacks may attach %s policies to it; needs of %q may be granted by them; %s for the role %s the plan list every policy of that kind",
 		role, kinds, p.Label, strings.Join(fixes, " and "), verb)
+}
+
+// outsideKeyNotice is the notice of the implicit source of a KMS key outside
+// the plan: its key policy decides the needs on the key, and the plan
+// doesn't show it. resource is the need's resource, or empty for a need
+// without resources.
+func outsideKeyNotice(p check.PrincipalSources, resource string) string {
+	if resource == "" {
+		return fmt.Sprintf("notice: a need of %q without resources may act on a KMS key outside the plan, whose key policy is unknown; needs of %q may be granted by it", p.Label, p.Label)
+	}
+	return fmt.Sprintf("notice: KMS key %s isn't in the plan, so its key policy is unknown; needs of %q may be granted by it", resource, p.Label)
 }
 
 // resourceType returns the resource type of a terraform address, or the

@@ -51,9 +51,11 @@ type PolicySource struct {
 	// policy the source attaches. It is empty when the source holds its
 	// text itself, and when the attached ARN names no policy of the plan.
 	Policy string
-	// PolicyMaybe is true when the plan can't decide whether the attached
+	// PolicyMaybe is true when the source may not apply. For a source that
+	// attaches a managed policy, the plan can't decide whether the attached
 	// ARN names Policy or, for a source with OutsidePlan, a managed policy
-	// outside the plan. The source may then not apply to the principal.
+	// outside the plan. For a KMS key policy, another source of the plan may
+	// set the key's policy instead (see keyPolicyOfKey).
 	PolicyMaybe bool
 	// OutsidePlan is true when the attached ARN names a managed policy that
 	// the plan doesn't create and no data source of the plan reads, such as
@@ -80,6 +82,15 @@ type PolicySource struct {
 	// variable sets. The source may then attach to any resource of its
 	// type, in the plan or outside it.
 	ResourceUnknown bool
+	// Grant is true for an aws_kms_grant. Its text is a policy that the
+	// check builds from the grant: an Allow of the grant's operations to its
+	// grantee principal (see grantText).
+	Grant bool
+	// DefaultKeyPolicy is true for the default key policy that AWS gives a
+	// KMS key created without a policy (see keyPolicyOfKey). The source has
+	// no text: AWS documents the policy, which allows every action to the
+	// key's account and so lets its identity policies grant access.
+	DefaultKeyPolicy bool
 }
 
 // AttachedResource is a resource that a resource policy source may attach
@@ -102,6 +113,23 @@ type AttachedResource struct {
 	// LinkMaybe when the plan can't decide which of several resources it
 	// attaches to.
 	Match LinkMatch
+	// Aliases are the names of the aws_kms_alias resources of the plan that
+	// may point to a KMS key, such as alias/app-data, with LinkYes when the
+	// alias provably points to the key and LinkMaybe when it may. It is nil
+	// for a resource of any other type (see keyAliases).
+	Aliases map[string]LinkMatch
+}
+
+// AliasMatch reports whether an ARN names the attached KMS key by one of
+// its aliases, such as arn:aws:kms:us-east-1:123456789012:alias/app-data. It
+// is LinkNo for an ARN without an alias, and for an alias that the plan
+// doesn't point to the key.
+func (a AttachedResource) AliasMatch(arn string) LinkMatch {
+	i := strings.Index(arn, ":alias/")
+	if i < 0 {
+		return LinkNo
+	}
+	return a.Aliases[arn[i+1:]]
 }
 
 // PolicyLink ties a policy source to the principal or resource it attaches
@@ -335,6 +363,8 @@ type policyText struct {
 	policy    string
 	maybe     bool
 	outside   bool
+	// defaultKey fills PolicySource.DefaultKeyPolicy.
+	defaultKey bool
 }
 
 // sourceContext is what a source reads besides its own resource: every
@@ -360,6 +390,8 @@ type sourceSpec struct {
 	service string
 	// managed marks a source that attaches a managed policy.
 	managed bool
+	// grant marks an aws_kms_grant (see PolicySource.Grant).
+	grant bool
 	// arn is the attribute of an unread source that holds the ARN of the
 	// managed policy it attaches, such as policy_arn. It sets PolicyARN and
 	// OutsidePlan. A read source sets them through its texts function.
@@ -460,10 +492,14 @@ var sourceSpecs = map[string][]sourceSpec{
 	// (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html).
 	"aws_ecr_repository_policy": {{kind: KindResource, service: "ecr", texts: attributeText("policy"), link: attributeLink("repository", "aws_ecr_repository")}},
 	// A KMS key policy must allow the principal, or the account, before an
-	// identity policy has any effect, so the union rule doesn't apply. A
-	// later version reads key policies with their own rule.
-	"aws_kms_key":        {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: selfLink}},
-	"aws_kms_key_policy": {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: attributeLink("key_id", "aws_kms_key")}},
+	// identity policy has any effect, so the union rule doesn't apply.
+	// Package principal evaluates the key policy and the identity policies
+	// apart (see its requiredResourcePolicy). A grant is a third way to
+	// allow access to a key
+	// (https://docs.aws.amazon.com/kms/latest/developerguide/grants.html).
+	"aws_kms_key":        {{kind: KindResource, service: "kms", texts: keyPolicyOfKey, link: selfLink}},
+	"aws_kms_key_policy": {{kind: KindResource, service: "kms", texts: keyPolicyText, link: kmsKeyLink}},
+	"aws_kms_grant":      {{kind: KindResource, service: "kms", grant: true, texts: grantText, link: kmsKeyLink}},
 }
 
 // PolicySources returns the policy sources that the changes set, in plan
@@ -485,20 +521,22 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 			link := spec.link(rc)
 			for _, t := range spec.texts(rc, ctx) {
 				s := PolicySource{
-					Address:     rc.Address,
-					Path:        t.path,
-					Kind:        spec.kind,
-					Service:     spec.service,
-					Text:        t.text,
-					Unknown:     t.unknown || spec.unread,
-					Unread:      spec.unread,
-					PolicyARN:   t.policyARN,
-					Policy:      t.policy,
-					PolicyMaybe: t.maybe,
-					OutsidePlan: t.outside,
-					PolicyName:  inlinePolicyName(rc, t.path),
-					Managed:     spec.managed,
-					Link:        link,
+					Address:          rc.Address,
+					Path:             t.path,
+					Kind:             spec.kind,
+					Service:          spec.service,
+					Text:             t.text,
+					Unknown:          t.unknown || spec.unread,
+					Unread:           spec.unread,
+					PolicyARN:        t.policyARN,
+					Policy:           t.policy,
+					PolicyMaybe:      t.maybe,
+					OutsidePlan:      t.outside,
+					PolicyName:       inlinePolicyName(rc, t.path),
+					Managed:          spec.managed,
+					Link:             link,
+					Grant:            spec.grant,
+					DefaultKeyPolicy: t.defaultKey,
 				}
 				if spec.unread {
 					s.Text = ""
@@ -510,6 +548,11 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 				}
 				if spec.kind == KindResource && !spec.unread {
 					s.Resources, s.ResourceUnknown = attachedResources(link, rc, ctx)
+				}
+				if spec.service == "kms" {
+					for i := range s.Resources {
+						s.Resources[i].Aliases = keyAliases(s.Resources[i], ctx)
+					}
 				}
 				out = append(out, s)
 			}
