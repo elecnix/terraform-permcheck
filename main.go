@@ -190,7 +190,7 @@ func validateCmd(args []string) error {
 	exitZero := fs.Bool("exit-zero", false, "exit with code 0 even when permission gaps are found")
 	configFile := fs.String("config", "", "path to permcheck config JSON (default: ./permcheck.json if present)")
 	showExcluded := fs.Bool("show-excluded", false, "list config-excluded permissions in the report (default: suppressed silently)")
-	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked)")
+	principal := fs.String("principal", "", "also check the needs the config declares for this principal (needs without a principal are always checked; without this flag, the needs of every principal in the config's principals map are checked)")
 	strictResources := fs.Bool("strict-resources", false, "report an action as unverified when its target ARN is unknown and the policy grants it only on some resources (default: from config strict_resources)")
 	allowUnresolved := fs.Bool("allow-unresolved-types", false, "report resource types no schema source knows but do not fail the run on them (default: from config allow_unresolved_types)")
 	awsProviderVersion := fs.String("aws-provider-version", "", "check against the requirements of this AWS provider major version, such as 5 or 5.100.0 (default: from config aws_provider_version, else the version the .terraform.lock.hcl under --terraform-root or in the working directory pins, else the plan's version constraint, else the newest the embedded table holds)")
@@ -237,6 +237,7 @@ func validateCmd(args []string) error {
 		Exclusions: cfg.Exclude,
 		Needs:      cfg.Needs,
 		Principal:  *principal,
+		Principals: cfg.Principals,
 
 		AllowUnresolvedTypes: allowUnresolvedTypes,
 	}
@@ -273,6 +274,7 @@ func validateCmd(args []string) error {
 			PlanOutput:  *policyFromPlanOutput,
 			StateOutput: *policyFromStateOutput,
 			StateFile:   *stateFile,
+			Optional:    check.MappedOnly(opts),
 		},
 	}
 	stdin := processStdin()
@@ -323,9 +325,15 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	policyRaw, err := sources.Policy.Load(planRaw, stdin.Read)
-	if err != nil {
-		return err
+	// A run without a --policy-* source checks the needs of mapped
+	// principals only, so it has no policy to load.
+	var loadPolicy func() ([]byte, error)
+	if sources.Policy.Given() {
+		policyRaw, err := sources.Policy.Load(planRaw, stdin.Read)
+		if err != nil {
+			return err
+		}
+		loadPolicy = func() ([]byte, error) { return policyRaw, nil }
 	}
 	changes, err := plan.Parse(planRaw, prefix)
 	if err != nil {
@@ -335,7 +343,7 @@ func validateCmd(args []string) error {
 		return err
 	}
 
-	res, err := check.Run(check.FromPlan(changes), func() ([]byte, error) { return policyRaw, nil }, opts)
+	res, err := check.Run(check.FromPlan(changes), loadPolicy, opts)
 	if err != nil {
 		return err
 	}

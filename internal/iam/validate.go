@@ -99,6 +99,10 @@ type MissingAction struct {
 	// empty for an action a terraform resource change needs, and then the
 	// resource fields name the source instead.
 	Need string
+	// Principal is the label of the mapped principal whose need this action
+	// comes from, when the config's principals map gives the need's label
+	// a role in the plan. It is empty for any other finding.
+	Principal string
 	// NeedResource is the resource of the need that the policy does not
 	// cover. Empty when the need lists no resources.
 	NeedResource string

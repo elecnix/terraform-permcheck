@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/principal"
 	"github.com/elecnix/terraform-permcheck/internal/providerversion"
 )
 
@@ -19,6 +20,10 @@ type Config struct {
 	// Needs declares permissions a principal needs beyond what the terraform
 	// resources imply. They are checked against the same policy.
 	Needs []iam.Need `json:"needs,omitempty"`
+	// Principals maps a need's principal label to a role in the plan. A
+	// need whose label is a key of the map is checked against the policies
+	// the plan attaches to that role, not against the --policy-* document.
+	Principals map[string]principal.Entry `json:"principals,omitempty"`
 	// AllowUnresolvedTypes turns on --allow-unresolved-types: a resource
 	// type no schema source knows is reported but does not fail the run.
 	// The flag, when given, overrides it.
@@ -48,6 +53,9 @@ func parse(raw []byte) (*Config, error) {
 		return nil, err
 	}
 	if err := iam.ValidateNeeds(c.Needs); err != nil {
+		return nil, err
+	}
+	if err := principal.Validate(c.Principals, c.Needs); err != nil {
 		return nil, err
 	}
 	if v := c.AWSProviderVersion; v != "" {

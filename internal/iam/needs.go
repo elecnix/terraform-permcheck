@@ -74,25 +74,46 @@ func ValidateNeeds(needs []Need) error {
 }
 
 // SelectNeeds returns the needs that apply to principal: every need without
-// a principal, plus the needs whose principal equals it. It returns an error
+// a principal, plus the needs whose principal equals it. Without principal,
+// it also returns the needs whose principal is in mapped, the labels that
+// the config's principals map gives a role in the plan. It returns an error
 // when principal is set and no need names it, so a typo does not pass
 // silently.
-func SelectNeeds(needs []Need, principal string) ([]Need, error) {
+func SelectNeeds(needs []Need, principal string, mapped map[string]bool) ([]Need, error) {
 	var out []Need
 	named := false
 	for _, n := range needs {
-		switch n.Principal {
-		case "":
+		switch {
+		case n.Principal == "":
 			out = append(out, n)
-		case principal:
+		case n.Principal == principal:
 			out = append(out, n)
 			named = true
+		case principal == "" && mapped[n.Principal]:
+			out = append(out, n)
 		}
 	}
 	if principal != "" && !named {
 		return nil, fmt.Errorf("no needs declared for principal %q", principal)
 	}
 	return out, nil
+}
+
+// Grants decides whether a principal's policies grant an action. A
+// *policy.Document is one: the policy a run reads from its --policy-*
+// source. The policy set of a mapped principal is another.
+type Grants interface {
+	// Coverage reports whether the policies grant action on a resource
+	// matching any of the target ARN patterns, as
+	// policy.Document.Coverage does.
+	Coverage(action string, targets []string, conds policy.Conditions, strict bool) policy.Result
+	// CoverageOfEveryResource reports whether the policies grant action on
+	// every resource, as policy.Document.CoverageOfEveryResource does.
+	CoverageOfEveryResource(action string, strict bool) policy.Result
+	// GrantedResources lists the resources the policies grant action on,
+	// when they grant it only on some, as
+	// policy.Document.GrantedResources does.
+	GrantedResources(action string) []string
 }
 
 // CheckNeeds reports each need action the policy does not grant, one
@@ -102,9 +123,18 @@ func SelectNeeds(needs []Need, principal string) ([]Need, error) {
 // limited to some resources as unverified. A need on "*" needs a grant on
 // every resource. Every case goes through Coverage.
 func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction {
+	return CheckNeedsWith(needs, func(string) Grants { return doc }, strict)
+}
+
+// CheckNeedsWith checks the needs as CheckNeeds does, against the policies
+// that grantsFor returns for each action. The policies of a mapped principal
+// depend on the action, since a resource policy applies only to the actions
+// of its service.
+func CheckNeedsWith(needs []Need, grantsFor func(action string) Grants, strict bool) []MissingAction {
 	var missing []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
+			doc := grantsFor(action)
 			add := func(resource string, res policy.Result) {
 				m := newFinding(action, ClassManagement, res)
 				m.Need = n.Sid
@@ -154,7 +184,7 @@ func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction
 					continue
 				}
 				listed[dep.action] = true
-				if res := dependencyVerdict(dep.action, doc, strict); res.Verdict != policy.Covered {
+				if res := dependencyVerdict(dep.action, grantsFor(dep.action), strict); res.Verdict != policy.Covered {
 					m := newFinding(dep.action, ClassManagement, res)
 					m.Need = n.Sid
 					m.Reason = n.Reason

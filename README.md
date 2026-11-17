@@ -538,7 +538,9 @@ config file, and PermCheck checks them against the same policy as the plan:
 - **`principal`** (optional) names the role the need belongs to. PermCheck
   checks one policy per run, so a need with a principal applies only when
   `--principal` names it. A need without a principal applies on every run.
-  An unknown `--principal` value is an error.
+  An unknown `--principal` value is an error. When the `principals` map of
+  the config gives the label a role, the need reads that role's policies
+  from the plan (see [Needs of a role in the plan](#needs-of-a-role-in-the-plan)).
 - **`reason`** (optional) is a note for reviewers. PermCheck shows it with
   every finding the need produces: in the `text` and `github-annotations`
   formats it follows the need in parentheses, and in `json` it is the
@@ -584,8 +586,85 @@ missing need fails the run unless `--exit-zero` is set. An exclusion can
 suppress it: its `permission` matches the action, and its `resource` matches
 `needs.<sid>`.
 
-PermCheck checks the needs against the one policy it is given. It does not
-collect the other policies in the plan or evaluate resource-based policies.
+Without a `principals` map, PermCheck checks the needs against the one
+policy it's given.
+
+#### Needs of a role in the plan
+
+The `principals` map gives a need's `principal` label a role that the plan
+creates or keeps. Its value is the terraform instance address of an
+`aws_iam_role`, as `terraform show -json` prints it:
+
+```json
+{
+  "principals": { "task": { "address": "aws_iam_role.task" } },
+  "needs": [
+    {
+      "sid": "FetchSecrets",
+      "principal": "task",
+      "actions": ["secretsmanager:GetSecretValue"],
+      "resources": ["arn:aws:secretsmanager:us-east-1:123456789012:secret:app-db-*"]
+    }
+  ]
+}
+```
+
+A need whose label is a key of the map is a mapped need. PermCheck checks it
+against the policies the plan attaches to the role, and ignores the
+`--policy-*` document for it. Each key must be the label of a need. An
+`aws_iam_user` address is an error, since this version reads roles only. A
+run fails with exit code 2 when the address matches no resource change in the
+plan, and in static HCL mode, which has no plan.
+
+Without `--principal`, a run checks the needs of every mapped principal and
+the needs without a principal. `--principal NAME` checks the needs labelled
+NAME and the needs without a principal, as before. A label that isn't in the
+map runs only when `--principal` selects it.
+
+This version reads the policy text of `aws_iam_role_policy` and of the
+`inline_policy` blocks of `aws_iam_role`. PermCheck merges them as AWS does in
+one account: any `Allow` grants, and a definite `Deny` overrides it. It knows
+the other policy sources of a role, such as `aws_iam_role_policy_attachment`,
+`managed_policy_arns`, a permissions boundary, and the resource policies of
+Secrets Manager, S3, SQS, SNS, ECR and KMS, but doesn't read their text yet.
+Each one that may apply to a need is an unknown source, and so is a policy
+whose text terraform computes at apply time. A resource policy applies to the
+needs whose action is in its service. An unknown source may grant the need,
+so PermCheck counts the need as covered by default and reports it unverified
+under `--strict-resources`, with the reason `policy_unknown`. An unknown boundary can only limit a need,
+so it never covers one. When PermCheck can't decide from the plan whether a
+policy attaches to the role, its `Allow` statements count as grants PermCheck can't check, with
+the reason `condition`, and PermCheck ignores its `Deny` statements.
+
+Every format but `json` prints one notice on stderr for each unknown source
+and principal:
+
+```
+notice: aws_iam_role_policy.task_secrets: policy text is known only after apply; needs of "task" may be granted by it
+```
+
+A notice doesn't change the exit code. A finding of a mapped need shows the
+label, as in `needs "FetchSecrets" of task`. Its `json` entry has a
+`principal` key. The `json` report adds `policy_sources`, one entry per
+mapped principal with its `principal`, its `address` and its `sources`. Each
+source has an `address`, a `path`, a `kind` (`identity`, `boundary` or
+`resource`), a `text` (`known` or `unknown`), and a `link` (`yes`, or `maybe`
+when PermCheck can't decide it from the plan). An unknown source adds `unknown_reason`:
+`computed`, `unread`, or `outside_plan` for a managed policy the plan doesn't
+contain, such as an AWS managed policy. A source that attaches a managed
+policy by a known ARN adds `policy_arn`. These keys appear only when a run
+checks a mapped need.
+
+A run whose selected needs are all mapped works without a `--policy-*`
+source. It checks those needs and skips the plan's resources. A notice on
+stderr says so. Its `json` report has
+`"plan_resources_skipped": true`. A run without a `--policy-*` source that
+selects an unmapped need fails as before.
+
+PermCheck assumes the plan lists every policy of a mapped role. A policy that
+another stack or a person attaches to the role can grant a need that
+PermCheck reports as missing. A release older than the `principals` key
+ignores it and checks every need against the `--policy-*` document.
 
 ## Supported clouds
 
@@ -654,7 +733,9 @@ terraform-permcheck validate --terraform-root ./terraform \
 
 The policy comes from exactly one of `--policy-file`,
 `--policy-from-plan-output` and `--policy-from-state-output`. Static HCL mode
-accepts `--policy-file` only.
+accepts `--policy-file` only. A plan-mode run whose needs are all mapped
+principals' needs may omit it (see
+[Needs of a role in the plan](#needs-of-a-role-in-the-plan)).
 
 ### Flags of `validate`
 
@@ -673,7 +754,7 @@ accepts `--policy-file` only.
 | `--no-filter` | `false` | Report every permission the schema sources list, including `[optional]` ones |
 | `--config` | `./permcheck.json` | Path to the config file (auto-discovered in the working directory when present) |
 | `--show-excluded` | `false` | List config-excluded permissions in the report (suppressed silently by default) |
-| `--principal` | none | Also check the config needs declared for this principal (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
+| `--principal` | none | Also check the config needs declared for this principal. Without it, a run checks the needs of every principal in the config's `principals` map (see [Permissions a principal needs beyond terraform](#permissions-a-principal-needs-beyond-terraform)) |
 | `--aws-provider-version` | none | Check against the requirements of this AWS provider major version, such as `5` or `5.100.0`. Without it, PermCheck reads the version from the lock file of `--terraform-root` or of the working directory, or from the plan (see [Which provider version a run checks](#which-provider-version-a-run-checks)). The config key `aws_provider_version` sets the default |
 | `--provider-source` | `embedded` | Where provider-source permissions come from: `embedded` reads the table built into the binary, `live` clones and parses terraform-provider-aws (see [Embedded permissions table](#embedded-permissions-table)). `PERMCHECK_PROVIDER_SOURCE` sets the default |
 | `--strict-resources` | `false` | Report an action as unverified when the tool cannot check the grant: its target ARN is unknown and the policy grants it only on some resources, or a condition on the grant names a key the plan does not supply (see [Strict resource scope](#strict-resource-scope)). The config key `strict_resources` sets the default |

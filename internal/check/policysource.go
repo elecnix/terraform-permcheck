@@ -18,6 +18,15 @@ type PolicySource struct {
 	// StateFile is the state JSON StateOutput reads (--state-file). Empty
 	// or "-" means stdin.
 	StateFile string
+	// Optional lets a plan-mode run go without a source, because every
+	// need it selects is a mapped need (see MappedOnly). Such a run skips
+	// the plan's resources.
+	Optional bool
+}
+
+// Given reports whether a --policy-* flag names a source.
+func (s PolicySource) Given() bool {
+	return s.File != "" || s.PlanOutput != "" || s.StateOutput != ""
 }
 
 // stateFromStdin reports whether the policy comes from a state read from
@@ -26,7 +35,8 @@ func (s PolicySource) stateFromStdin() bool {
 	return s.StateOutput != "" && (s.StateFile == "" || s.StateFile == "-")
 }
 
-// Validate checks the selection rules. Plan mode needs exactly one source.
+// Validate checks the selection rules. Plan mode needs exactly one source,
+// or none when Optional is set.
 // Static HCL mode has no plan or state, so only File applies there. Static
 // mode reads File only when there is something to check, so it may be
 // empty.
@@ -44,6 +54,8 @@ func (s PolicySource) Validate(static bool) error {
 		}
 	}
 	switch {
+	case n == 0 && s.Optional:
+		return nil
 	case n == 0:
 		return fmt.Errorf("one of --policy-file, --policy-from-plan-output, or --policy-from-state-output is required")
 	case n > 1:

@@ -176,16 +176,28 @@ func TestSelectNeeds(t *testing.T) {
 		return out
 	}
 
-	got, err := SelectNeeds(needs, "")
+	got, err := SelectNeeds(needs, "", nil)
 	if err != nil || !reflect.DeepEqual(sids(got), []string{"Shared"}) {
 		t.Errorf("no principal: got %v, %v; want [Shared]", sids(got), err)
 	}
-	got, err = SelectNeeds(needs, "deploy")
+	got, err = SelectNeeds(needs, "deploy", nil)
 	if err != nil || !reflect.DeepEqual(sids(got), []string{"Shared", "Deploy"}) {
 		t.Errorf("deploy: got %v, %v; want [Shared Deploy]", sids(got), err)
 	}
-	if _, err := SelectNeeds(needs, "deploi"); err == nil || !strings.Contains(err.Error(), `"deploi"`) {
+	if _, err := SelectNeeds(needs, "deploi", nil); err == nil || !strings.Contains(err.Error(), `"deploi"`) {
 		t.Errorf("unknown principal: want an error naming it, got %v", err)
+	}
+
+	// Without --principal, the needs of mapped principals run too. With it,
+	// only the named principal's needs do, mapped or not.
+	mapped := map[string]bool{"task": true}
+	got, err = SelectNeeds(needs, "", mapped)
+	if err != nil || !reflect.DeepEqual(sids(got), []string{"Shared", "Task"}) {
+		t.Errorf("no principal, task mapped: got %v, %v; want [Shared Task]", sids(got), err)
+	}
+	got, err = SelectNeeds(needs, "deploy", mapped)
+	if err != nil || !reflect.DeepEqual(sids(got), []string{"Shared", "Deploy"}) {
+		t.Errorf("deploy, task mapped: got %v, %v; want [Shared Deploy]", sids(got), err)
 	}
 }
 

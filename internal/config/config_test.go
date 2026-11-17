@@ -190,3 +190,28 @@ func TestParse_AllowUnresolvedTypes(t *testing.T) {
 		t.Error("allow_unresolved_types not read")
 	}
 }
+
+// TestParse_Principals reads the principals map and checks it against the
+// needs.
+func TestParse_Principals(t *testing.T) {
+	c, err := parse([]byte(`{
+		"principals": {"task": {"address": "module.app.aws_iam_role.task"}},
+		"needs": [{"sid": "FetchSecrets", "principal": "task", "actions": ["secretsmanager:GetSecretValue"]}]
+	}`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := c.Principals["task"].Address; got != "module.app.aws_iam_role.task" {
+		t.Errorf("address = %q", got)
+	}
+
+	for body, want := range map[string]string{
+		`{"principals": {"ci": {"address": "aws_iam_user.ci"}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`: "users aren't supported yet",
+		`{"principals": {"ci": {"address": "aws_iam_role.ci"}}, "needs": [{"sid": "S", "principal": "cd", "actions": ["s3:GetObject"]}]}`: `no need has the principal "ci"`,
+		`{"principals": {"ci": {}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`:                             "address is required",
+	} {
+		if _, err := parse([]byte(body)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("parse(%s) error = %v, want one containing %q", body, err, want)
+		}
+	}
+}

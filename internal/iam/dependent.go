@@ -52,6 +52,6 @@ func dependenciesOf(r Requirement) []targeted {
 
 // dependencyVerdict returns the policy's verdict on a dependent action. The
 // resource it acts on is not known, so the action alone decides.
-func dependencyVerdict(action string, doc *policy.Document, strict bool) policy.Result {
+func dependencyVerdict(action string, doc Grants, strict bool) policy.Result {
 	return doc.Coverage(action, nil, nil, strict)
 }

@@ -1,0 +1,11 @@
+{
+  "principals": { "task": { "address": "aws_iam_role.task" } },
+  "needs": [
+    {
+      "sid": "FetchSecrets",
+      "principal": "task",
+      "actions": ["secretsmanager:GetSecretValue"],
+      "resources": ["arn:aws:secretsmanager:us-east-1:123456789012:secret:app-db-*"]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/principal"
 )
 
 // JSONResult is the structured JSON output produced by --format json.
@@ -20,6 +21,56 @@ type JSONResult struct {
 	// UnresolvedAllowed counts the unresolved types that do not fail the
 	// run: allowed ones and those a config exclusion covers.
 	UnresolvedAllowed int `json:"unresolved_allowed,omitempty"`
+	// PolicySources lists each mapped principal whose needs the run
+	// checked, in label order, with the policy sources that may apply to
+	// those needs. It is absent when the run checked no mapped need.
+	PolicySources []JSONPrincipalSources `json:"policy_sources,omitempty"`
+	// PlanResourcesSkipped is true when the run had no --policy-* source,
+	// so it checked the needs of mapped principals only and not the plan's
+	// resources. It is absent otherwise.
+	PlanResourcesSkipped bool `json:"plan_resources_skipped,omitempty"`
+}
+
+// JSONPrincipalSources is a mapped principal and the policy sources that may
+// apply to its checked needs.
+type JSONPrincipalSources struct {
+	// Principal is the principal's key in the config's principals map.
+	Principal string `json:"principal"`
+	// Address is the terraform address of its role.
+	Address string `json:"address"`
+	// Sources are in plan order. The list is empty when no source applies.
+	Sources []JSONPolicySource `json:"sources"`
+}
+
+// JSONPolicySource is one policy source of a mapped principal.
+type JSONPolicySource struct {
+	// Address is the terraform address of the resource that sets the
+	// policy.
+	Address string `json:"address"`
+	// Path is the attribute path of the policy in that resource, such as
+	// policy, inline_policy.0.policy or policy_arn.
+	Path string `json:"path"`
+	// Kind is "identity", "boundary" or "resource".
+	Kind string `json:"kind"`
+	// Text is "known" when the check read the policy text, and "unknown"
+	// when it couldn't. An unknown source may grant any action and never
+	// denies. A boundary with unknown text may limit any action.
+	Text string `json:"text"`
+	// UnknownReason says why the text is unknown: "computed" when
+	// terraform computes it at apply time, "unread" when this version
+	// doesn't read the source's type yet, and "outside_plan" when the
+	// source attaches a managed policy that the plan doesn't contain. It is
+	// absent when the text is known.
+	UnknownReason string `json:"unknown_reason,omitempty"`
+	// PolicyARN is the known ARN of the managed policy the source attaches.
+	// It is absent for a source that holds its text itself.
+	PolicyARN string `json:"policy_arn,omitempty"`
+	// Link is "yes" when the source attaches to the principal, and "maybe"
+	// when the plan can't decide it. The check counts the Allows of a
+	// "maybe" source as grants it can't check, and ignores its Denies. A
+	// resource policy is "maybe", since this version doesn't read whom its
+	// statements grant.
+	Link string `json:"link"`
 }
 
 // JSONUnresolved is one resource type no schema source knows, with the
@@ -50,6 +101,7 @@ type JSONExcluded struct {
 	ResourceName   string `json:"resource_name,omitempty"`
 	Change         string `json:"change,omitempty"`
 	Need           string `json:"need,omitempty"`
+	Principal      string `json:"principal,omitempty"`
 	NeedResource   string `json:"need_resource,omitempty"`
 	ExcludedAction string `json:"excluded_action,omitempty"`
 	Reason         string `json:"reason,omitempty"`
@@ -69,6 +121,9 @@ type JSONMissing struct {
 	ResourceName  string `json:"resource_name,omitempty"`
 	Change        string `json:"change,omitempty"`
 	Need          string `json:"need,omitempty"`
+	// Principal is the label of the mapped principal whose need this is.
+	// It is absent for any other finding.
+	Principal     string `json:"principal,omitempty"`
 	NeedResource  string `json:"need_resource,omitempty"`
 	MissingAction string `json:"missing_action"`
 	// DependsOn names the action AWS requires missing_action with, for a
@@ -111,6 +166,7 @@ func (r *Report) json() string {
 			ResourceName:   e.ResourceName,
 			Change:         e.Change,
 			Need:           e.Need,
+			Principal:      e.Principal,
 			NeedResource:   e.NeedResource,
 			ExcludedAction: e.Action,
 			Reason:         e.Reason,
@@ -144,6 +200,7 @@ func (r *Report) json() string {
 				ResourceName:       f.ResourceName,
 				Change:             f.Change,
 				Need:               f.Need,
+				Principal:          f.Principal,
 				NeedResource:       f.NeedResource,
 				MissingAction:      f.Action,
 				DependsOn:          f.DependsOn,
@@ -163,6 +220,32 @@ func (r *Report) json() string {
 		}
 	}
 
+	for _, p := range r.principals {
+		item := JSONPrincipalSources{Principal: p.Label, Address: p.Address, Sources: []JSONPolicySource{}}
+		for _, src := range p.Sources {
+			item.Sources = append(item.Sources, jsonPolicySource(src))
+		}
+		result.PolicySources = append(result.PolicySources, item)
+	}
+	result.PlanResourcesSkipped = r.resourcesSkipped
+
 	out, _ := json.MarshalIndent(result, "", "  ")
 	return string(out) + "\n"
+}
+
+// jsonPolicySource renders one policy source of a mapped principal.
+func jsonPolicySource(s principal.Applied) JSONPolicySource {
+	out := JSONPolicySource{
+		Address:   s.Address,
+		Path:      s.Path,
+		Kind:      string(s.Kind),
+		Text:      "known",
+		PolicyARN: s.PolicyARN,
+		Link:      s.Match.String(),
+	}
+	if s.Unknown {
+		out.Text = "unknown"
+		out.UnknownReason = unknownReason(s)
+	}
+	return out
 }

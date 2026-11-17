@@ -1,0 +1,47 @@
+--- stdout ---
+{
+  "status": "ok",
+  "checked": 0,
+  "label": "resource changes",
+  "missing": null,
+  "policy_sources": [
+    {
+      "principal": "task",
+      "address": "aws_iam_role.task",
+      "sources": [
+        {
+          "address": "aws_iam_role_policy.task_logs",
+          "path": "policy",
+          "kind": "identity",
+          "text": "known",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy.task_secrets",
+          "path": "policy",
+          "kind": "identity",
+          "text": "unknown",
+          "unknown_reason": "computed",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy.shared",
+          "path": "policy",
+          "kind": "identity",
+          "text": "known",
+          "link": "maybe"
+        },
+        {
+          "address": "aws_secretsmanager_secret_policy.app",
+          "path": "policy",
+          "kind": "resource",
+          "text": "unknown",
+          "unknown_reason": "unread",
+          "link": "maybe"
+        }
+      ]
+    }
+  ],
+  "plan_resources_skipped": true
+}
+--- stderr ---

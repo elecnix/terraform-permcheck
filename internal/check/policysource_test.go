@@ -18,6 +18,8 @@ func TestPolicySource_Validate(t *testing.T) {
 		{"plan output", PolicySource{PlanOutput: "out"}, false, ""},
 		{"state output", PolicySource{StateOutput: "out"}, false, ""},
 		{"none", PolicySource{}, false, "one of --policy-file, --policy-from-plan-output, or --policy-from-state-output is required"},
+		{"none, optional", PolicySource{Optional: true}, false, ""},
+		{"two, optional", PolicySource{File: "p.json", PlanOutput: "out", Optional: true}, false, "only one of"},
 		{"two", PolicySource{File: "p.json", PlanOutput: "out"}, false, "only one of"},
 		{"static file", PolicySource{File: "p.json"}, true, ""},
 		{"static none", PolicySource{}, true, ""},

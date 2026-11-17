@@ -12,6 +12,8 @@ import (
 
 	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/iam"
+	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/principal"
 	"github.com/elecnix/terraform-permcheck/internal/report"
 )
 
@@ -81,6 +83,32 @@ func goldenCases() []goldenCase {
 			Action:       fmt.Sprintf("s3:Action%d", i),
 			Class:        iam.ClassManagement,
 		})
+	}
+
+	// Findings and policy sources of mapped principals. Two principals
+	// share a sid, and the label tells their findings apart.
+	taskSecrets := iam.MissingAction{Need: "FetchSecrets", Principal: "task", NeedResource: "arn:aws:secretsmanager:us-east-1:123456789012:secret:app-db-*", Action: "secretsmanager:GetSecretValue", Class: iam.ClassManagement}
+	deployImages := iam.MissingAction{Need: "Verify", Principal: "deploy", NeedResource: "arn:aws:ecr:us-east-1:123456789012:repository/app", Action: "ecr:DescribeImages", Class: iam.ClassManagement, PolicyUnknownUnverified: true}
+	taskVerify := iam.MissingAction{Need: "Verify", Principal: "task", Action: "ecr:DescribeImages", Class: iam.ClassManagement, PolicyUnknownUnverified: true}
+	identity := func(addr, path string, match plan.LinkMatch) principal.Applied {
+		return principal.Applied{PolicySource: plan.PolicySource{Address: addr, Path: path, Kind: plan.KindIdentity}, Match: match}
+	}
+	computed := identity("aws_iam_role_policy.task_secrets", "policy", plan.LinkYes)
+	computed.Unknown = true
+	unread := identity("aws_iam_role_policy_attachment.deploy_ecs", "policy_arn", plan.LinkYes)
+	unread.Unknown, unread.Unread = true, true
+	managed := identity("aws_iam_role_policy_attachment.deploy_ecr", "policy_arn", plan.LinkYes)
+	managed.Unknown, managed.Unread, managed.OutsidePlan, managed.PolicyARN = true, true, true, "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+	boundary := principal.Applied{PolicySource: plan.PolicySource{Address: "aws_iam_role.deploy", Path: "permissions_boundary", Kind: plan.KindBoundary, Unknown: true, Unread: true}, Match: plan.LinkYes}
+	secretPolicy := principal.Applied{PolicySource: plan.PolicySource{Address: "aws_secretsmanager_secret_policy.app", Path: "policy", Kind: plan.KindResource, Service: "secretsmanager", Unknown: true, Unread: true}, Match: plan.LinkMaybe}
+	principals := []check.PrincipalSources{
+		{Label: "deploy", Address: "aws_iam_role.deploy", Sources: []principal.Applied{boundary, managed, unread}},
+		{Label: "task", Address: "aws_iam_role.task", Sources: []principal.Applied{
+			identity("aws_iam_role_policy.task_logs", "policy", plan.LinkYes),
+			computed,
+			identity("aws_iam_role_policy.shared", "policy", plan.LinkMaybe),
+			secretPolicy,
+		}},
 	}
 
 	planLabel := "resource changes"
@@ -229,6 +257,27 @@ func goldenCases() []goldenCase {
 				Checked:  3, Label: planLabel,
 			},
 			showExcluded: true,
+		},
+		{
+			// Needs of two mapped principals, with a notice per unknown
+			// policy source and the policy_sources key in json.
+			name: "principals",
+			res: check.Result{
+				Missing: []iam.MissingAction{bucketA, taskSecrets, deployImages, taskVerify},
+				Checked: 1, Label: planLabel, Needs: 3,
+				Principals: principals,
+			},
+			locations: locations,
+		},
+		{
+			// A run without a --policy-* source: it checks the mapped
+			// needs only and says the plan's resources weren't checked.
+			name: "principals_resources_skipped",
+			res: check.Result{
+				Checked: 0, Label: planLabel, Needs: 1,
+				Principals:           principals[1:],
+				PlanResourcesSkipped: true,
+			},
 		},
 		{
 			// More warning lines than GitHub shows in a step: the report

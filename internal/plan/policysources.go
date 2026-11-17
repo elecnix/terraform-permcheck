@@ -28,11 +28,28 @@ type PolicySource struct {
 	Path string
 	// Kind says how AWS evaluates the policy.
 	Kind PolicyKind
+	// Service is the service prefix of the actions a resource policy can
+	// grant, such as secretsmanager. It is empty for an identity or
+	// boundary source.
+	Service string
 	// Text is the policy JSON. It is empty when Unknown is true.
 	Text string
 	// Unknown is true when the plan lacks the policy text, such as a value
-	// that terraform computes at apply time.
+	// that terraform computes at apply time, and when this version doesn't
+	// read the source's type yet.
 	Unknown bool
+	// Unread is true when this version knows the source's type but doesn't
+	// read its policy text yet. Unknown is true too.
+	Unread bool
+	// PolicyARN is the known ARN of the managed policy that the source
+	// attaches, such as the policy_arn of an aws_iam_role_policy_attachment.
+	// It is empty when the source holds its text itself, or when terraform
+	// computes the ARN at apply time.
+	PolicyARN string
+	// OutsidePlan is true when PolicyARN names a managed policy that the
+	// plan doesn't create, such as an AWS managed policy. The plan can't
+	// show its text.
+	OutsidePlan bool
 	// Link ties the source to the principal or resource it attaches to.
 	Link PolicyLink
 }
@@ -58,6 +75,10 @@ type PolicyLink struct {
 	// Value is the known value of the link attribute. It is empty when
 	// terraform computes the value at apply time.
 	Value string
+	// Values are the known values of a link attribute that holds a list,
+	// such as the roles of an aws_iam_policy_attachment. It is nil when the
+	// attribute isn't a list, or when terraform computes it at apply time.
+	Values []string
 }
 
 // LinkMatch is the answer to whether a policy source attaches to a
@@ -168,19 +189,40 @@ func (l PolicyLink) matchReferences(p *ResourceChange) (LinkMatch, bool) {
 // matchValue decides the link from the known value of the link attribute.
 // An ARN compares with the principal's arn, and any other value with its
 // name.
+//
+// A list, such as the roles of an aws_iam_policy_attachment, matches when
+// one of its values matches. It doesn't match when no value may match.
 func (l PolicyLink) matchValue(p *ResourceChange) LinkMatch {
-	if l.Value == "" {
+	if l.Values != nil {
+		out := LinkNo
+		for _, v := range l.Values {
+			switch matchOneValue(v, p) {
+			case LinkYes:
+				return LinkYes
+			case LinkMaybe:
+				out = LinkMaybe
+			}
+		}
+		return out
+	}
+	return matchOneValue(l.Value, p)
+}
+
+// matchOneValue compares one known value of a link attribute with the
+// principal's known name or arn. An empty value is unknown.
+func matchOneValue(value string, p *ResourceChange) LinkMatch {
+	if value == "" {
 		return LinkMaybe
 	}
 	attr := "name"
-	if strings.HasPrefix(l.Value, "arn:") {
+	if strings.HasPrefix(value, "arn:") {
 		attr = "arn"
 	}
 	known := p.AttributeValues[attr]
 	switch {
 	case known == "":
 		return LinkMaybe
-	case known == l.Value:
+	case known == value:
 		return LinkYes
 	default:
 		return LinkNo
@@ -242,16 +284,69 @@ type policyText struct {
 // where the policy text is, and how the source links to its principal or
 // resource.
 type sourceSpec struct {
-	kind  PolicyKind
+	kind PolicyKind
+	// unread marks a source type that this version knows but doesn't read
+	// yet. Its sources are unknown, whatever text the plan holds. A later
+	// version reads the type by dropping the marker and giving the spec a
+	// texts function that reads the text.
+	unread bool
+	// service is the service prefix of the actions a resource policy can
+	// grant, such as secretsmanager. It is empty for an identity or
+	// boundary source.
+	service string
+	// arn is the attribute that holds the ARN of the managed policy the
+	// source attaches, such as policy_arn. It is empty when the source
+	// holds its policy text itself.
+	arn   string
 	texts func(rc *ResourceChange) []policyText
 	link  func(rc *ResourceChange) PolicyLink
 }
 
-// sourceSpecs lists the policy sources of each resource type that
-// PolicySources reads.
+// sourceSpecs lists the policy sources of each resource type that the
+// design of issue #175 names. PolicySources reads the policy text of the
+// specs without the unread marker. A spec with the marker still gives a
+// source, with unknown text, so that a grant the plan shows is never absent
+// from the check.
+//
+// The membership resources aws_iam_user_group_membership and
+// aws_iam_group_membership set no policy, so they have no spec. An
+// aws_iam_policy holds the text of a managed policy, but it attaches to no
+// principal by itself, so it has no spec either.
 var sourceSpecs = map[string][]sourceSpec{
-	"aws_iam_role_policy": {{KindIdentity, attributeText("policy"), attributeLink("role", "aws_iam_role")}},
-	"aws_iam_role":        {{KindIdentity, blockTexts("inline_policy", "policy"), selfLink}},
+	// Identity policies of a role.
+	"aws_iam_role_policy": {{kind: KindIdentity, texts: attributeText("policy"), link: attributeLink("role", "aws_iam_role")}},
+	"aws_iam_role": {
+		{kind: KindIdentity, texts: blockTexts("inline_policy", "policy"), link: selfLink},
+		{kind: KindIdentity, unread: true, texts: unreadText("managed_policy_arns"), link: selfLink},
+		{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink},
+	},
+	"aws_iam_role_policy_attachment":            {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("role", "aws_iam_role")}},
+	"aws_iam_role_policy_attachments_exclusive": {{kind: KindIdentity, unread: true, texts: unreadText("policy_arns"), link: attributeLink("role_name", "aws_iam_role")}},
+	"aws_iam_policy_attachment": {
+		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
+		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "users"), link: attributeLink("users", "aws_iam_user")},
+		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "groups"), link: attributeLink("groups", "aws_iam_group")},
+	},
+
+	// Identity policies and the boundary of a user, and the policies of a
+	// group.
+	"aws_iam_user":                    {{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink}},
+	"aws_iam_user_policy":             {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("user", "aws_iam_user")}},
+	"aws_iam_user_policy_attachment":  {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("user", "aws_iam_user")}},
+	"aws_iam_group_policy":            {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("group", "aws_iam_group")}},
+	"aws_iam_group_policy_attachment": {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("group", "aws_iam_group")}},
+
+	// Resource policies.
+	"aws_secretsmanager_secret_policy": {{kind: KindResource, unread: true, service: "secretsmanager", texts: unreadText("policy"), link: attributeLink("secret_arn", "aws_secretsmanager_secret")}},
+	"aws_secretsmanager_secret":        {{kind: KindResource, unread: true, service: "secretsmanager", texts: unreadText("policy"), link: selfLink}},
+	"aws_s3_bucket_policy":             {{kind: KindResource, unread: true, service: "s3", texts: unreadText("policy"), link: attributeLink("bucket", "aws_s3_bucket")}},
+	"aws_sqs_queue_policy":             {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: attributeLink("queue_url", "aws_sqs_queue")}},
+	"aws_sqs_queue":                    {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: selfLink}},
+	"aws_sns_topic_policy":             {{kind: KindResource, unread: true, service: "sns", texts: unreadText("policy"), link: attributeLink("arn", "aws_sns_topic")}},
+	"aws_sns_topic":                    {{kind: KindResource, unread: true, service: "sns", texts: unreadText("policy"), link: selfLink}},
+	"aws_ecr_repository_policy":        {{kind: KindResource, unread: true, service: "ecr", texts: unreadText("policy"), link: attributeLink("repository", "aws_ecr_repository")}},
+	"aws_kms_key":                      {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: selfLink}},
+	"aws_kms_key_policy":               {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: attributeLink("key_id", "aws_kms_key")}},
 }
 
 // PolicySources returns the policy sources that the changes set, in plan
@@ -267,18 +362,104 @@ func PolicySources(changes []*ResourceChange) []PolicySource {
 		for _, spec := range sourceSpecs[rc.Type] {
 			link := spec.link(rc)
 			for _, t := range spec.texts(rc) {
-				out = append(out, PolicySource{
+				s := PolicySource{
 					Address: rc.Address,
 					Path:    t.path,
 					Kind:    spec.kind,
+					Service: spec.service,
 					Text:    t.text,
-					Unknown: t.unknown,
+					Unknown: t.unknown || spec.unread,
+					Unread:  spec.unread,
 					Link:    link,
-				})
+				}
+				if spec.unread {
+					s.Text = ""
+				}
+				if spec.arn != "" {
+					s.PolicyARN = rc.AttributeValues[spec.arn]
+					s.OutsidePlan = outsidePlan(rc, spec.arn, changes)
+				}
+				out = append(out, s)
 			}
 		}
 	}
 	return out
+}
+
+// awsManagedPolicyPrefix starts the ARN of every AWS managed policy. AWS
+// owns these policies, so no plan creates one.
+const awsManagedPolicyPrefix = "arn:aws:iam::aws:policy/"
+
+// outsidePlan reports whether the attribute attr of rc holds the known ARN
+// of a managed policy that no aws_iam_policy in the plan can be. That is
+// true for an AWS managed policy. For any other ARN, it is true when the
+// attribute references no aws_iam_policy, and every aws_iam_policy in the
+// plan has a known ARN or name that differs from it. A policy whose ARN and
+// name are both unknown, such as one with name_prefix, may be any ARN.
+func outsidePlan(rc *ResourceChange, attr string, changes []*ResourceChange) bool {
+	arn := rc.AttributeValues[attr]
+	if arn == "" {
+		return false
+	}
+	if strings.HasPrefix(arn, awsManagedPolicyPrefix) {
+		return true
+	}
+	for _, ref := range rc.References[attr] {
+		if typ, _, _, ok := parseResourceRef(ref); !ok || typ == "aws_iam_policy" {
+			return false
+		}
+	}
+	name := arn[strings.LastIndex(arn, "/")+1:]
+	for _, p := range changes {
+		if p.Type != "aws_iam_policy" || p.Change == "delete" {
+			continue
+		}
+		if known := p.AttributeValues["arn"]; known != "" {
+			if known == arn {
+				return false
+			}
+			continue
+		}
+		if known := p.AttributeValues["name"]; known == "" || known == name {
+			return false
+		}
+	}
+	return true
+}
+
+// unreadText gives one source with unknown text at the attribute attr, when
+// the resource may set that attribute.
+func unreadText(attr string) func(rc *ResourceChange) []policyText {
+	return unreadTextWhen(attr, attr)
+}
+
+// unreadTextWhen gives one source with unknown text at the attribute attr,
+// when the resource may set the attribute when. An aws_iam_policy_attachment
+// that names only users, say, gives no source for roles.
+func unreadTextWhen(attr, when string) func(rc *ResourceChange) []policyText {
+	return func(rc *ResourceChange) []policyText {
+		if !maySet(rc, when) {
+			return nil
+		}
+		return []policyText{{path: attr, unknown: true}}
+	}
+}
+
+// maySet reports whether the resource may set the attribute attr. An
+// attribute the configuration doesn't write holds no policy that this
+// resource sets, even when the provider computes a value for it, such as the
+// policy AWS gives a new SNS topic or the managed_policy_arns that other
+// resources attach to a role. An attribute that the plan holds as null or
+// empty sets nothing. Without a configuration section or a state, the
+// attribute may be set.
+func maySet(rc *ResourceChange, attr string) bool {
+	if rc.Configured != nil && !rc.Configured[attr] {
+		return false
+	}
+	if rc.Attributes == nil {
+		return true
+	}
+	return rc.Attributes[attr]
 }
 
 // attributeText reads the policy text from a top-level attribute. A value
@@ -343,11 +524,67 @@ func attributeLink(attr, target string) func(rc *ResourceChange) PolicyLink {
 			Attribute:  attr,
 			References: rc.References[attr],
 			Value:      rc.AttributeValues[attr],
+			Values:     knownStrings(rc, attr),
 		}
 	}
+}
+
+// knownStrings returns the values of a top-level attribute that holds a
+// list of strings. It returns nil when the attribute isn't such a list, or
+// when terraform computes any part of it at apply time.
+func knownStrings(rc *ResourceChange, attr string) []string {
+	if rc.paths == nil || unknownAlong(rc.paths.unknown, attr) {
+		return nil
+	}
+	v, _ := walk(rc.paths.state, attr)
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		s, ok := item.(string)
+		if !ok || s == "" {
+			return nil
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // selfLink links a source to the resource that sets it.
 func selfLink(rc *ResourceChange) PolicyLink {
 	return PolicyLink{Type: rc.Type, Self: rc.Address, Module: rc.ModuleAddress}
+}
+
+// AddressType returns the resource type of a terraform instance address of a
+// managed resource, such as aws_iam_role for
+// module.app["eu"].aws_iam_role.task[0]. It reports false for an address of
+// any other form, such as a data source or a module alone.
+func AddressType(addr string) (string, bool) {
+	rest := addr
+	for strings.HasPrefix(rest, "module.") {
+		rest = rest[len("module."):]
+		end := strings.IndexAny(rest, ".[")
+		if end <= 0 {
+			return "", false
+		}
+		rest = rest[end:]
+		if rest[0] == '[' {
+			close := closingBracket(rest)
+			if close < 0 {
+				return "", false
+			}
+			rest = rest[close+1:]
+		}
+		if !strings.HasPrefix(rest, ".") {
+			return "", false
+		}
+		rest = rest[1:]
+	}
+	typ, name, key, ok := parseResourceRef(rest)
+	if !ok || typ == "data" || rest != typ+"."+name+key {
+		return "", false
+	}
+	return typ, true
 }

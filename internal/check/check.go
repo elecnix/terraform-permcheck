@@ -7,6 +7,8 @@ package check
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/permdata"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/policy"
+	"github.com/elecnix/terraform-permcheck/internal/principal"
 	"github.com/elecnix/terraform-permcheck/internal/provideraws"
 )
 
@@ -197,6 +200,12 @@ type Options struct {
 	Needs []iam.Need
 	// Principal selects the needs declared for one principal (--principal).
 	Principal string
+	// Principals is the config's principals map. A need whose principal
+	// label is a key of it is a mapped need: it is checked against the
+	// policies the plan attaches to the role, not against the --policy-*
+	// document. Without Principal, Run checks the needs of every mapped
+	// principal.
+	Principals map[string]principal.Entry
 	// AllowUnresolvedTypes keeps unresolved resource types from failing the
 	// run (--allow-unresolved-types or the allow_unresolved_types config
 	// key). They are still reported.
@@ -221,6 +230,25 @@ type Result struct {
 	Unresolved []iam.MissingAction
 	// UnresolvedAllowed reports that unresolved types do not fail the run.
 	UnresolvedAllowed bool
+	// Principals are the mapped principals whose needs the run checked, in
+	// label order, with the policy sources that may apply to those needs.
+	// It is empty when the run checked no mapped need.
+	Principals []PrincipalSources
+	// PlanResourcesSkipped reports that the run had no --policy-* source,
+	// so it checked the needs of mapped principals only and not the
+	// plan's resources.
+	PlanResourcesSkipped bool
+}
+
+// PrincipalSources is a mapped principal and the policy sources that may
+// apply to its checked needs.
+type PrincipalSources struct {
+	// Label is the principal's key in the principals map.
+	Label string
+	// Address is the terraform address of its role.
+	Address string
+	// Sources are in plan order.
+	Sources []principal.Applied
 }
 
 // HasGaps reports whether the result should fail the run: a missing or
@@ -230,28 +258,123 @@ func (r Result) HasGaps() bool {
 	return len(r.Missing) > 0 || (len(r.Unresolved) > 0 && !r.UnresolvedAllowed)
 }
 
+// MappedOnly reports whether the needs that the options select are all
+// mapped needs, of principals that the principals map gives a role. Such a
+// run needs no --policy-* source in plan mode: the needs read the plan's
+// policies, and without a policy the run skips the plan's resources.
+func MappedOnly(opts Options) bool {
+	if len(opts.Principals) == 0 {
+		return false
+	}
+	needs, err := iam.SelectNeeds(opts.Needs, opts.Principal, mappedLabels(opts.Principals))
+	if err != nil || len(needs) == 0 {
+		return false
+	}
+	for _, n := range needs {
+		if _, ok := opts.Principals[n.Principal]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// mappedLabels returns the keys of a principals map as a set.
+func mappedLabels(entries map[string]principal.Entry) map[string]bool {
+	out := make(map[string]bool, len(entries))
+	for l := range entries {
+		out[l] = true
+	}
+	return out
+}
+
 // Run checks the input and the selected needs against the policy that
 // loadPolicy returns. When there is nothing to check, Run returns an empty
 // Result without loading the policy. Run returns loadPolicy's error unchanged
 // and wraps a parse error. A schema lookup that fails (iam.ErrLookupFailed)
 // is an error too, since the result would not say what was checked.
+//
+// A mapped need (see Options.Principals) is checked against the policies the
+// plan attaches to its principal, and never against the policy. A nil
+// loadPolicy means the run has no --policy-* source: Run then checks the
+// mapped needs only, skips the input's resources, and fails when the options
+// select a need that isn't mapped. Static HCL mode has no plan, so a mapped
+// need there is an error.
 func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, error) {
-	needs, err := iam.SelectNeeds(opts.Needs, opts.Principal)
+	selected, err := iam.SelectNeeds(opts.Needs, opts.Principal, mappedLabels(opts.Principals))
 	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Label: in.label(), Needs: len(needs), UnresolvedAllowed: opts.AllowUnresolvedTypes}
-	if in.empty() && len(needs) == 0 {
+	var needs []iam.Need
+	mapped := map[string][]iam.Need{}
+	for _, n := range selected {
+		if _, ok := opts.Principals[n.Principal]; ok {
+			mapped[n.Principal] = append(mapped[n.Principal], n)
+		} else {
+			needs = append(needs, n)
+		}
+	}
+	if in.static && len(mapped) > 0 {
+		label := slices.Sorted(maps.Keys(mapped))[0]
+		return Result{}, fmt.Errorf("principal %q is mapped in the config's principals, and static HCL mode has no plan to read its policies from: pass --plan-file, or select an unmapped principal with --principal", label)
+	}
+	if loadPolicy == nil && len(needs) > 0 {
+		return Result{}, fmt.Errorf("one of --policy-file, --policy-from-plan-output, or --policy-from-state-output is required")
+	}
+
+	res := Result{Label: in.label(), Needs: len(selected), UnresolvedAllowed: opts.AllowUnresolvedTypes}
+	if in.empty() && len(selected) == 0 {
 		return res, nil
 	}
 
+	var missing []iam.MissingAction
+	if loadPolicy == nil {
+		res.PlanResourcesSkipped = true
+	} else {
+		missing, err = checkPolicy(in, loadPolicy, needs, opts, &res)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+
+	if len(mapped) > 0 {
+		sources := plan.PolicySources(in.changes)
+		for _, label := range slices.Sorted(maps.Keys(mapped)) {
+			address := opts.Principals[label].Address
+			role, err := principal.Find(in.changes, label, address)
+			if err != nil {
+				return Result{}, err
+			}
+			pr, err := principal.Check(principal.Principal{Label: label, Role: role}, mapped[label], sources, opts.Filter.StrictResources)
+			if err != nil {
+				return Result{}, err
+			}
+			missing = append(missing, pr.Missing...)
+			res.Principals = append(res.Principals, PrincipalSources{Label: label, Address: address, Sources: pr.Sources})
+		}
+	}
+
+	kept, excluded := iam.ApplyExclusions(missing, opts.Exclusions)
+	res.Excluded = excluded
+	for _, m := range kept {
+		if m.Unresolved {
+			res.Unresolved = append(res.Unresolved, m)
+		} else {
+			res.Missing = append(res.Missing, m)
+		}
+	}
+	return res, nil
+}
+
+// checkPolicy checks the input's resources and the unmapped needs against
+// the policy that loadPolicy returns, and sets the checked count of res.
+func checkPolicy(in Input, loadPolicy func() ([]byte, error), needs []iam.Need, opts Options, res *Result) ([]iam.MissingAction, error) {
 	raw, err := loadPolicy()
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 	doc, err := policy.Parse(raw)
 	if err != nil {
-		return Result{}, fmt.Errorf("parse policy: %w", err)
+		return nil, fmt.Errorf("parse policy: %w", err)
 	}
 
 	resolver := opts.Resolver
@@ -265,13 +388,13 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	if in.static {
 		changes, res.Checked, err = staticChanges(in.blocks, resolver)
 		if err != nil {
-			return Result{}, err
+			return nil, err
 		}
 	}
 
 	missing, err := iam.Validate(changes, doc, resolver, opts.Filter.config())
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 	if !in.static {
 		// A resource whose type no source knows is not checked, as in static
@@ -292,17 +415,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 			res.Checked = countResources(resolved)
 		}
 	}
-	missing = append(missing, iam.CheckNeeds(needs, doc, opts.Filter.StrictResources)...)
-	kept, excluded := iam.ApplyExclusions(missing, opts.Exclusions)
-	res.Excluded = excluded
-	for _, m := range kept {
-		if m.Unresolved {
-			res.Unresolved = append(res.Unresolved, m)
-		} else {
-			res.Missing = append(res.Missing, m)
-		}
-	}
-	return res, nil
+	return append(missing, iam.CheckNeeds(needs, doc, opts.Filter.StrictResources)...), nil
 }
 
 // memoResolver remembers each lookup of a run, error included, so a type

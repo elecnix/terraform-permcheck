@@ -1,0 +1,23 @@
+{
+  "principals": { "deploy": { "address": "aws_iam_role.deploy" } },
+  "needs": [
+    {
+      "sid": "VerifyImage",
+      "principal": "deploy",
+      "actions": ["ecr:DescribeImages"],
+      "resources": ["arn:aws:ecr:us-east-1:123456789012:repository/app"]
+    },
+    {
+      "sid": "RollService",
+      "principal": "deploy",
+      "actions": ["ecs:UpdateService"],
+      "resources": ["arn:aws:ecs:us-east-1:123456789012:service/app/web"]
+    },
+    {
+      "sid": "ReadParams",
+      "principal": "deploy",
+      "actions": ["ssm:GetParameter"],
+      "resources": ["arn:aws:ssm:us-east-1:123456789012:parameter/app/*"]
+    }
+  ]
+}

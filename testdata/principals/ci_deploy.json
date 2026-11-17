@@ -1,0 +1,158 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.deploy",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "deploy",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com\"}}],\"Version\":\"2012-10-17\"}",
+          "description": null,
+          "force_detach_policies": false,
+          "max_session_duration": 3600,
+          "name": "ci-deploy",
+          "path": "/",
+          "permissions_boundary": null,
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.deploy_ecr",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "deploy_ecr",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "policy_arn": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser",
+          "role": "ci-deploy"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.deploy_ecs",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "deploy_ecs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "description": null,
+          "name": "ci-deploy-ecs",
+          "path": "/",
+          "policy": "{\"Statement\":[{\"Action\":[\"ecs:UpdateService\",\"ecs:DescribeServices\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:ecs:us-east-1:123456789012:service/app/*\"}],\"Version\":\"2012-10-17\"}",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.deploy_ecs",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "deploy_ecs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "role": "ci-deploy"
+        },
+        "after_unknown": {
+          "id": true,
+          "policy_arn": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.deploy",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "deploy",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {
+              "references": ["data.aws_iam_policy_document.github_oidc.json", "data.aws_iam_policy_document.github_oidc"]
+            },
+            "name": {"constant_value": "ci-deploy"}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.deploy_ecr",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "deploy_ecr",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy_arn": {"constant_value": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"},
+            "role": {"references": ["aws_iam_role.deploy.name", "aws_iam_role.deploy"]}
+          }
+        },
+        {
+          "address": "aws_iam_policy.deploy_ecs",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "deploy_ecs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {"constant_value": "ci-deploy-ecs"},
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.deploy_ecs",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "deploy_ecs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy_arn": {"references": ["aws_iam_policy.deploy_ecs.arn", "aws_iam_policy.deploy_ecs"]},
+            "role": {"references": ["aws_iam_role.deploy.name", "aws_iam_role.deploy"]}
+          }
+        }
+      ]
+    }
+  }
+}

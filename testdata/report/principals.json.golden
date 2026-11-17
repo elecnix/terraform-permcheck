@@ -1,0 +1,109 @@
+--- stdout ---
+{
+  "status": "gaps_found",
+  "checked": 1,
+  "label": "resource changes",
+  "missing": [
+    {
+      "resource_type": "aws_s3_bucket",
+      "resource_name": "a[0]",
+      "change": "create",
+      "missing_action": "s3:PutBucketTagging",
+      "class": "[required]",
+      "file": "s3.tf",
+      "line": 3
+    },
+    {
+      "need": "FetchSecrets",
+      "principal": "task",
+      "need_resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:app-db-*",
+      "missing_action": "secretsmanager:GetSecretValue",
+      "class": "[required]"
+    },
+    {
+      "need": "Verify",
+      "principal": "deploy",
+      "need_resource": "arn:aws:ecr:us-east-1:123456789012:repository/app",
+      "missing_action": "ecr:DescribeImages",
+      "class": "[required]",
+      "unverified": "policy_unknown"
+    },
+    {
+      "need": "Verify",
+      "principal": "task",
+      "missing_action": "ecr:DescribeImages",
+      "class": "[required]",
+      "unverified": "policy_unknown"
+    }
+  ],
+  "policy_sources": [
+    {
+      "principal": "deploy",
+      "address": "aws_iam_role.deploy",
+      "sources": [
+        {
+          "address": "aws_iam_role.deploy",
+          "path": "permissions_boundary",
+          "kind": "boundary",
+          "text": "unknown",
+          "unknown_reason": "unread",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.deploy_ecr",
+          "path": "policy_arn",
+          "kind": "identity",
+          "text": "unknown",
+          "unknown_reason": "outside_plan",
+          "policy_arn": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.deploy_ecs",
+          "path": "policy_arn",
+          "kind": "identity",
+          "text": "unknown",
+          "unknown_reason": "unread",
+          "link": "yes"
+        }
+      ]
+    },
+    {
+      "principal": "task",
+      "address": "aws_iam_role.task",
+      "sources": [
+        {
+          "address": "aws_iam_role_policy.task_logs",
+          "path": "policy",
+          "kind": "identity",
+          "text": "known",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy.task_secrets",
+          "path": "policy",
+          "kind": "identity",
+          "text": "unknown",
+          "unknown_reason": "computed",
+          "link": "yes"
+        },
+        {
+          "address": "aws_iam_role_policy.shared",
+          "path": "policy",
+          "kind": "identity",
+          "text": "known",
+          "link": "maybe"
+        },
+        {
+          "address": "aws_secretsmanager_secret_policy.app",
+          "path": "policy",
+          "kind": "resource",
+          "text": "unknown",
+          "unknown_reason": "unread",
+          "link": "maybe"
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

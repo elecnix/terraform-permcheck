@@ -1,0 +1,6 @@
+--- stdout ---
+All required permissions covered (0 resource changes, 1 declared need checked).
+--- stderr ---
+notice: the plan's resources weren't checked, because no --policy-* source was given; only the needs of mapped principals were checked
+notice: aws_iam_role_policy.task_secrets: policy text is known only after apply; needs of "task" may be granted by it
+notice: aws_secretsmanager_secret_policy.app: this version doesn't read the policy attribute of aws_secretsmanager_secret_policy yet; needs of "task" may be granted by it

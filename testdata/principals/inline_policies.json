@@ -1,0 +1,168 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+          "force_detach_policies": false,
+          "inline_policy": [
+            {
+              "name": "no-secrets",
+              "policy": "{\"Statement\":[{\"Action\":\"secretsmanager:*\",\"Effect\":\"Allow\",\"Resource\":\"*\"},{\"Action\":\"secretsmanager:GetSecretValue\",\"Effect\":\"Deny\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}"
+            }
+          ],
+          "max_session_duration": 3600,
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": [{}],
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.task_logs",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task_logs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "policy": "{\"Statement\":[{\"Action\":\"logs:PutLogEvents\",\"Effect\":\"Allow\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {
+          "id": true,
+          "name": true,
+          "name_prefix": true,
+          "role": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.task_queue",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task_queue",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {},
+        "after_unknown": {
+          "id": true,
+          "name": true,
+          "name_prefix": true,
+          "policy": true,
+          "role": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.shared_reads",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "shared_reads",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "policy": "{\"Statement\":[{\"Action\":\"s3:GetObject\",\"Effect\":\"Allow\",\"Resource\":\"*\"},{\"Action\":\"logs:PutLogEvents\",\"Effect\":\"Deny\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {
+          "id": true,
+          "name": true,
+          "name_prefix": true,
+          "role": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {
+              "references": ["data.aws_iam_policy_document.ecs_trust.json", "data.aws_iam_policy_document.ecs_trust"]
+            },
+            "inline_policy": [
+              {
+                "name": {"constant_value": "no-secrets"},
+                "policy": {}
+              }
+            ],
+            "name": {"constant_value": "app-task"}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.task_logs",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "task_logs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "role": {"references": ["aws_iam_role.task.id", "aws_iam_role.task"]}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.task_queue",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "task_queue",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {
+              "references": ["data.aws_iam_policy_document.queue.json", "data.aws_iam_policy_document.queue"]
+            },
+            "role": {"references": ["aws_iam_role.task.id", "aws_iam_role.task"]}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.shared_reads",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "shared_reads",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "role": {"references": ["module.roles.reader_role_name", "module.roles"]}
+          }
+        }
+      ]
+    }
+  }
+}
