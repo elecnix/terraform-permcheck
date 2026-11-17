@@ -19,12 +19,18 @@ type Document struct {
 // Statement is a single IAM policy statement. A statement names its actions
 // with Action or NotAction, and its resources with Resource or NotResource.
 type Statement struct {
-	Sid         string        `json:"Sid,omitempty"`
-	Effect      string        `json:"Effect"`
-	Action      actionField   `json:"Action,omitempty"`
-	NotAction   actionField   `json:"NotAction,omitempty"`
-	Resource    resourceField `json:"Resource,omitempty"`
-	NotResource resourceField `json:"NotResource,omitempty"`
+	Sid    string `json:"Sid,omitempty"`
+	Effect string `json:"Effect"`
+	// Principal and NotPrincipal name who a resource policy statement
+	// applies to. They are nil when the statement leaves them out. Coverage
+	// ignores both, as an identity policy has no principal to match.
+	// ForPrincipal reads them (see principal.go).
+	Principal    *principalField `json:"Principal,omitempty"`
+	NotPrincipal *principalField `json:"NotPrincipal,omitempty"`
+	Action       actionField     `json:"Action,omitempty"`
+	NotAction    actionField     `json:"NotAction,omitempty"`
+	Resource     resourceField   `json:"Resource,omitempty"`
+	NotResource  resourceField   `json:"NotResource,omitempty"`
 	// Condition is the statement's condition block, decoded. A block the
 	// tool cannot read stays in the statement as an unreadable condition,
 	// so the statement is still conditional.
