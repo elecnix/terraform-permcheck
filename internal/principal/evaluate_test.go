@@ -87,25 +87,25 @@ func TestCheck_UnknownBoundary(t *testing.T) {
 	}
 }
 
-// A resource policy applies to the actions of its service only. A queue
-// policy is an unknown source, since this version doesn't read SQS queue
+// A resource policy applies to the actions of its service only. A key
+// policy is an unknown source, since this version doesn't read KMS key
 // policies yet.
 func TestCheck_ResourcePolicyByService(t *testing.T) {
 	raw := `{"resource_changes": [
 		{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
 		 "change": {"actions": ["create"], "after": {"name": "app-task"}, "after_unknown": {"arn": true}}},
-		{"address": "aws_sqs_queue_policy.q", "type": "aws_sqs_queue_policy", "name": "q",
-		 "change": {"actions": ["create"], "after": {"queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs", "policy": "` + allowSQS + `"}, "after_unknown": {}}}]}`
+		{"address": "aws_kms_key_policy.k", "type": "aws_kms_key_policy", "name": "k",
+		 "change": {"actions": ["create"], "after": {"key_id": "1234abcd-12ab-34cd-56ef-1234567890ab", "policy": "{}"}, "after_unknown": {}}}]}`
 	needs := []iam.Need{
-		{Sid: "Send", Actions: []string{"sqs:SendMessage"}},
+		{Sid: "Decrypt", Actions: []string{"kms:Decrypt"}},
 		{Sid: "Read", Actions: []string{"s3:GetObject"}},
 	}
 	res := checkPlan(t, raw, needs, true)
-	if got, want := verdicts(res.Missing), "Send sqs:SendMessage policy_unknown; Read s3:GetObject"; got != want {
+	if got, want := verdicts(res.Missing), "Decrypt kms:Decrypt policy_unknown; Read s3:GetObject"; got != want {
 		t.Errorf("strict: %q, want %q", got, want)
 	}
-	if len(res.Sources) != 1 || res.Sources[0].Address != "aws_sqs_queue_policy.q" || res.Sources[0].Match != plan.LinkMaybe {
-		t.Errorf("sources = %+v, want the queue policy as a maybe", res.Sources)
+	if len(res.Sources) != 1 || res.Sources[0].Address != "aws_kms_key_policy.k" || res.Sources[0].Match != plan.LinkMaybe {
+		t.Errorf("sources = %+v, want the key policy as a maybe", res.Sources)
 	}
 }
 

@@ -69,3 +69,83 @@ func TestPolicySources_SecretsManager(t *testing.T) {
 		t.Errorf("sources =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// servicePoliciesPlan has a resource policy of S3, SQS, SNS and ECR for each
+// way its link can name the resource: a reference, and a known value that
+// isn't an ARN. The queue sets its policy itself, and the topic leaves its
+// computed policy attribute out of the configuration.
+const servicePoliciesPlan = `{
+	"resource_changes": [
+		{"address": "aws_s3_bucket.data", "type": "aws_s3_bucket", "name": "data",
+		 "change": {"actions": ["create"], "after": {"bucket": "app-data"}, "after_unknown": {"arn": true, "policy": true}}},
+		{"address": "aws_s3_bucket_policy.by_ref", "type": "aws_s3_bucket_policy", "name": "by_ref",
+		 "change": {"actions": ["create"], "after": {"policy": "{}"}, "after_unknown": {"bucket": true}}},
+		{"address": "aws_s3_bucket_policy.by_name", "type": "aws_s3_bucket_policy", "name": "by_name",
+		 "change": {"actions": ["create"], "after": {"policy": "{}", "bucket": "app-logs"}, "after_unknown": {}}},
+		{"address": "aws_sqs_queue.jobs", "type": "aws_sqs_queue", "name": "jobs",
+		 "change": {"actions": ["create"], "after": {"name": "app-jobs", "policy": "{}"}, "after_unknown": {"url": true}}},
+		{"address": "aws_sqs_queue_policy.by_url", "type": "aws_sqs_queue_policy", "name": "by_url",
+		 "change": {"actions": ["create"], "after": {"policy": "{}", "queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs"}, "after_unknown": {}}},
+		{"address": "aws_sns_topic.events", "type": "aws_sns_topic", "name": "events",
+		 "change": {"actions": ["create"], "after": {"name": "app-events"}, "after_unknown": {"arn": true, "policy": true}}},
+		{"address": "aws_sns_topic_policy.by_ref", "type": "aws_sns_topic_policy", "name": "by_ref",
+		 "change": {"actions": ["create"], "after": {"policy": "{}"}, "after_unknown": {"arn": true}}},
+		{"address": "aws_ecr_repository_policy.by_name", "type": "aws_ecr_repository_policy", "name": "by_name",
+		 "change": {"actions": ["create"], "after": {"policy": "{}", "repository": "app"}, "after_unknown": {}}}
+	],
+	"configuration": {"root_module": {"resources": [
+		{"address": "aws_s3_bucket.data", "mode": "managed", "type": "aws_s3_bucket", "name": "data",
+		 "expressions": {"bucket": {}}},
+		{"address": "aws_s3_bucket_policy.by_ref", "mode": "managed", "type": "aws_s3_bucket_policy", "name": "by_ref",
+		 "expressions": {"policy": {}, "bucket": {"references": ["aws_s3_bucket.data.id", "aws_s3_bucket.data"]}}},
+		{"address": "aws_s3_bucket_policy.by_name", "mode": "managed", "type": "aws_s3_bucket_policy", "name": "by_name",
+		 "expressions": {"policy": {}, "bucket": {}}},
+		{"address": "aws_sqs_queue.jobs", "mode": "managed", "type": "aws_sqs_queue", "name": "jobs",
+		 "expressions": {"name": {}, "policy": {}}},
+		{"address": "aws_sqs_queue_policy.by_url", "mode": "managed", "type": "aws_sqs_queue_policy", "name": "by_url",
+		 "expressions": {"policy": {}, "queue_url": {}}},
+		{"address": "aws_sns_topic.events", "mode": "managed", "type": "aws_sns_topic", "name": "events",
+		 "expressions": {"name": {}}},
+		{"address": "aws_sns_topic_policy.by_ref", "mode": "managed", "type": "aws_sns_topic_policy", "name": "by_ref",
+		 "expressions": {"policy": {}, "arn": {"references": ["aws_sns_topic.events.arn", "aws_sns_topic.events"]}}},
+		{"address": "aws_ecr_repository_policy.by_name", "mode": "managed", "type": "aws_ecr_repository_policy", "name": "by_name",
+		 "expressions": {"policy": {}, "repository": {}}}
+	]}}
+}`
+
+// TestPolicySources_ServiceResourcePolicies checks that this version reads
+// the resource policies of S3, SQS, SNS and ECR. A link attribute with a
+// known value that isn't an ARN, such as a bucket name or a queue URL, names
+// its resource by that value.
+func TestPolicySources_ServiceResourcePolicies(t *testing.T) {
+	sources := PolicySources(parseRaw(t, servicePoliciesPlan), nil)
+	var got []string
+	for _, s := range sources {
+		line := s.Address + " " + s.Service
+		if s.Unknown || s.Unread {
+			line += " unknown"
+		}
+		for _, r := range s.Resources {
+			to := r.ARN + r.Value
+			if r.Change != nil {
+				to = r.Change.Address
+			}
+			line += " -> " + to + " " + r.Match.String()
+		}
+		if s.ResourceUnknown {
+			line += " -> unknown"
+		}
+		got = append(got, line)
+	}
+	want := []string{
+		`aws_s3_bucket_policy.by_ref s3 -> aws_s3_bucket.data yes`,
+		`aws_s3_bucket_policy.by_name s3 -> app-logs yes`,
+		`aws_sqs_queue.jobs sqs -> aws_sqs_queue.jobs yes`,
+		`aws_sqs_queue_policy.by_url sqs -> https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs yes`,
+		`aws_sns_topic_policy.by_ref sns -> aws_sns_topic.events yes`,
+		`aws_ecr_repository_policy.by_name ecr -> app yes`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sources =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

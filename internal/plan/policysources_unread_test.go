@@ -21,12 +21,6 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 		{"aws_iam_group_policy", `"group": "ops", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_group_policy_attachment", `"group": "ops", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_user", `"name": "ci", "permissions_boundary": "arn:aws:iam::123456789012:policy/b"`, "permissions_boundary", KindBoundary, "", "aws_iam_user"},
-		{"aws_s3_bucket_policy", `"bucket": "app-data", "policy": "{}"`, "policy", KindResource, "s3", "aws_s3_bucket"},
-		{"aws_sqs_queue_policy", `"queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs", "policy": "{}"`, "policy", KindResource, "sqs", "aws_sqs_queue"},
-		{"aws_sqs_queue", `"name": "app-jobs", "policy": "{}"`, "policy", KindResource, "sqs", "aws_sqs_queue"},
-		{"aws_sns_topic_policy", `"arn": "arn:aws:sns:us-east-1:123456789012:app-events", "policy": "{}"`, "policy", KindResource, "sns", "aws_sns_topic"},
-		{"aws_sns_topic", `"name": "app-events", "policy": "{}"`, "policy", KindResource, "sns", "aws_sns_topic"},
-		{"aws_ecr_repository_policy", `"repository": "app", "policy": "{}"`, "policy", KindResource, "ecr", "aws_ecr_repository"},
 		{"aws_kms_key", `"policy": "{}"`, "policy", KindResource, "kms", "aws_kms_key"},
 		{"aws_kms_key_policy", `"key_id": "1234abcd-12ab-34cd-56ef-1234567890ab", "policy": "{}"`, "policy", KindResource, "kms", "aws_kms_key"},
 	}

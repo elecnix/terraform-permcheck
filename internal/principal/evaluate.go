@@ -218,13 +218,20 @@ func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp).
 // Secrets Manager applies the same rule to a secret's resource policy
 // (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html).
+// The table of source types in package plan cites the page of each other
+// service it reads.
 //
 // A source of another service doesn't apply. A source of a type this version
 // doesn't read yet applies to every action of its service, as an unknown
 // source. For a read type:
 //
-//  1. The need's resource selects the resources of the source (see
-//     resourceMatch). A need on "*" needs a grant on every resource, which
+//  1. The need's resource selects the resources of the source, and the
+//     patterns of each resource that it may share an ARN with (see
+//     resourceMatch). A bucket has a pattern for itself and one for its
+//     objects, so a need on objects keeps the statements on objects only,
+//     and a need on the bucket keeps the statements on the bucket only. A
+//     statement on the bucket ARN doesn't grant its objects. A need on "*"
+//     needs a grant on every resource, which
 //     the policy of one resource can't give, and a Deny on one resource
 //     doesn't deny every resource. So no resource policy applies to it, and
 //     the identity policies decide it.
@@ -260,7 +267,7 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 	best := plan.LinkNo
 	var docs []*policy.Document
 	for _, a := range attached {
-		patterns := attachedPatterns(a)
+		patterns := attachedPatterns(s.Link.Type, a)
 		m := a.Match
 		as := patterns
 		switch {
@@ -271,7 +278,8 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 			// The resource's ARN and pattern are both unknown.
 			m = plan.LinkMaybe
 		default:
-			rm := resourceMatch(resource, patterns)
+			var rm plan.LinkMatch
+			patterns, rm = resourceMatch(resource, patterns)
 			if rm == plan.LinkNo {
 				continue
 			}
@@ -311,14 +319,17 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 	return best, policy.Merge(docs...)
 }
 
-// attachedPatterns returns the ARN patterns of a resource that a resource
-// policy attaches to: the known ARN of the link attribute, or the ARN or
-// target pattern of the resource in the plan (see iam.ResourceARNPatterns).
-// It returns nil when neither is known.
-func attachedPatterns(a plan.AttachedResource) []string {
+// attachedPatterns returns the ARN patterns of a resource of type typ that a
+// resource policy attaches to: the known ARN of the link attribute, the
+// patterns that another known value of the link attribute gives (see
+// iam.LinkValueARNPatterns), or the ARN or target pattern of the resource in
+// the plan (see iam.ResourceARNPatterns). It returns nil when none is known.
+func attachedPatterns(typ string, a plan.AttachedResource) []string {
 	switch {
 	case a.ARN != "":
 		return []string{a.ARN}
+	case a.Value != "":
+		return iam.LinkValueARNPatterns(typ, a.Value)
 	case a.Change != nil:
 		return iam.ResourceARNPatterns(a.Change)
 	}
@@ -328,19 +339,27 @@ func attachedPatterns(a plan.AttachedResource) []string {
 // resourceMatch compares a resource of a need with the ARN patterns of the
 // resource a policy is attached to. It is LinkYes when they provably share
 // an ARN, LinkNo when they provably share none, and LinkMaybe when the
-// overlap is undecidable (see policy.ARNOverlap).
-func resourceMatch(resource string, patterns []string) plan.LinkMatch {
-	out := plan.LinkNo
+// overlap is undecidable (see policy.ARNOverlap). It also returns the
+// patterns that decide the answer: those that provably share an ARN with the
+// need's resource, or for LinkMaybe those that may.
+func resourceMatch(resource string, patterns []string) ([]string, plan.LinkMatch) {
+	var yes, maybe []string
 	for _, p := range patterns {
 		overlap, decidable := policy.ARNOverlap(resource, p)
 		switch {
 		case overlap && decidable:
-			return plan.LinkYes
+			yes = append(yes, p)
 		case overlap:
-			out = plan.LinkMaybe
+			maybe = append(maybe, p)
 		}
 	}
-	return out
+	switch {
+	case yes != nil:
+		return yes, plan.LinkYes
+	case maybe != nil:
+		return maybe, plan.LinkMaybe
+	}
+	return nil, plan.LinkNo
 }
 
 // applyExclusives applies the exclusive resources of the principal's role

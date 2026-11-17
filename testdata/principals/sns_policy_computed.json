@@ -1,0 +1,135 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_sns_topic.events",
+      "mode": "managed",
+      "type": "aws_sns_topic",
+      "name": "events",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "app-events",
+          "fifo_topic": false
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "owner": true,
+          "policy": true
+        }
+      }
+    },
+    {
+      "address": "aws_sns_topic_policy.events",
+      "mode": "managed",
+      "type": "aws_sns_topic_policy",
+      "name": "events",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {},
+        "after_unknown": {
+          "id": true,
+          "policy": true,
+          "arn": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-task"
+            }
+          }
+        },
+        {
+          "address": "aws_sns_topic.events",
+          "mode": "managed",
+          "type": "aws_sns_topic",
+          "name": "events",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-events"
+            }
+          }
+        },
+        {
+          "address": "aws_sns_topic_policy.events",
+          "mode": "managed",
+          "type": "aws_sns_topic_policy",
+          "name": "events",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "arn": {
+              "references": [
+                "aws_sns_topic.events.arn",
+                "aws_sns_topic.events"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

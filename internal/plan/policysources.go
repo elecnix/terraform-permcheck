@@ -92,6 +92,12 @@ type AttachedResource struct {
 	// secret_arn of an aws_secretsmanager_secret_policy. It is empty when
 	// terraform computes the value at apply time.
 	ARN string
+	// Value is the known value of the link attribute when it isn't an ARN
+	// but still names the resource, such as the bucket name of an
+	// aws_s3_bucket_policy or the queue URL of an aws_sqs_queue_policy. Like
+	// ARN, it decides the resource without Change. It is empty when ARN or
+	// Change is set.
+	Value string
 	// Match is LinkYes when the source attaches to the resource, and
 	// LinkMaybe when the plan can't decide which of several resources it
 	// attaches to.
@@ -407,16 +413,57 @@ var sourceSpecs = map[string][]sourceSpec{
 	// resource type and the link attribute, or the resource itself. A read
 	// type also needs a row in iam's ownARNPatterns, which builds the
 	// resource's ARN pattern when the plan doesn't know its arn.
+	//
+	// A read type's service must combine its resource policy with the
+	// identity policies of a principal in the same account as IAM's general
+	// rule does: an Allow in either grants, and an explicit Deny in either
+	// overrides it. IAM's evaluation page says that services other than IAM
+	// and KMS "may also require an explicit Allow statement within the same
+	// account", so each row cites its service's documentation.
+
+	// Secrets Manager: see principal's resourcePolicy
+	// (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html).
 	"aws_secretsmanager_secret_policy": {{kind: KindResource, service: "secretsmanager", texts: attributeText("policy"), link: attributeLink("secret_arn", "aws_secretsmanager_secret")}},
 	"aws_secretsmanager_secret":        {{kind: KindResource, service: "secretsmanager", texts: configuredText("policy"), link: selfLink}},
-	"aws_s3_bucket_policy":             {{kind: KindResource, unread: true, service: "s3", texts: unreadText("policy"), link: attributeLink("bucket", "aws_s3_bucket")}},
-	"aws_sqs_queue_policy":             {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: attributeLink("queue_url", "aws_sqs_queue")}},
-	"aws_sqs_queue":                    {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: selfLink}},
-	"aws_sns_topic_policy":             {{kind: KindResource, unread: true, service: "sns", texts: unreadText("policy"), link: attributeLink("arn", "aws_sns_topic")}},
-	"aws_sns_topic":                    {{kind: KindResource, unread: true, service: "sns", texts: unreadText("policy"), link: selfLink}},
-	"aws_ecr_repository_policy":        {{kind: KindResource, unread: true, service: "ecr", texts: unreadText("policy"), link: attributeLink("repository", "aws_ecr_repository")}},
-	"aws_kms_key":                      {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: selfLink}},
-	"aws_kms_key_policy":               {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: attributeLink("key_id", "aws_kms_key")}},
+	// "If the parent AWS account owns the resource (bucket or object), it
+	// can grant resource permissions to its IAM principal by using either
+	// the user policy or the resource policy."
+	// (https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-auth-workflow-object-operation.html).
+	// The same page says that an object another account owns needs a grant
+	// from its owner, through the object ACL. The check assumes that the
+	// bucket's account owns its objects, which the bucket owner enforced
+	// setting of Object Ownership guarantees. The deprecated policy
+	// attribute of aws_s3_bucket is a source when the configuration writes
+	// it, at both provider major versions.
+	"aws_s3_bucket_policy": {{kind: KindResource, service: "s3", texts: attributeText("policy"), link: attributeLink("bucket", "aws_s3_bucket")}},
+	"aws_s3_bucket":        {{kind: KindResource, service: "s3", texts: configuredText("policy"), link: selfLink}},
+	// "There are two ways to give your users permissions to your Amazon SQS
+	// resources: using the Amazon SQS policy system (resource-based
+	// policies) and using the IAM policy system (identity-based policies).
+	// You can use one or both methods, with the exception of the ListQueues
+	// action, which is a regional permission that can only be set in an IAM
+	// policy." ListQueues acts on "*", which no resource policy grants
+	// (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-using-identity-based-policies.html).
+	"aws_sqs_queue_policy": {{kind: KindResource, service: "sqs", texts: attributeText("policy"), link: attributeLink("queue_url", "aws_sqs_queue")}},
+	"aws_sqs_queue":        {{kind: KindResource, service: "sqs", texts: configuredText("policy"), link: selfLink}},
+	// "To grant your users permissions for your Amazon SNS topics, you can
+	// use IAM policies, Amazon SNS policies, or both." An explicit deny in
+	// either "always overrides an allow"
+	// (https://docs.aws.amazon.com/sns/latest/dg/sns-using-identity-based-policies.html).
+	// AWS gives a new topic a default policy when the configuration leaves
+	// the policy attribute out. That policy is no source (see maySet).
+	"aws_sns_topic_policy": {{kind: KindResource, service: "sns", texts: attributeText("policy"), link: attributeLink("arn", "aws_sns_topic")}},
+	"aws_sns_topic":        {{kind: KindResource, service: "sns", texts: configuredText("policy"), link: selfLink}},
+	// "A user or role only needs to be allowed permission for an action
+	// through either a repository policy or an IAM policy but not both for
+	// the action to be allowed." A Deny in either denies the action
+	// (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html).
+	"aws_ecr_repository_policy": {{kind: KindResource, service: "ecr", texts: attributeText("policy"), link: attributeLink("repository", "aws_ecr_repository")}},
+	// A KMS key policy must allow the principal, or the account, before an
+	// identity policy has any effect, so the union rule doesn't apply. A
+	// later version reads key policies with their own rule.
+	"aws_kms_key":        {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: selfLink}},
+	"aws_kms_key_policy": {{kind: KindResource, unread: true, service: "kms", texts: unreadText("policy"), link: attributeLink("key_id", "aws_kms_key")}},
 }
 
 // PolicySources returns the policy sources that the changes set, in plan
@@ -723,6 +770,9 @@ func policyTarget(p *ResourceChange, maybe bool) policyText {
 //     aws_secretsmanager_secret, attaches to rc.
 //   - A link attribute with a known ARN attaches to the resource with that
 //     ARN, whether the plan contains it or not.
+//   - A link attribute with another known value, such as a bucket name or a
+//     queue URL, attaches to the resource that the value names, whether the
+//     plan contains it or not. AttachedResource.Value keeps the value.
 //   - Otherwise the references of the link attribute name the resources of
 //     the plan it may attach to, as PolicyLink.Match decides for a principal.
 //
@@ -735,6 +785,9 @@ func attachedResources(link PolicyLink, rc *ResourceChange, ctx sourceContext) (
 	}
 	if strings.HasPrefix(link.Value, "arn:") {
 		return []AttachedResource{{ARN: link.Value, Match: LinkYes}}, false
+	}
+	if link.Value != "" {
+		return []AttachedResource{{Value: link.Value, Match: LinkYes}}, false
 	}
 	var out []AttachedResource
 	for _, c := range ctx.changes {

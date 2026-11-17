@@ -1,0 +1,98 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-task",
+          "id": "app-task",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_sqs_queue_policy.jobs",
+      "mode": "managed",
+      "type": "aws_sqs_queue_policy",
+      "name": "jobs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:role/app-task\"}, \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+          "queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-task"
+            }
+          }
+        },
+        {
+          "address": "aws_sqs_queue_policy.jobs",
+          "mode": "managed",
+          "type": "aws_sqs_queue_policy",
+          "name": "jobs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "queue_url": {
+              "constant_value": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

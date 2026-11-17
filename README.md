@@ -641,11 +641,11 @@ This version reads the policy text of `aws_iam_role_policy` and of the
 that `aws_iam_role_policy_attachment`, the `roles` of
 `aws_iam_policy_attachment`, the `managed_policy_arns` of `aws_iam_role`, and
 the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach, and
-the Secrets Manager resource policies that `aws_secretsmanager_secret_policy`
-and the `policy` attribute of `aws_secretsmanager_secret` set. PermCheck merges them as AWS does in one account: any `Allow` grants,
+the resource policies of Secrets Manager, S3, SQS, SNS and ECR (see
+[Resource policies](#resource-policies)). PermCheck merges them as AWS does in one account: any `Allow` grants,
 and a definite `Deny` overrides it. It knows the other policy sources of a
-role, such as a permissions boundary and the resource policies of S3, SQS,
-SNS, ECR and KMS, but doesn't read their text yet. Each one that may apply to
+role, such as a permissions boundary and KMS key policies, but doesn't read
+their text yet. Each one that may apply to
 a need is an unknown source, and so is a policy whose text terraform computes
 at apply time.
 
@@ -695,9 +695,9 @@ its entry, and its `sources`. A role outside the plan also has `complete`,
 which is `true` when the plan has both exclusive resources for the role. Each
 source has an `address`, a `path`, a `kind` (`identity`, `boundary` or
 `resource`), a `text` (`known` or `unknown`), and a `link` (`yes`, or `maybe`
-when PermCheck can't decide it from the plan). For a secret policy, `link` is
-`yes` when its secret is the resource of a checked need, and `maybe` when it
-may be. An unknown source adds `unknown_reason`:
+when PermCheck can't decide it from the plan). For a resource policy, `link`
+is `yes` when its resource is the resource of a checked need, and `maybe` when
+it may be. An unknown source adds `unknown_reason`:
 `computed`, `unread`, or `outside_plan` for a managed policy the plan doesn't
 contain, such as an AWS managed policy, or for an inline policy that an
 `aws_iam_role_policies_exclusive` lists and the plan doesn't define. A source
@@ -761,35 +761,55 @@ role it can't decide: its `Allow` statements count as grants it can't check,
 with the reason `condition`, and it ignores its `Deny` statements. That way
 the removal can't turn into a missing need that the apply would disprove.
 
-##### Secrets Manager resource policies
+##### Resource policies
 
 In one account, AWS allows a request when an identity policy or a resource
 policy allows it, and an explicit deny in either overrides the allow
 ([policy evaluation logic](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp)).
-A secret's resource policy and the role's identity policies combine by that
-rule
-([Secrets Manager resource-based policies](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html)).
-PermCheck adds the statements of each secret policy that applies to the role's
-policies, and checks the need against the result.
+The IAM guide adds that some services may also require an `Allow` in the
+resource policy, so PermCheck reads the resource policies of a service only
+after its documentation confirms the rule:
 
-A secret policy applies to a need when its secret may be the need's resource.
-The `secret_arn` of an `aws_secretsmanager_secret_policy` links it to its
-secret, by reference or by a known ARN. PermCheck compares the need's ARN with
-the secret's `arn` when the plan knows it. Otherwise it compares the need's
-ARN with the secret's `name` followed by the six random characters that AWS
-appends. When the plan shows neither, the secret may be the need's resource.
-The policy's `Allow` statements then count as grants PermCheck can't check,
-with the reason `resource_scope`, and PermCheck ignores its `Deny`
-statements. A need without `resources` may act on any secret, so each secret
-policy applies to it. A need on `"*"` needs a grant on every resource. The
-policy of one secret can't give that, so PermCheck checks such a need against
-the identity policies alone.
+| Service | Resource types | Documentation |
+|---------|----------------|---------------|
+| Secrets Manager | `aws_secretsmanager_secret_policy`, the `policy` of `aws_secretsmanager_secret` | [Resource-based policies](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html) |
+| S3 | `aws_s3_bucket_policy`, the deprecated `policy` of `aws_s3_bucket` | [Authorizing an object operation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-auth-workflow-object-operation.html) |
+| SQS | `aws_sqs_queue_policy`, the `policy` of `aws_sqs_queue` | [Using Amazon SQS and IAM policies](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-using-identity-based-policies.html#sqs-using-sqs-and-iam-policies) |
+| SNS | `aws_sns_topic_policy`, the `policy` of `aws_sns_topic` | [IAM and Amazon SNS policies together](https://docs.aws.amazon.com/sns/latest/dg/sns-using-identity-based-policies.html#iam-and-sns-policies) |
+| ECR | `aws_ecr_repository_policy` | [Repository policies vs IAM policies](https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html#repository-policy-vs-iam-policy) |
 
-A statement of a secret policy applies to its own secret only, even when its
-`Resource` is `"*"`. PermCheck replaces that `"*"` with the secret's ARN, or
-with the name pattern when terraform computes the ARN at apply time. A statement whose `Resource`
-names part of the secret keeps it, and a statement on another secret grants
-nothing.
+PermCheck doesn't read KMS key policies yet. A key policy must allow the role
+or its account before an identity policy counts, so it needs its own rule.
+
+PermCheck adds the statements of each resource policy that applies to the
+role's policies, and checks the need against the result. A resource policy
+applies to a need when its resource may be the need's resource. The link
+attribute of the policy resource, such as `secret_arn` or `bucket`, names the
+resource by reference or by a known value, such as an ARN or a queue URL.
+PermCheck compares the need's ARN with the resource's
+`arn` when the plan knows it. Otherwise it compares the need's ARN with a
+pattern built from the resource's name, such as a secret's name followed by
+the six random characters that AWS appends. When the plan shows neither, the
+resource may be the need's resource. The policy's `Allow` statements then
+count as grants PermCheck can't check, with the reason `resource_scope`, and
+PermCheck ignores its `Deny` statements. A need without `resources` may act
+on any resource of the service, so each of its resource policies applies. A
+need on `"*"` needs a grant on every resource. The policy of one resource
+can't give that, so PermCheck checks such a need against the identity
+policies alone.
+
+A statement of a resource policy applies to its own resource only, even when
+its `Resource` is `"*"`. PermCheck replaces that `"*"` with the resource's ARN,
+or with the name pattern when terraform computes the ARN at apply time. A
+statement whose `Resource` names part of the resource keeps it, and a
+statement on another resource grants nothing. A bucket policy covers the
+bucket and its objects. A statement on `arn:aws:s3:::app-data` grants on the
+bucket only, so it doesn't give `s3:GetObject` on `arn:aws:s3:::app-data/*`.
+A statement on `arn:aws:s3:::app-data/*` grants on the objects only, so it
+doesn't give `s3:ListBucket` on the bucket. PermCheck assumes that the
+bucket's account is the owner of each object in it, as the bucket owner
+enforced setting of Object Ownership guarantees. An object whose owner is
+another account also needs a grant in the object's ACL.
 
 The `Principal` element of a statement says whom it applies to
 ([Principal element](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html)).
@@ -804,11 +824,24 @@ policies and grants the role nothing by itself. A `Deny` counts when its
 `NotPrincipal` list can't exclude the role.
 
 PermCheck assumes that the plan lists every resource policy, as it does for
-the role's policies. For a secret that the plan doesn't contain, or whose
+the role's policies. For a resource that the plan doesn't contain, or whose
 policy the plan doesn't set, PermCheck sees an empty resource policy, and the
-identity policies decide the need. A secret policy set outside the plan can
+identity policies decide the need. A resource policy set outside the plan can
 grant a need that PermCheck reports as missing, or deny a need that it reports
-as covered.
+as covered. The `policy` attribute of a resource such as `aws_sqs_queue` is a
+source only when the configuration writes it. When the configuration leaves
+it out, the attribute shows a policy that another resource sets, or AWS's
+default.
+
+AWS gives a new SNS topic a default policy. It allows `"AWS": "*"` only when
+the condition key `AWS:SourceOwner` equals the topic owner's account. The SNS
+guide says that some AWS services set that key when they publish to a topic
+on behalf of an account
+([`aws:SourceAccount` versus `aws:SourceOwner`](https://docs.aws.amazon.com/sns/latest/dg/sns-access-policy-use-cases.html#source-account-versus-source-owner)).
+A role's own call doesn't set it, so the default policy grants the role
+nothing. PermCheck reads a topic without a configured policy as a topic with
+an empty policy, and checks the need against the identity policies alone, as
+AWS does.
 
 A release older than the `principals` key ignores it and checks every need
 against the `--policy-*` document.
