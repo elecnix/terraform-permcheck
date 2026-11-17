@@ -1,0 +1,82 @@
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"name": "app-task", "assume_role_policy": "{}"},
+        "after_unknown": {"arn": true, "id": true, "inline_policy": true, "managed_policy_arns": true}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.task_logs",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task_logs",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "logs",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"logs:PutLogEvents\",\"Resource\":\"*\"}]}"
+        },
+        "after_unknown": {"id": true, "role": true}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.task_secrets",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task_secrets",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"name": "secrets"},
+        "after_unknown": {"id": true, "policy": true, "role": true}
+      }
+    }
+  ],
+  "configuration": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "expressions": {
+            "name": {"constant_value": "app-task"},
+            "assume_role_policy": {"constant_value": "{}"}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.task_logs",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "task_logs",
+          "expressions": {
+            "name": {"constant_value": "logs"},
+            "role": {"references": ["aws_iam_role.task.id", "aws_iam_role.task"]},
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.task_secrets",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "task_secrets",
+          "expressions": {
+            "name": {"constant_value": "secrets"},
+            "role": {"references": ["aws_iam_role.task.id", "aws_iam_role.task"]},
+            "policy": {"references": ["data.aws_iam_policy_document.secrets.json", "data.aws_iam_policy_document.secrets"]}
+          }
+        }
+      ]
+    }
+  }
+}
