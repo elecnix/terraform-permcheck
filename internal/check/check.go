@@ -254,9 +254,16 @@ type Result struct {
 type PrincipalSources struct {
 	// Label is the principal's key in the principals map.
 	Label string
-	// Address is the terraform address of its role.
+	// Address is the terraform address of its role. It is empty for a role
+	// outside the plan.
 	Address string
-	// Sources are in plan order.
+	// Name and ARN are the name or the ARN that the principals map gives a
+	// role outside the plan. Exactly one of Address, Name and ARN is set.
+	Name, ARN string
+	// Complete is true when the plan shows every policy of the role (see
+	// principal.Result.Complete).
+	Complete bool
+	// Sources are in the order of principal.Result.Sources.
 	Sources []principal.Applied
 }
 
@@ -347,18 +354,30 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 
 	if len(mapped) > 0 {
 		sources := plan.PolicySources(in.changes, in.data)
+		exclusives := plan.Exclusives(in.changes)
 		for _, label := range slices.Sorted(maps.Keys(mapped)) {
-			address := opts.Principals[label].Address
-			role, err := principal.Find(in.changes, label, address)
-			if err != nil {
-				return Result{}, err
+			entry := opts.Principals[label]
+			p := principal.Principal{Label: label}
+			if entry.Address != "" {
+				role, err := principal.Find(in.changes, label, entry.Address)
+				if err != nil {
+					return Result{}, err
+				}
+				p.Role = role
+			} else {
+				if err := principal.FindOutside(in.changes, label, entry); err != nil {
+					return Result{}, err
+				}
+				outside := entry.Outside()
+				p.Outside = &outside
 			}
-			pr, err := principal.Check(principal.Principal{Label: label, Role: role}, mapped[label], sources, opts.Filter.StrictResources)
+			pr, err := principal.Check(p, mapped[label], sources, exclusives, opts.Filter.StrictResources)
 			if err != nil {
 				return Result{}, err
 			}
 			missing = append(missing, pr.Missing...)
-			res.Principals = append(res.Principals, PrincipalSources{Label: label, Address: address, Sources: pr.Sources})
+			res.Principals = append(res.Principals, PrincipalSources{Label: label, Address: entry.Address, Name: entry.Name, ARN: entry.ARN,
+				Complete: pr.Complete, Sources: pr.Sources})
 		}
 	}
 

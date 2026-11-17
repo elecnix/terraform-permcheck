@@ -1,0 +1,11 @@
+{
+  "principals": { "ops": { "name": "ops-admin" } },
+  "needs": [
+    {
+      "sid": "ReadParams",
+      "principal": "ops",
+      "actions": ["ssm:GetParameter"],
+      "resources": ["arn:aws:ssm:us-east-1:123456789012:parameter/app/*"]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/elecnix/terraform-permcheck/internal/check"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/principal"
 )
@@ -25,22 +26,32 @@ func (r *Report) notices() string {
 	for _, p := range r.principals {
 		for _, s := range p.Sources {
 			if s.Unknown {
-				b.WriteString(sourceNotice(p.Label, s) + "\n")
+				b.WriteString(sourceNotice(p, s) + "\n")
 			}
 		}
 	}
 	return b.String()
 }
 
-// sourceNotice says why the text of a policy source is unknown, and that the
-// needs of the principal may depend on it. A boundary can only limit what
-// the other policies grant, and any other source may grant a need. For a
-// managed policy outside the plan, it also gives the fix: a
+// sourceNotice says why the text of a policy source of the principal p is
+// unknown, and that the needs of p may depend on it. A boundary can only
+// limit what the other policies grant, and any other source may grant a
+// need. For a managed policy outside the plan, it also gives the fix: a
 // data "aws_iam_policy" block with the same arn gives PermCheck the text.
-func sourceNotice(label string, s principal.Applied) string {
+// The implicit source of a role outside the plan gives the exclusive
+// resources that make the plan list the kinds of policy it doesn't show.
+func sourceNotice(p check.PrincipalSources, s principal.Applied) string {
+	label := p.Label
+	if len(s.Unlisted) > 0 {
+		return outsideRoleNotice(p, s.Unlisted)
+	}
 	var why, fix string
 	switch unknownReason(s) {
 	case reasonOutsidePlan:
+		if s.PolicyName != "" {
+			why = "the plan doesn't define the inline policy " + s.PolicyName + " that the list names"
+			break
+		}
 		why = s.PolicyARN + " is a managed policy that the plan doesn't contain"
 		if s.PolicyMaybe {
 			why = s.PolicyARN + " may be a managed policy that the plan doesn't contain"
@@ -52,6 +63,9 @@ func sourceNotice(label string, s principal.Applied) string {
 		why = fmt.Sprintf("this version doesn't read the %s attribute of %s yet", s.Path, resourceType(s.Address))
 	default:
 		why = "policy text is known only after apply"
+		if s.Path == "policy_names" {
+			why = "the names of the inline policies are known only after apply"
+		}
 		if s.Policy != "" {
 			why = "the text of " + s.Policy + " is known only after apply"
 		}
@@ -61,6 +75,33 @@ func sourceNotice(label string, s principal.Applied) string {
 		effect = "limited"
 	}
 	return fmt.Sprintf("notice: %s: %s; needs of %q may be %s by it%s", s.Address, why, label, effect, fix)
+}
+
+// The exclusive resources that make the plan list one kind of policy of a
+// role, by the kind (see principal.Applied.Unlisted).
+var exclusiveFix = map[string]string{
+	principal.UnlistedInline:  "aws_iam_role_policies_exclusive",
+	principal.UnlistedManaged: "aws_iam_role_policy_attachments_exclusive",
+}
+
+// outsideRoleNotice is the notice of the implicit source of a role outside
+// the plan: other stacks may attach policies of the unlisted kinds to it.
+func outsideRoleNotice(p check.PrincipalSources, unlisted []string) string {
+	role := p.Name
+	if p.ARN != "" {
+		role = p.ARN
+	}
+	kinds := strings.Join(unlisted, " and ")
+	fixes := make([]string, len(unlisted))
+	for i, k := range unlisted {
+		fixes[i] = "an " + exclusiveFix[k]
+	}
+	verb := "makes"
+	if len(fixes) > 1 {
+		verb = "make"
+	}
+	return fmt.Sprintf("notice: role %s is outside the plan, and other stacks may attach %s policies to it; needs of %q may be granted by them; %s for the role %s the plan list every policy of that kind",
+		role, kinds, p.Label, strings.Join(fixes, " and "), verb)
 }
 
 // resourceType returns the resource type of a terraform address, or the
@@ -78,6 +119,9 @@ const (
 	reasonComputed    = "computed"
 	reasonUnread      = "unread"
 	reasonOutsidePlan = "outside_plan"
+	// reasonAttachedOutside is the reason of the implicit source of a role
+	// outside the plan.
+	reasonAttachedOutside = "attached_outside_plan"
 )
 
 // unknownReason says why the text of a policy source is unknown. A managed
@@ -87,6 +131,8 @@ func unknownReason(s principal.Applied) string {
 	switch {
 	case !s.Unknown:
 		return ""
+	case len(s.Unlisted) > 0:
+		return reasonAttachedOutside
 	case s.OutsidePlan:
 		return reasonOutsidePlan
 	case s.Unread:

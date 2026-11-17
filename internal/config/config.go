@@ -20,9 +20,10 @@ type Config struct {
 	// Needs declares permissions a principal needs beyond what the terraform
 	// resources imply. They are checked against the same policy.
 	Needs []iam.Need `json:"needs,omitempty"`
-	// Principals maps a need's principal label to a role in the plan. A
-	// need whose label is a key of the map is checked against the policies
-	// the plan attaches to that role, not against the --policy-* document.
+	// Principals maps a need's principal label to a role, by its address in
+	// the plan, or by its name or ARN for a role outside the plan. A need
+	// whose label is a key of the map is checked against the policies the
+	// plan attaches to that role, not against the --policy-* document.
 	Principals map[string]principal.Entry `json:"principals,omitempty"`
 	// AllowUnresolvedTypes turns on --allow-unresolved-types: a resource
 	// type no schema source knows is reported but does not fail the run.

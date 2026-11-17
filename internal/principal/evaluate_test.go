@@ -6,6 +6,7 @@ import (
 
 	"github.com/elecnix/terraform-permcheck/internal/iam"
 	"github.com/elecnix/terraform-permcheck/internal/plan"
+	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
 // checkPlan parses an inline plan, finds the role at aws_iam_role.task, and
@@ -23,7 +24,7 @@ func checkPlan(t *testing.T, raw string, needs []iam.Need, strict bool) Result {
 	for i := range needs {
 		needs[i].Principal = "task"
 	}
-	res, err := Check(Principal{Label: "task", Role: role}, needs, plan.PolicySources(changes, nil), strict)
+	res, err := Check(Principal{Label: "task", Role: role}, needs, plan.PolicySources(changes, nil), plan.Exclusives(changes), strict)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,8 +134,78 @@ func TestCheck_UnparsablePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Check(Principal{Label: "task", Role: changes[0]}, nil, plan.PolicySources(changes, nil), false)
+	_, err = Check(Principal{Label: "task", Role: changes[0]}, nil, plan.PolicySources(changes, nil), nil, false)
 	if err == nil || !strings.Contains(err.Error(), "aws_iam_role_policy.p") {
 		t.Errorf("error = %v, want one that names the source", err)
+	}
+}
+
+// TestPrincipal_Identity checks the policy.Principal of a role in the plan
+// and of a role outside it, which the resource policy stages match against
+// the Principal and NotPrincipal elements.
+func TestPrincipal_Identity(t *testing.T) {
+	changes, err := plan.Parse([]byte(`{"resource_changes": [`+taskRole+`]}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Principal{Label: "task", Role: changes[0]}.Identity()
+	want := policy.Principal{Kind: policy.KindRole, Name: "app-task", PermissionsBoundary: true}
+	if got != want {
+		t.Errorf("role in the plan = %+v, want %+v", got, want)
+	}
+	outside := plan.OutsideRole{Name: "ops-admin", ARN: "arn:aws:iam::123456789012:role/ops-admin"}
+	got = Principal{Label: "ops", Outside: &outside}.Identity()
+	want = policy.Principal{Kind: policy.KindRole, Name: "ops-admin", ARN: outside.ARN}
+	if got != want {
+		t.Errorf("role outside the plan = %+v, want %+v", got, want)
+	}
+}
+
+// For a role in the plan, an exclusive resource doesn't change a verdict by
+// completing the set, since the check assumes the plan shows every policy.
+// A source whose kind the list covers and that the list omits may be
+// removed after the apply, so its link is maybe: its Allow counts as a grant
+// the tool can't check, and its Deny doesn't count. A listed source keeps
+// its link.
+func TestCheck_ExclusiveOmitsSourceOfRoleInPlan(t *testing.T) {
+	denyLogs := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sqs:SendMessage\",\"Resource\":\"*\"},{\"Effect\":\"Deny\",\"Action\":\"logs:PutLogEvents\",\"Resource\":\"*\"}]}`
+	allowLogs := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"logs:PutLogEvents\",\"Resource\":\"*\"}]}`
+	plain := `{"resource_changes": [
+		{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
+		 "change": {"actions": ["create"], "after": {"name": "app-task"}, "after_unknown": {"arn": true}}},
+		{"address": "aws_iam_role_policy.kept", "type": "aws_iam_role_policy", "name": "kept",
+		 "change": {"actions": ["create"], "after": {"role": "app-task", "name": "kept", "policy": "` + allowLogs + `"}, "after_unknown": {}}},
+		{"address": "aws_iam_role_policy.omitted", "type": "aws_iam_role_policy", "name": "omitted",
+		 "change": {"actions": ["create"], "after": {"role": "app-task", "name": "omitted", "policy": "` + denyLogs + `"}, "after_unknown": {}}}`
+	withExclusive := plain + `,
+		{"address": "aws_iam_role_policies_exclusive.task", "type": "aws_iam_role_policies_exclusive", "name": "task",
+		 "change": {"actions": ["create"], "after": {"role_name": "app-task", "policy_names": ["kept"]}, "after_unknown": {}}}]}`
+	needs := func() []iam.Need {
+		return []iam.Need{
+			{Sid: "Send", Actions: []string{"sqs:SendMessage"}},
+			{Sid: "Logs", Actions: []string{"logs:PutLogEvents"}},
+		}
+	}
+	// Without the exclusive resource, the Deny of the omitted policy makes
+	// Logs missing.
+	if got, want := verdicts(checkPlan(t, plain+`]}`, needs(), true).Missing), "Logs logs:PutLogEvents"; got != want {
+		t.Errorf("without exclusive: %q, want %q", got, want)
+	}
+	if got, want := verdicts(checkPlan(t, withExclusive, needs(), false).Missing), ""; got != want {
+		t.Errorf("default: %q, want %q", got, want)
+	}
+	res := checkPlan(t, withExclusive, needs(), true)
+	if got, want := verdicts(res.Missing), "Send sqs:SendMessage condition"; got != want {
+		t.Errorf("strict: %q, want %q", got, want)
+	}
+	var links []string
+	for _, s := range res.Sources {
+		links = append(links, s.Address+" "+s.Match.String())
+	}
+	if got, want := strings.Join(links, "; "), "aws_iam_role_policy.kept yes; aws_iam_role_policy.omitted maybe"; got != want {
+		t.Errorf("sources = %q, want %q", got, want)
+	}
+	if !res.Complete {
+		t.Error("a role in the plan is not complete")
 	}
 }

@@ -59,6 +59,15 @@ type PolicySource struct {
 	// the plan doesn't create and no data source of the plan reads, such as
 	// an AWS managed policy. The plan can't show its text.
 	OutsidePlan bool
+	// PolicyName is the known name of an inline policy: the name of an
+	// aws_iam_role_policy, or of an inline_policy block of an aws_iam_role.
+	// It is empty for any other source, and when terraform computes the
+	// name at apply time.
+	PolicyName string
+	// Managed is true when the source attaches a managed policy, such as an
+	// aws_iam_role_policy_attachment, and false when it holds an inline
+	// policy or a resource policy.
+	Managed bool
 	// Link ties the source to the principal or resource it attaches to.
 	Link PolicyLink
 }
@@ -317,6 +326,8 @@ type sourceSpec struct {
 	// grant, such as secretsmanager. It is empty for an identity or
 	// boundary source.
 	service string
+	// managed marks a source that attaches a managed policy.
+	managed bool
 	// arn is the attribute of an unread source that holds the ARN of the
 	// managed policy it attaches, such as policy_arn. It sets PolicyARN and
 	// OutsidePlan. A read source sets them through its texts function.
@@ -341,24 +352,29 @@ var sourceSpecs = map[string][]sourceSpec{
 	"aws_iam_role_policy": {{kind: KindIdentity, texts: attributeText("policy"), link: attributeLink("role", "aws_iam_role")}},
 	"aws_iam_role": {
 		{kind: KindIdentity, texts: blockTexts("inline_policy", "policy"), link: selfLink},
-		{kind: KindIdentity, texts: managedPolicyList("managed_policy_arns"), link: selfLink},
+		{kind: KindIdentity, managed: true, texts: managedPolicyList("managed_policy_arns"), link: selfLink},
 		{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink},
 	},
-	"aws_iam_role_policy_attachment":            {{kind: KindIdentity, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("role", "aws_iam_role")}},
-	"aws_iam_role_policy_attachments_exclusive": {{kind: KindIdentity, unread: true, texts: unreadText("policy_arns"), link: attributeLink("role_name", "aws_iam_role")}},
+	"aws_iam_role_policy_attachment": {{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("role", "aws_iam_role")}},
+	// An aws_iam_role_policy_attachments_exclusive attaches each ARN of its
+	// list. Its other effect, removing what the list omits, is an Exclusive
+	// (see Exclusives). An aws_iam_role_policies_exclusive holds no policy
+	// text, so it has no spec: the inline policies it lists come from
+	// aws_iam_role_policy resources, or from outside the plan.
+	"aws_iam_role_policy_attachments_exclusive": {{kind: KindIdentity, managed: true, texts: managedPolicyList("policy_arns"), link: attributeLink("role_name", "aws_iam_role")}},
 	"aws_iam_policy_attachment": {
-		{kind: KindIdentity, texts: managedPolicy("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
-		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "users"), link: attributeLink("users", "aws_iam_user")},
-		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "groups"), link: attributeLink("groups", "aws_iam_group")},
+		{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
+		{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "users"), link: attributeLink("users", "aws_iam_user")},
+		{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "groups"), link: attributeLink("groups", "aws_iam_group")},
 	},
 
 	// Identity policies and the boundary of a user, and the policies of a
 	// group.
 	"aws_iam_user":                    {{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink}},
 	"aws_iam_user_policy":             {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("user", "aws_iam_user")}},
-	"aws_iam_user_policy_attachment":  {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("user", "aws_iam_user")}},
+	"aws_iam_user_policy_attachment":  {{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("user", "aws_iam_user")}},
 	"aws_iam_group_policy":            {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("group", "aws_iam_group")}},
-	"aws_iam_group_policy_attachment": {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("group", "aws_iam_group")}},
+	"aws_iam_group_policy_attachment": {{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("group", "aws_iam_group")}},
 
 	// Resource policies.
 	"aws_secretsmanager_secret_policy": {{kind: KindResource, unread: true, service: "secretsmanager", texts: unreadText("policy"), link: attributeLink("secret_arn", "aws_secretsmanager_secret")}},
@@ -403,6 +419,8 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 					Policy:      t.policy,
 					PolicyMaybe: t.maybe,
 					OutsidePlan: t.outside,
+					PolicyName:  inlinePolicyName(rc, t.path),
+					Managed:     spec.managed,
 					Link:        link,
 				}
 				if spec.unread {
@@ -418,6 +436,25 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 		}
 	}
 	return out
+}
+
+// inlinePolicyName returns the known name of the inline policy whose text is
+// at path in rc: the name of an aws_iam_role_policy, or the name of an
+// inline_policy block of an aws_iam_role. It is empty for any other source.
+func inlinePolicyName(rc *ResourceChange, path string) string {
+	switch {
+	case rc.Type == rolePolicyType && path == "policy":
+		return rc.AttributeValues["name"]
+	case rc.Type == roleType && strings.HasPrefix(path, "inline_policy.") && strings.HasSuffix(path, ".policy"):
+		namePath := strings.TrimSuffix(path, ".policy") + ".name"
+		if rc.paths == nil || unknownAlong(rc.paths.unknown, namePath) {
+			return ""
+		}
+		v, _ := walk(rc.paths.state, namePath)
+		name, _ := v.(string)
+		return name
+	}
+	return ""
 }
 
 // policyType is the resource type of a customer managed policy.

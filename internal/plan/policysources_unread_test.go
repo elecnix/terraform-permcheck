@@ -16,7 +16,6 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 		service  string
 		linkType string
 	}{
-		{"aws_iam_role_policy_attachments_exclusive", `"role_name": "app-task", "policy_arns": ["arn:aws:iam::123456789012:policy/x"]`, "policy_arns", KindIdentity, "", "aws_iam_role"},
 		{"aws_iam_user_policy", `"user": "ci", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_user"},
 		{"aws_iam_user_policy_attachment", `"user": "ci", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_user"},
 		{"aws_iam_group_policy", `"group": "ops", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_group"},

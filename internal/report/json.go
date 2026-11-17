@@ -36,20 +36,36 @@ type JSONResult struct {
 type JSONPrincipalSources struct {
 	// Principal is the principal's key in the config's principals map.
 	Principal string `json:"principal"`
-	// Address is the terraform address of its role.
-	Address string `json:"address"`
-	// Sources are in plan order. The list is empty when no source applies.
+	// Address is the terraform address of its role. It is absent for a
+	// role outside the plan.
+	Address string `json:"address,omitempty"`
+	// Name and ARN are the name or the ARN that the principals map gives a
+	// role outside the plan. Each is absent unless the map sets it.
+	Name string `json:"name,omitempty"`
+	ARN  string `json:"arn,omitempty"`
+	// Complete is set for a role outside the plan only. It is true when the
+	// plan has both exclusive resources for the role, so the sources list
+	// every policy of the role, some perhaps with unknown text. It is false
+	// when other stacks may attach policies to the role, and then the
+	// sources end with the implicit source of those policies. The check
+	// assumes that the plan shows every policy of a role in the plan.
+	Complete *bool `json:"complete,omitempty"`
+	// Sources are in plan order, then the inline policies that an exclusive
+	// resource lists and the plan doesn't define, then the implicit source
+	// of a role outside the plan. The list is empty when no source applies.
 	Sources []JSONPolicySource `json:"sources"`
 }
 
 // JSONPolicySource is one policy source of a mapped principal.
 type JSONPolicySource struct {
 	// Address is the terraform address of the resource that sets the
-	// policy.
-	Address string `json:"address"`
+	// policy. It is absent for the implicit source of a role outside the
+	// plan.
+	Address string `json:"address,omitempty"`
 	// Path is the attribute path of the policy in that resource, such as
-	// policy, inline_policy.0.policy or policy_arn.
-	Path string `json:"path"`
+	// policy, inline_policy.0.policy, policy_arn or policy_names.0. It is
+	// absent for the implicit source of a role outside the plan.
+	Path string `json:"path,omitempty"`
 	// Kind is "identity", "boundary" or "resource".
 	Kind string `json:"kind"`
 	// Text is "known" when the check read the policy text, and "unknown"
@@ -59,12 +75,20 @@ type JSONPolicySource struct {
 	// UnknownReason says why the text is unknown: "computed" when
 	// terraform computes it at apply time, "unread" when this version
 	// doesn't read the source's type yet, and "outside_plan" when the
-	// source attaches a managed policy that the plan doesn't contain. It is
-	// absent when the text is known.
+	// source attaches a managed policy that the plan doesn't contain, or
+	// when an aws_iam_role_policies_exclusive lists an inline policy that
+	// the plan doesn't define. The implicit source of a role outside the
+	// plan has "attached_outside_plan". It is absent when the text is known.
 	UnknownReason string `json:"unknown_reason,omitempty"`
 	// PolicyARN is the known ARN of the managed policy the source attaches.
 	// It is absent for a source that holds its text itself.
 	PolicyARN string `json:"policy_arn,omitempty"`
+	// PolicyName is the name of the inline policy, when the plan knows it.
+	PolicyName string `json:"policy_name,omitempty"`
+	// Unlisted names the kinds of policy, "inline" and "managed", that
+	// other stacks may attach to a role outside the plan. It is set on the
+	// implicit source of that role only.
+	Unlisted []string `json:"unlisted,omitempty"`
 	// Policy is the address of the aws_iam_policy resource, or of the
 	// data "aws_iam_policy" source, whose text the check read for the
 	// managed policy the source attaches. It is absent for a source that
@@ -227,7 +251,11 @@ func (r *Report) json() string {
 	}
 
 	for _, p := range r.principals {
-		item := JSONPrincipalSources{Principal: p.Label, Address: p.Address, Sources: []JSONPolicySource{}}
+		item := JSONPrincipalSources{Principal: p.Label, Address: p.Address, Name: p.Name, ARN: p.ARN, Sources: []JSONPolicySource{}}
+		if p.Address == "" {
+			complete := p.Complete
+			item.Complete = &complete
+		}
 		for _, src := range p.Sources {
 			item.Sources = append(item.Sources, jsonPolicySource(src))
 		}
@@ -242,13 +270,15 @@ func (r *Report) json() string {
 // jsonPolicySource renders one policy source of a mapped principal.
 func jsonPolicySource(s principal.Applied) JSONPolicySource {
 	out := JSONPolicySource{
-		Address:   s.Address,
-		Path:      s.Path,
-		Kind:      string(s.Kind),
-		Text:      "known",
-		PolicyARN: s.PolicyARN,
-		Policy:    s.Policy,
-		Link:      s.Match.String(),
+		Address:    s.Address,
+		Path:       s.Path,
+		Kind:       string(s.Kind),
+		Text:       "known",
+		PolicyARN:  s.PolicyARN,
+		PolicyName: s.PolicyName,
+		Policy:     s.Policy,
+		Unlisted:   s.Unlisted,
+		Link:       s.Match.String(),
 	}
 	if s.Unknown {
 		out.Text = "unknown"

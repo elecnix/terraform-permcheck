@@ -591,9 +591,10 @@ policy it's given.
 
 #### Needs of a role in the plan
 
-The `principals` map gives a need's `principal` label a role that the plan
-creates or keeps. Its value is the terraform instance address of an
-`aws_iam_role`, as `terraform show -json` prints it:
+The `principals` map gives a need's `principal` label a role. Its value sets
+exactly one key. For a role that the plan creates or keeps, `address` is the
+terraform instance address of its `aws_iam_role`, as `terraform show -json`
+prints it:
 
 ```json
 {
@@ -608,6 +609,20 @@ creates or keeps. Its value is the terraform instance address of an
   ]
 }
 ```
+
+For a role outside the plan, such as a role that another stack creates, set
+`name` or `arn` instead:
+
+```json
+{ "principals": { "ops": { "name": "ops-admin" } } }
+{ "principals": { "ops": { "arn": "arn:aws:iam::123456789012:role/ops-admin" } } }
+```
+
+An `arn` must be the ARN of an IAM role, without a wildcard. PermCheck reads
+the role's name from the last part of the ARN's path. A run fails with exit
+code 2 when a role of the plan has the known name or ARN that the entry gives,
+and the error gives the role's address to use instead. So each role in the
+plan has one entry form.
 
 A need whose label is a key of the map is a mapped need. PermCheck checks it
 against the policies the plan attaches to the role, and ignores the
@@ -624,8 +639,8 @@ map runs only when `--principal` selects it.
 This version reads the policy text of `aws_iam_role_policy` and of the
 `inline_policy` blocks of `aws_iam_role`. It also reads the managed policies
 that `aws_iam_role_policy_attachment`, the `roles` of
-`aws_iam_policy_attachment`, and the `managed_policy_arns` of `aws_iam_role`
-attach. PermCheck merges them as AWS does in one account: any `Allow` grants,
+`aws_iam_policy_attachment`, the `managed_policy_arns` of `aws_iam_role`, and
+the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach. PermCheck merges them as AWS does in one account: any `Allow` grants,
 and a definite `Deny` overrides it. It knows the other policy sources of a
 role, such as a permissions boundary and the resource policies of Secrets
 Manager, S3, SQS, SNS, ECR and KMS, but doesn't read their text yet. Each one
@@ -672,13 +687,17 @@ notice: aws_iam_role_policy.task_secrets: policy text is known only after apply;
 A notice doesn't change the exit code. A finding of a mapped need shows the
 label, as in `needs "FetchSecrets" of task`. Its `json` entry has a
 `principal` key. The `json` report adds `policy_sources`, one entry per
-mapped principal with its `principal`, its `address` and its `sources`. Each
+mapped principal with its `principal`, the `address`, `name` or `arn` from
+its entry, and its `sources`. A role outside the plan also has `complete`,
+which is `true` when the plan has both exclusive resources for the role. Each
 source has an `address`, a `path`, a `kind` (`identity`, `boundary` or
 `resource`), a `text` (`known` or `unknown`), and a `link` (`yes`, or `maybe`
 when PermCheck can't decide it from the plan). An unknown source adds `unknown_reason`:
 `computed`, `unread`, or `outside_plan` for a managed policy the plan doesn't
-contain, such as an AWS managed policy. A source that attaches a managed
-policy by a known ARN adds `policy_arn`. A source whose text PermCheck reads
+contain, such as an AWS managed policy, or for an inline policy that an
+`aws_iam_role_policies_exclusive` lists and the plan doesn't define. A source
+that attaches a managed policy by a known ARN adds `policy_arn`, and an inline
+policy with a known name adds `policy_name`. A source whose text PermCheck reads
 from an `aws_iam_policy` or a `data "aws_iam_policy"` adds `policy`, that
 resource's address. These keys appear only when a run checks a mapped need.
 
@@ -694,10 +713,51 @@ stderr says so. Its `json` report has
 `"plan_resources_skipped": true`. A run without a `--policy-*` source that
 selects an unmapped need fails as before.
 
-PermCheck assumes the plan lists every policy of a mapped role. A policy that
-another stack or a person attaches to the role can grant a need that
-PermCheck reports as missing. A release older than the `principals` key
-ignores it and checks every need against the `--policy-*` document.
+For a role in the plan, PermCheck assumes the plan lists every policy of the
+role. A policy that another stack or a person attaches to the role can grant a
+need that PermCheck reports as missing.
+
+A role outside the plan gets a different rule, since other stacks usually
+attach its policies. PermCheck adds an implicit unknown source for the
+policies attached outside the plan. PermCheck then counts a need that the
+plan's policies don't grant as covered by default, and reports it unverified
+under `--strict-resources` with the reason `policy_unknown`. In the `json` report, that source comes last
+in `sources`, without an `address`. Its `unknown_reason` is
+`attached_outside_plan`, and its `unlisted` key lists the kinds of policy that
+the plan may not show, `inline` and `managed`. The run prints one notice for
+it:
+
+```
+notice: role ops-admin is outside the plan, and other stacks may attach inline and managed policies to it; needs of "ops" may be granted by them; an aws_iam_role_policies_exclusive and an aws_iam_role_policy_attachments_exclusive for the role make the plan list every policy of that kind
+```
+
+The exclusive resources of the AWS provider make the plan list every policy of
+a role. The provider removes any policy of their kind that their list leaves
+out:
+
+- `aws_iam_role_policies_exclusive` lists, in `policy_names`, the names of the
+  role's inline policies.
+- `aws_iam_role_policy_attachments_exclusive` lists, in `policy_arns`, the
+  ARNs of the managed policies attached to the role.
+
+When the plan has both for a role outside the plan, PermCheck drops the
+implicit source, and a need that the plan's policies don't grant is missing.
+With one of them, the implicit source stays for the other kind. A list that
+terraform computes at apply time still covers its kind, and PermCheck reads it
+as one unknown source. An inline policy that `policy_names` lists and that the
+plan doesn't define as an `aws_iam_role_policy` stays on the role, so it's an
+unknown source too.
+
+The exclusive resources don't change the assumption for a role in the plan.
+They can remove a policy that the plan defines but that their list leaves out.
+Terraform may then attach that policy again in the same apply, so PermCheck
+can't tell whether it stays. It treats such a policy as one whose link to the
+role it can't decide: its `Allow` statements count as grants it can't check,
+with the reason `condition`, and it ignores its `Deny` statements. That way
+the removal can't turn into a missing need that the apply would disprove.
+
+A release older than the `principals` key ignores it and checks every need
+against the `--policy-*` document.
 
 ## Supported clouds
 

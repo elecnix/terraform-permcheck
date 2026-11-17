@@ -1,0 +1,51 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role_policy.ops_logs",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "ops_logs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "ops-logs",
+          "policy": "{\"Statement\":[{\"Action\":\"logs:PutLogEvents\",\"Effect\":\"Allow\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}",
+          "role": "ops-admin"
+        },
+        "after_unknown": {
+          "id": true,
+          "name_prefix": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role_policy.ops_logs",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "ops_logs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {"constant_value": "ops-logs"},
+            "policy": {},
+            "role": {"constant_value": "ops-admin"}
+          }
+        }
+      ]
+    }
+  }
+}
