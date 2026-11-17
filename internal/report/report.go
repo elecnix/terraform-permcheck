@@ -375,14 +375,19 @@ func (f finding) unverifiedReason() iam.UnverifiedReason {
 		return iam.ReasonCondition
 	case f.ResourceScopeUnverified:
 		return iam.ReasonResourceScope
+	case f.PolicyUnknownUnverified:
+		return iam.ReasonPolicyUnknown
+	case f.CrossAccountUnverified:
+		return iam.ReasonCrossAccount
 	default:
 		return iam.ReasonNone
 	}
 }
 
 // unverifiedTag marks a finding whose coverage depends on a grant the tool
-// cannot check: a resource scope it cannot derive, or a condition it cannot
-// evaluate (--strict-resources).
+// cannot check: a resource scope it cannot derive, a condition it cannot
+// evaluate, a policy source whose text the plan does not show, or a resource
+// policy in another account (--strict-resources).
 func unverifiedTag(reason iam.UnverifiedReason) string {
 	if reason == iam.ReasonNone {
 		return ""

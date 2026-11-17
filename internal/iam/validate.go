@@ -56,6 +56,12 @@ const (
 	// ReasonCondition means a condition on the grant names a key the plan
 	// does not supply, or an operator the tool does not model.
 	ReasonCondition = policy.ReasonCondition
+	// ReasonPolicyUnknown means the grant comes from a policy source whose
+	// text the plan does not show.
+	ReasonPolicyUnknown = policy.ReasonPolicyUnknown
+	// ReasonCrossAccount means the need crosses accounts and the resource
+	// policy in the other account is not in the plan.
+	ReasonCrossAccount = policy.ReasonCrossAccount
 )
 
 // MissingAction is a single required permission found to be absent from the policy.
@@ -79,6 +85,12 @@ type MissingAction struct {
 	// tool does not model. The grant may or may not apply, so the finding
 	// is unverified, not missing.
 	ConditionUnverified bool
+	// PolicyUnknownUnverified marks an action that only a policy source
+	// whose text the plan does not show may grant (--strict-resources).
+	PolicyUnknownUnverified bool
+	// CrossAccountUnverified marks a cross-account action whose resource
+	// policy in the other account is not in the plan (--strict-resources).
+	CrossAccountUnverified bool
 	// ConditionAttribute is the attribute gating this action, e.g.
 	// "kms_key_arn": set in the planned resource (d.GetOk) or changed between
 	// prior and planned state (d.HasChange). Empty for an unconditional action.
@@ -316,6 +328,10 @@ func newFinding(action string, class Class, res policy.Result) MissingAction {
 		m.ConditionUnverified = true
 	case policy.ReasonResourceScope:
 		m.ResourceScopeUnverified = true
+	case policy.ReasonPolicyUnknown:
+		m.PolicyUnknownUnverified = true
+	case policy.ReasonCrossAccount:
+		m.CrossAccountUnverified = true
 	}
 	return m
 }

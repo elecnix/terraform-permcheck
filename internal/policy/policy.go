@@ -29,6 +29,11 @@ type Statement struct {
 	// tool cannot read stays in the statement as an unreadable condition,
 	// so the statement is still conditional.
 	Condition conditionBlock `json:"Condition,omitempty"`
+	// unverified marks a statement the tool cannot check, with the reason
+	// it reports under --strict-resources. Only Statement.Unverified sets
+	// it, so Parse never reads it from a policy's JSON, and the JSON form
+	// of a statement leaves it out.
+	unverified UnverifiedReason
 }
 
 // statementList handles a Statement given as one object or as an array.

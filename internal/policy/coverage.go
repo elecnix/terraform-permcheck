@@ -51,8 +51,16 @@ const (
 	// grants the action only on some resources.
 	ReasonResourceScope
 	// ReasonCondition means a condition on the grant names a key the plan
-	// does not supply, or an operator the tool does not model.
+	// does not supply, or an operator the tool does not model. A statement
+	// that may grant, such as a resource policy statement whose Principal
+	// may match, carries this reason too.
 	ReasonCondition
+	// ReasonPolicyUnknown means the grant comes from a policy source whose
+	// text the plan does not show (see UnknownSource).
+	ReasonPolicyUnknown
+	// ReasonCrossAccount means the need crosses accounts and the resource
+	// policy in the other account is not in the plan.
+	ReasonCrossAccount
 )
 
 func (r UnverifiedReason) String() string {
@@ -61,21 +69,64 @@ func (r UnverifiedReason) String() string {
 		return "resource scope"
 	case ReasonCondition:
 		return "condition"
+	case ReasonPolicyUnknown:
+		return "policy unknown"
+	case ReasonCrossAccount:
+		return "cross account"
 	default:
 		return ""
 	}
 }
 
 // Value is the discriminator the json report carries for the reason:
-// "resource_scope" or "condition". It is what a consumer matches on.
+// "resource_scope", "condition", "policy_unknown" or "cross_account". It is
+// what a consumer matches on.
 func (r UnverifiedReason) Value() string {
 	switch r {
 	case ReasonResourceScope:
 		return "resource_scope"
 	case ReasonCondition:
 		return "condition"
+	case ReasonPolicyUnknown:
+		return "policy_unknown"
+	case ReasonCrossAccount:
+		return "cross_account"
 	default:
 		return ""
+	}
+}
+
+// firstReason returns the reason to report when two apply to the grants that
+// reach an action. ReasonNone yields to any reason. Otherwise the order is
+// condition, resource scope, policy unknown, cross account. A reason about a
+// statement the tool read comes before a reason about a source it could not
+// read: the read statement stays unchecked even once the unknown text is
+// known, so it names the finer-grained mechanism. Condition comes before
+// resource scope for the same reason.
+func firstReason(a, b UnverifiedReason) UnverifiedReason {
+	if a == ReasonNone {
+		return b
+	}
+	if b == ReasonNone {
+		return a
+	}
+	if reasonRank(b) < reasonRank(a) {
+		return b
+	}
+	return a
+}
+
+// reasonRank orders the reasons for firstReason. A lower rank comes first.
+func reasonRank(r UnverifiedReason) int {
+	switch r {
+	case ReasonCondition:
+		return 0
+	case ReasonResourceScope:
+		return 1
+	case ReasonPolicyUnknown:
+		return 2
+	default:
+		return 3
 	}
 }
 
@@ -96,32 +147,35 @@ type Result struct {
 // A condition that provably cannot match the plan's value means the grant
 // does not apply, so the action is Missing. A condition the tool cannot
 // evaluate means the grant may or may not apply: it counts as coverage, and
-// with strict set the action is Unverified.
+// with strict set the action is Unverified. A statement marked with
+// Statement.Unverified behaves the same way, with the reason it carries.
+// When several unchecked grants reach the action, firstReason picks the
+// reason. A grant the tool checked settles the action, so the verdict is
+// then Covered with no reason, in strict mode too.
 func (d *Document) Coverage(action string, targets []string, conds Conditions, strict bool) Result {
 	if len(targets) > 0 {
-		covered, conditionUnknown := d.coversTarget(action, targets, conds)
+		covered, unknown := d.coversTarget(action, targets, conds)
 		if !covered {
 			return Result{Verdict: Missing}
 		}
-		if strict && conditionUnknown {
-			return Result{Verdict: Unverified, Reason: ReasonCondition}
+		if strict && unknown != ReasonNone {
+			return Result{Verdict: Unverified, Reason: unknown}
 		}
 		return Result{Verdict: Covered}
 	}
 
-	granted, scoped, conditionUnknown := d.grantsWithoutTarget(action, conds)
-	if !granted && !scoped && !conditionUnknown {
+	granted, scoped, unknown := d.grantsWithoutTarget(action, conds)
+	if !granted && !scoped && unknown == ReasonNone {
 		return Result{Verdict: Missing}
 	}
-	if strict {
-		// The condition reason comes first: it names the finer-grained
-		// mechanism the tool could not check.
-		if conditionUnknown && !granted {
-			return Result{Verdict: Unverified, Reason: ReasonCondition}
+	if strict && !granted {
+		// firstReason picks the reason when both a scoped grant and an
+		// unchecked one reach the action.
+		reason := unknown
+		if scoped {
+			reason = firstReason(reason, ReasonResourceScope)
 		}
-		if scoped && !granted {
-			return Result{Verdict: Unverified, Reason: ReasonResourceScope}
-		}
+		return Result{Verdict: Unverified, Reason: reason}
 	}
 	return Result{Verdict: Covered}
 }
@@ -136,7 +190,7 @@ func (d *Document) Coverage(action string, targets []string, conds Conditions, s
 // Unverified, as in Coverage. An unconditional Deny on every resource
 // overrides any grant.
 func (d *Document) CoverageOfEveryResource(action string, strict bool) Result {
-	granted, conditionUnknown := false, false
+	granted, unknown := false, ReasonNone
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
 			continue
@@ -150,22 +204,22 @@ func (d *Document) CoverageOfEveryResource(action string, strict bool) Result {
 			if !s.grantsEveryResource() {
 				continue
 			}
-			switch s.conditionVerdict(nil) {
+			switch verdict, reason := s.grantVerdict(nil); verdict {
 			case condFails:
 				// The grant provably does not apply.
 			case condHolds:
 				granted = true
 			default:
-				conditionUnknown = true
+				unknown = firstReason(unknown, reason)
 			}
 		}
 	}
 	switch {
 	case granted:
 		return Result{Verdict: Covered}
-	case conditionUnknown && strict:
-		return Result{Verdict: Unverified, Reason: ReasonCondition}
-	case conditionUnknown:
+	case unknown != ReasonNone && strict:
+		return Result{Verdict: Unverified, Reason: unknown}
+	case unknown != ReasonNone:
 		return Result{Verdict: Covered}
 	}
 	return Result{Verdict: Missing}
@@ -177,12 +231,13 @@ func (d *Document) CoverageOfEveryResource(action string, strict bool) Result {
 // granted reports that an Allow statement grants the action on every
 // resource, with no condition the tool cannot check. scoped reports that a
 // grant is limited to some resources, whose ARN the plan does not show.
-// conditionUnknown reports that a grant carries a condition the tool cannot
-// evaluate, so the grant may or may not apply.
+// unknown is the reason the tool could not check a grant that may or may not
+// apply, such as a condition it cannot evaluate, or ReasonNone when every
+// grant was checked.
 //
 // A grant on every resource settles the action: it is granted whatever the
 // target, so the other grants do not narrow it.
-func (d *Document) grantsWithoutTarget(action string, conds Conditions) (granted, scoped, conditionUnknown bool) {
+func (d *Document) grantsWithoutTarget(action string, conds Conditions) (granted, scoped bool, unknown UnverifiedReason) {
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
 			continue
@@ -190,10 +245,10 @@ func (d *Document) grantsWithoutTarget(action string, conds Conditions) (granted
 		switch s.Effect {
 		case "Deny":
 			if !s.conditional() && s.deniesEveryResource() {
-				return false, false, false
+				return false, false, ReasonNone
 			}
 		case "Allow":
-			switch s.conditionVerdict(conds) {
+			switch verdict, reason := s.grantVerdict(conds); verdict {
 			case condFails:
 				// The grant provably does not apply.
 				continue
@@ -204,13 +259,13 @@ func (d *Document) grantsWithoutTarget(action string, conds Conditions) (granted
 					scoped = true
 				}
 			default:
-				// The condition is one the tool cannot evaluate, so
-				// the grant may or may not apply.
-				conditionUnknown = true
+				// The tool cannot check the grant, so it may or may
+				// not apply.
+				unknown = firstReason(unknown, reason)
 			}
 		}
 	}
-	return granted, scoped, conditionUnknown
+	return granted, scoped, unknown
 }
 
 // CoversTarget reports whether the policy grants action for a resource whose
@@ -237,33 +292,35 @@ func (d *Document) CoversTarget(action string, targets []string) bool {
 }
 
 // coversTarget reports whether the policy grants action for a resource
-// matching any of the target patterns, and whether the grant that reaches it
-// carries a condition the tool cannot evaluate.
+// matching any of the target patterns, and why the tool could not check the
+// grant that reaches it. The reason is ReasonNone when a checked grant
+// reaches it.
 //
 // A target reached by a grant whose condition holds is covered and checked.
-// A target reached only by a grant whose condition the tool cannot evaluate
-// is covered too, but not checked.
-func (d *Document) coversTarget(action string, targets []string, conds Conditions) (covered, conditionUnknown bool) {
+// A target reached only by a grant the tool cannot check, such as one whose
+// condition it cannot evaluate, is covered too, but not checked.
+func (d *Document) coversTarget(action string, targets []string, conds Conditions) (covered bool, unknown UnverifiedReason) {
 	verified := false
-	unknown := false
 	for _, t := range targets {
 		c, u := d.coversOneTarget(action, t, targets, conds)
 		verified = verified || c
-		unknown = unknown || u
+		unknown = firstReason(unknown, u)
 	}
 	// A target reached by a checked grant settles the resource, so the
 	// unknown one does not make it unverified.
-	return verified || unknown, unknown && !verified
+	if verified {
+		return true, ReasonNone
+	}
+	return unknown != ReasonNone, unknown
 }
 
-// coversOneTarget reports whether the policy grants action for a target, and
-// whether the grant that reaches it carries a condition the tool cannot
-// evaluate.
+// coversOneTarget reports whether a grant the tool checked reaches the
+// target, and why the tool could not check the other grants that reach it.
+// The reason is ReasonNone when no unchecked grant reaches it.
 //
 // A grant whose condition holds settles the target: the tool checked it, so
 // the target is covered and not unverified.
-func (d *Document) coversOneTarget(action, target string, forms []string, conds Conditions) (verified, conditionUnknown bool) {
-	unknown := false
+func (d *Document) coversOneTarget(action, target string, forms []string, conds Conditions) (verified bool, unknown UnverifiedReason) {
 	for _, s := range d.Statements {
 		if !s.matchesAction(action) {
 			continue
@@ -271,13 +328,13 @@ func (d *Document) coversOneTarget(action, target string, forms []string, conds 
 		switch s.Effect {
 		case "Deny":
 			if !s.conditional() && s.appliesToAll(target) {
-				return false, false
+				return false, ReasonNone
 			}
 		case "Allow":
 			if !s.mayApplyTo(target, forms) {
 				continue
 			}
-			switch s.conditionVerdict(conds) {
+			switch verdict, reason := s.grantVerdict(conds); verdict {
 			case condFails:
 				// The grant provably does not apply.
 			case condHolds:
@@ -287,9 +344,9 @@ func (d *Document) coversOneTarget(action, target string, forms []string, conds 
 				// on.
 				verified = true
 			default:
-				// The condition is one the tool cannot evaluate, so
-				// the grant may or may not apply.
-				unknown = true
+				// The tool cannot check the grant, so it may or may
+				// not apply.
+				unknown = firstReason(unknown, reason)
 			}
 		}
 	}

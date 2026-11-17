@@ -144,13 +144,13 @@ func (c conditionBlock) set() bool {
 	return len(c.operators) > 0 || len(c.unreadable) > 0
 }
 
-// conditional reports whether the statement carries a Condition. The tool
-// cannot evaluate every condition, so a conditional Deny never counts as a
-// definite deny, and a conditional Allow still counts as an allow: either way
-// only provable gaps are reported. An empty Condition block sets no
-// condition.
+// conditional reports whether the statement carries a Condition, or a marker
+// from Statement.Unverified. The tool cannot evaluate every condition, so a
+// conditional Deny never counts as a definite deny, and a conditional Allow
+// still counts as an allow: either way only provable gaps are reported. An
+// empty Condition block sets no condition.
 func (s Statement) conditional() bool {
-	return s.Condition.set()
+	return s.Condition.set() || s.unverified != ReasonNone
 }
 
 // conditionOperator is one condition operator the tool models.
@@ -183,12 +183,36 @@ var conditionOperators = map[string]conditionOperator{
 // conditionVerdict reports what the statement's condition concludes for the
 // context the plan supplies. A statement with no condition holds; one whose
 // condition provably cannot match fails; one the tool cannot evaluate is
-// unknown.
+// unknown. A statement marked with Statement.Unverified is unknown unless its
+// condition fails.
 func (s Statement) conditionVerdict(conds Conditions) conditionResult {
-	if !s.conditional() {
-		return condHolds
+	verdict, _ := s.grantVerdict(conds)
+	return verdict
+}
+
+// grantVerdict reports what conditionVerdict reports, and the reason the tool
+// cannot check the grant when the verdict is unknown. A condition the tool
+// cannot evaluate gives ReasonCondition, and a marker gives the reason it
+// carries. When both apply, firstReason picks one. A condition that provably
+// cannot match fails whatever the marker says, since the statement then
+// grants nothing.
+func (s Statement) grantVerdict(conds Conditions) (conditionResult, UnverifiedReason) {
+	verdict := condHolds
+	if s.Condition.set() {
+		verdict = matchCondition(s.Condition, conds)
 	}
-	return matchCondition(s.Condition, conds)
+	reason := ReasonNone
+	switch verdict {
+	case condFails:
+		return condFails, ReasonNone
+	case condUnknown:
+		reason = ReasonCondition
+	}
+	reason = firstReason(reason, s.unverified)
+	if reason == ReasonNone {
+		return condHolds, ReasonNone
+	}
+	return condUnknown, reason
 }
 
 // conditionHolds reports whether the statement's condition lets it apply for

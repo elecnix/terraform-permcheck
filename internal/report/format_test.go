@@ -969,3 +969,33 @@ func TestFormat_NoGrantKeepsOutput(t *testing.T) {
 		t.Errorf("json carries granted_on without a grant:\n%s", got)
 	}
 }
+
+// TestFormat_UnverifiedPolicySourceReasons checks the tag and the json
+// discriminator of the two reasons that come from policy sources.
+func TestFormat_UnverifiedPolicySourceReasons(t *testing.T) {
+	cases := []struct {
+		finding iam.MissingAction
+		tag     string
+		value   string
+	}{
+		{iam.MissingAction{Need: "ReadParams", Action: "ssm:GetParameter", Class: iam.ClassManagement, PolicyUnknownUnverified: true},
+			"[unverified: policy unknown]", "policy_unknown"},
+		{iam.MissingAction{Need: "ReadParams", Action: "ssm:GetParameter", Class: iam.ClassManagement, CrossAccountUnverified: true},
+			"[unverified: cross account]", "cross_account"},
+	}
+	for _, c := range cases {
+		missing := []iam.MissingAction{c.finding}
+		if out := formatMissing(missing, nil); !strings.Contains(out, "Unverified IAM permissions (1)") || !strings.Contains(out, "ssm:GetParameter [required] "+c.tag) {
+			t.Errorf("%s: text report wrong:\n%s", c.value, out)
+		}
+		var res struct {
+			Missing []map[string]interface{} `json:"missing"`
+		}
+		if err := json.Unmarshal([]byte(formatJSON(missing, nil, 2, "resource changes", nil)), &res); err != nil {
+			t.Fatal(err)
+		}
+		if res.Missing[0]["unverified"] != c.value {
+			t.Errorf("unverified = %v, want %s", res.Missing[0]["unverified"], c.value)
+		}
+	}
+}
