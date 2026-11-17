@@ -640,12 +640,14 @@ This version reads the policy text of `aws_iam_role_policy` and of the
 `inline_policy` blocks of `aws_iam_role`. It also reads the managed policies
 that `aws_iam_role_policy_attachment`, the `roles` of
 `aws_iam_policy_attachment`, the `managed_policy_arns` of `aws_iam_role`, and
-the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach. PermCheck merges them as AWS does in one account: any `Allow` grants,
+the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach, and
+the Secrets Manager resource policies that `aws_secretsmanager_secret_policy`
+and the `policy` attribute of `aws_secretsmanager_secret` set. PermCheck merges them as AWS does in one account: any `Allow` grants,
 and a definite `Deny` overrides it. It knows the other policy sources of a
-role, such as a permissions boundary and the resource policies of Secrets
-Manager, S3, SQS, SNS, ECR and KMS, but doesn't read their text yet. Each one
-that may apply to a need is an unknown source, and so is a policy whose text
-terraform computes at apply time.
+role, such as a permissions boundary and the resource policies of S3, SQS,
+SNS, ECR and KMS, but doesn't read their text yet. Each one that may apply to
+a need is an unknown source, and so is a policy whose text terraform computes
+at apply time.
 
 PermCheck finds the text of an attached managed policy in an `aws_iam_policy`
 of the plan. The attachment's references decide first, as in
@@ -669,8 +671,9 @@ the plan doesn't know yet, such as one with `name_prefix`. PermCheck then
 can't decide which policy the ARN names. That policy's `Allow` statements
 count as grants PermCheck can't check, with the reason `condition`, and
 PermCheck ignores its `Deny` statements. The ARN may also belong to a policy
-outside the plan, which is an unknown source. A resource policy applies to the
-needs whose action is in its service. An unknown source may grant the need,
+outside the plan, which is an unknown source. A resource policy of a type
+that PermCheck doesn't read yet applies to the needs whose action is in its
+service. An unknown source may grant the need,
 so PermCheck counts the need as covered by default and reports it unverified
 under `--strict-resources`, with the reason `policy_unknown`. An unknown boundary can only limit a need,
 so it never covers one. When PermCheck can't decide from the plan whether a
@@ -692,7 +695,9 @@ its entry, and its `sources`. A role outside the plan also has `complete`,
 which is `true` when the plan has both exclusive resources for the role. Each
 source has an `address`, a `path`, a `kind` (`identity`, `boundary` or
 `resource`), a `text` (`known` or `unknown`), and a `link` (`yes`, or `maybe`
-when PermCheck can't decide it from the plan). An unknown source adds `unknown_reason`:
+when PermCheck can't decide it from the plan). For a secret policy, `link` is
+`yes` when its secret is the resource of a checked need, and `maybe` when it
+may be. An unknown source adds `unknown_reason`:
 `computed`, `unread`, or `outside_plan` for a managed policy the plan doesn't
 contain, such as an AWS managed policy, or for an inline policy that an
 `aws_iam_role_policies_exclusive` lists and the plan doesn't define. A source
@@ -755,6 +760,55 @@ can't tell whether it stays. It treats such a policy as one whose link to the
 role it can't decide: its `Allow` statements count as grants it can't check,
 with the reason `condition`, and it ignores its `Deny` statements. That way
 the removal can't turn into a missing need that the apply would disprove.
+
+##### Secrets Manager resource policies
+
+In one account, AWS allows a request when an identity policy or a resource
+policy allows it, and an explicit deny in either overrides the allow
+([policy evaluation logic](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp)).
+A secret's resource policy and the role's identity policies combine by that
+rule
+([Secrets Manager resource-based policies](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html)).
+PermCheck adds the statements of each secret policy that applies to the role's
+policies, and checks the need against the result.
+
+A secret policy applies to a need when its secret may be the need's resource.
+The `secret_arn` of an `aws_secretsmanager_secret_policy` links it to its
+secret, by reference or by a known ARN. PermCheck compares the need's ARN with
+the secret's `arn` when the plan knows it. Otherwise it compares the need's
+ARN with the secret's `name` followed by the six random characters that AWS
+appends. When the plan shows neither, the secret may be the need's resource.
+The policy's `Allow` statements then count as grants PermCheck can't check,
+with the reason `resource_scope`, and PermCheck ignores its `Deny`
+statements. A need without `resources` may act on any secret, so each secret
+policy applies to it. A need on `"*"` needs a grant on every resource. The
+policy of one secret can't give that, so PermCheck checks such a need against
+the identity policies alone.
+
+A statement of a secret policy applies to its own secret only, even when its
+`Resource` is `"*"`. PermCheck replaces that `"*"` with the secret's ARN, or
+with the name pattern when terraform computes the ARN at apply time. A statement whose `Resource`
+names part of the secret keeps it, and a statement on another secret grants
+nothing.
+
+The `Principal` element of a statement says whom it applies to
+([Principal element](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html)).
+An `Allow` grants the role when its `Principal` is `"*"` or the role's ARN.
+When the plan creates the role, its account is unknown, so an ARN with the
+role's name may grant it. PermCheck then counts the need as covered by
+default, and reports it unverified under `--strict-resources` with the reason
+`condition`. An account principal, such
+as `arn:aws:iam::123456789012:root`, hands the decision to the account's IAM
+policies and grants the role nothing by itself. A `Deny` counts when its
+`Principal` is `"*"`, the role's ARN or the role's account, or when its
+`NotPrincipal` list can't exclude the role.
+
+PermCheck assumes that the plan lists every resource policy, as it does for
+the role's policies. For a secret that the plan doesn't contain, or whose
+policy the plan doesn't set, PermCheck sees an empty resource policy, and the
+identity policies decide the need. A secret policy set outside the plan can
+grant a need that PermCheck reports as missing, or deny a need that it reports
+as covered.
 
 A release older than the `principals` key ignores it and checks every need
 against the `--policy-*` document.

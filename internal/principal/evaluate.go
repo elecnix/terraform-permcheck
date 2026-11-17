@@ -61,11 +61,13 @@ const (
 // principal.
 type Applied struct {
 	plan.PolicySource
-	// Match says whether the source attaches to the principal. A resource
-	// policy is LinkMaybe, since this version doesn't read the Principal
-	// element of its statements. So is a source whose attached ARN may name
-	// another policy (see plan.PolicySource.PolicyMaybe), and a source that
-	// an exclusive resource of the role may remove (see Check).
+	// Match says whether the source attaches to the principal. A source
+	// whose attached ARN may name another policy (see
+	// plan.PolicySource.PolicyMaybe) is LinkMaybe, and so is a source that
+	// an exclusive resource of the role may remove (see Check). A resource
+	// policy is LinkYes when its resource is the resource of a checked need,
+	// and LinkMaybe when it may be (see resourcePolicy). A resource policy of
+	// a type this version doesn't read yet is LinkMaybe.
 	Match plan.LinkMatch
 	// Unlisted is set on the implicit source of a role outside the plan:
 	// the policies that other stacks attach to the role. It names the kinds
@@ -93,9 +95,9 @@ type Result struct {
 
 // Check checks the needs of the principal against the policy sources of the
 // plan. It is the one entry point for the evaluation of a principal's
-// policies: for each action, it builds the principal's policy set (see Set)
-// and runs the action through iam.CheckNeedsWith, the path the needs of a
-// --policy-* document take.
+// policies: for each action and resource of a need, it builds the
+// principal's policy set (see Set) and runs the action through
+// iam.CheckNeedsWith, the path the needs of a --policy-* document take.
 //
 // exclusives are the exclusive resources of the plan (see plan.Exclusives).
 // For a role in the plan, the check assumes that the plan shows every policy
@@ -137,34 +139,38 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 	}
 	extra, complete := applyExclusives(p, sources, links, exclusives)
 
+	identity := p.Identity()
 	applied := make([]plan.LinkMatch, len(sources))
-	grantsFor := func(action string) iam.Grants {
+	grantsFor := func(action, resource string) iam.Grants {
 		var set Set
 		var merged []*policy.Document
 		for i, s := range sources {
 			m := links[i]
+			var resourceDoc *policy.Document
 			if s.Kind == plan.KindResource {
-				m = resourceLink(s, action)
+				m, resourceDoc = resourcePolicy(s, docs[i], identity, action, resource)
 			}
 			if m == plan.LinkNo {
 				continue
 			}
-			applied[i] = m
+			if applied[i] == plan.LinkNo || m == plan.LinkYes {
+				applied[i] = m
+			}
 			switch {
 			case s.Kind == plan.KindBoundary:
 				// No boundary type is read yet, so every boundary is an
 				// unknown source. It can only remove permissions.
 				set.Boundaries = append(set.Boundaries, policy.UnknownSource())
 			case s.Kind == plan.KindResource:
-				// This version doesn't read the Principal element of a
-				// resource policy, so it can't tell whom the policy grants.
-				// Every resource policy that may apply is an unknown source,
-				// whether or not the plan shows its text.
-				merged = append(merged, policy.UnknownSource())
+				merged = append(merged, resourceDoc)
 			case s.Unknown:
 				merged = append(merged, policy.UnknownSource())
 			case m == plan.LinkMaybe:
-				merged = append(merged, mayGrant(docs[i]))
+				// The source may not apply to the principal. Its Allows count
+				// as grants the tool can't check, with the reason condition,
+				// and its Denies don't (design of issue #175, "Undecidable
+				// overlaps in the new cases").
+				merged = append(merged, docs[i].MayGrant(policy.ReasonCondition))
 			default:
 				merged = append(merged, docs[i])
 			}
@@ -204,16 +210,137 @@ func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
 	return m
 }
 
-// resourceLink reports whether a resource policy may apply to an action: it
-// does when its service is the service of the action. A later version
-// narrows that by the resource ARN and by the Principal element of each
-// statement.
-func resourceLink(s plan.PolicySource, action string) plan.LinkMatch {
+// resourcePolicy returns whether a resource policy source applies to a need
+// of the principal, for one action and one resource of the need, and the
+// statements it adds to the merged document. It applies the same-account
+// rule of the design of issue #175: an Allow in an identity policy or in a
+// resource policy grants, and an explicit Deny in either overrides it
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp).
+// Secrets Manager applies the same rule to a secret's resource policy
+// (https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_resource-policies.html).
+//
+// A source of another service doesn't apply. A source of a type this version
+// doesn't read yet applies to every action of its service, as an unknown
+// source. For a read type:
+//
+//  1. The need's resource selects the resources of the source (see
+//     resourceMatch). A need on "*" needs a grant on every resource, which
+//     the policy of one resource can't give, and a Deny on one resource
+//     doesn't deny every resource. So no resource policy applies to it, and
+//     the identity policies decide it.
+//  2. A source whose text the plan doesn't show is an unknown source.
+//  3. Otherwise the statements whose Principal or NotPrincipal may match the
+//     principal are kept (see policy.Document.ForPrincipal), and each one is
+//     rewritten to apply to the attached resource only (see
+//     policy.Document.OnResource).
+//  4. When the attached resource may not be the need's resource, its Allows
+//     are grants the tool can't check, with the reason resource_scope, and
+//     its Denies are dropped (see policy.Document.MayGrant). For a need
+//     without resources, the target is unknown, and Coverage applies a Deny
+//     only when it denies every resource, which a rewritten Deny never does.
+//
+// The plan is taken to list every policy, of principals and of resources. A
+// resource that the plan doesn't contain, or whose policy no source of the
+// plan sets, has no resource policy that the check can see, so the identity
+// policies decide its needs.
+func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.Principal, action, resource string) (plan.LinkMatch, *policy.Document) {
 	service, _, _ := strings.Cut(action, ":")
-	if strings.EqualFold(service, s.Service) {
-		return plan.LinkMaybe
+	switch {
+	case !strings.EqualFold(service, s.Service):
+		return plan.LinkNo, nil
+	case s.Unread:
+		return plan.LinkMaybe, policy.UnknownSource()
+	case resource == "*":
+		return plan.LinkNo, nil
 	}
-	return plan.LinkNo
+	attached := s.Resources
+	if s.ResourceUnknown {
+		attached = []plan.AttachedResource{{Match: plan.LinkMaybe}}
+	}
+	best := plan.LinkNo
+	var docs []*policy.Document
+	for _, a := range attached {
+		patterns := attachedPatterns(a)
+		m := a.Match
+		as := patterns
+		switch {
+		case resource == "":
+			// The need acts on an unknown resource.
+			m = plan.LinkMaybe
+		case patterns == nil:
+			// The resource's ARN and pattern are both unknown.
+			m = plan.LinkMaybe
+		default:
+			rm := resourceMatch(resource, patterns)
+			if rm == plan.LinkNo {
+				continue
+			}
+			if rm == plan.LinkMaybe {
+				m = plan.LinkMaybe
+			}
+			if m == plan.LinkYes {
+				// The need's resource is the attached resource, so a
+				// statement on the whole resource is a statement on the
+				// need's resource.
+				as = []string{resource}
+			}
+		}
+		if best == plan.LinkNo || m == plan.LinkYes {
+			best = m
+		}
+		if s.Unknown {
+			continue
+		}
+		d := doc.ForPrincipal(identity)
+		switch {
+		case patterns == nil:
+			d = d.MayGrant(policy.ReasonResourceScope)
+		case resource != "" && m == plan.LinkMaybe:
+			d = d.OnResource(patterns, nil).MayGrant(policy.ReasonResourceScope)
+		default:
+			d = d.OnResource(patterns, as)
+		}
+		docs = append(docs, d)
+	}
+	if best == plan.LinkNo {
+		return plan.LinkNo, nil
+	}
+	if s.Unknown {
+		return best, policy.UnknownSource()
+	}
+	return best, policy.Merge(docs...)
+}
+
+// attachedPatterns returns the ARN patterns of a resource that a resource
+// policy attaches to: the known ARN of the link attribute, or the ARN or
+// target pattern of the resource in the plan (see iam.ResourceARNPatterns).
+// It returns nil when neither is known.
+func attachedPatterns(a plan.AttachedResource) []string {
+	switch {
+	case a.ARN != "":
+		return []string{a.ARN}
+	case a.Change != nil:
+		return iam.ResourceARNPatterns(a.Change)
+	}
+	return nil
+}
+
+// resourceMatch compares a resource of a need with the ARN patterns of the
+// resource a policy is attached to. It is LinkYes when they provably share
+// an ARN, LinkNo when they provably share none, and LinkMaybe when the
+// overlap is undecidable (see policy.ARNOverlap).
+func resourceMatch(resource string, patterns []string) plan.LinkMatch {
+	out := plan.LinkNo
+	for _, p := range patterns {
+		overlap, decidable := policy.ARNOverlap(resource, p)
+		switch {
+		case overlap && decidable:
+			return plan.LinkYes
+		case overlap:
+			out = plan.LinkMaybe
+		}
+	}
+	return out
 }
 
 // applyExclusives applies the exclusive resources of the principal's role
@@ -338,22 +465,6 @@ func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicyS
 			Unknown: true,
 			Link:    ex.Link,
 		}})
-	}
-	return out
-}
-
-// mayGrant returns the statements of a source whose link to the principal
-// is undecidable. Its Allows count, marked as grants the tool can't check,
-// and its Denies don't, since the source may not apply to the principal
-// (design of issue #175, "Undecidable overlaps in the new cases"). The
-// marked Allows make a need they cover unverified under --strict-resources,
-// with the reason condition.
-func mayGrant(doc *policy.Document) *policy.Document {
-	out := &policy.Document{Version: doc.Version}
-	for _, s := range doc.Statements {
-		if s.Effect == "Allow" {
-			out.Statements = append(out.Statements, s.Unverified(policy.ReasonCondition))
-		}
 	}
 	return out
 }

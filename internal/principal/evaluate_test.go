@@ -41,6 +41,8 @@ func verdicts(missing []iam.MissingAction) string {
 			s += " policy_unknown"
 		case m.ConditionUnverified:
 			s += " condition"
+		case m.ResourceScopeUnverified:
+			s += " resource_scope"
 		}
 		if m.Principal != "task" {
 			s += " without the label"
@@ -85,8 +87,9 @@ func TestCheck_UnknownBoundary(t *testing.T) {
 	}
 }
 
-// A resource policy applies to the actions of its service only. It is an
-// unknown source, since this version doesn't read whom it grants.
+// A resource policy applies to the actions of its service only. A queue
+// policy is an unknown source, since this version doesn't read SQS queue
+// policies yet.
 func TestCheck_ResourcePolicyByService(t *testing.T) {
 	raw := `{"resource_changes": [
 		{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
@@ -103,6 +106,55 @@ func TestCheck_ResourcePolicyByService(t *testing.T) {
 	}
 	if len(res.Sources) != 1 || res.Sources[0].Address != "aws_sqs_queue_policy.q" || res.Sources[0].Match != plan.LinkMaybe {
 		t.Errorf("sources = %+v, want the queue policy as a maybe", res.Sources)
+	}
+}
+
+// secretPolicy is an aws_secretsmanager_secret_policy whose secret_arn the
+// configuration sets to the value secretARN, and whose policy grants
+// GetSecretValue to every principal.
+func secretPolicy(secretARN string) string {
+	after := `"policy": "{\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"secretsmanager:GetSecretValue\",\"Resource\":\"*\"}]}"`
+	unknown := `{"secret_arn": true}`
+	if secretARN != "" {
+		after += `, "secret_arn": "` + secretARN + `"`
+		unknown = `{}`
+	}
+	return `{"address": "aws_secretsmanager_secret_policy.s", "type": "aws_secretsmanager_secret_policy", "name": "s",
+		"change": {"actions": ["create"], "after": {` + after + `}, "after_unknown": ` + unknown + `}}`
+}
+
+// A secret policy applies to the secret its secret_arn names. A known ARN
+// names a secret outside the plan, and the policy applies to a need on that
+// secret only. A secret_arn that the plan computes from no resource of the
+// plan, such as a variable, may name any secret: the policy's Allows are
+// grants the tool can't check, with the reason resource_scope.
+func TestCheck_SecretPolicyResource(t *testing.T) {
+	need := func(resource string) []iam.Need {
+		return []iam.Need{{Sid: "Fetch", Actions: []string{"secretsmanager:GetSecretValue"},
+			Resources: []string{"arn:aws:secretsmanager:us-east-1:123456789012:secret:" + resource}}}
+	}
+	// The role has no permissions boundary, which would be an unknown
+	// source.
+	role := `{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
+		"change": {"actions": ["create"], "after": {"name": "app-task"}, "after_unknown": {"arn": true}}}`
+	known := `{"resource_changes": [` + role + `, ` + secretPolicy("arn:aws:secretsmanager:us-east-1:123456789012:secret:shared-AbCdEf") + `]}`
+	for resource, want := range map[string]string{"shared-AbCdEf": "", "app-db-AbCdEf": "Fetch secretsmanager:GetSecretValue"} {
+		res := checkPlan(t, known, need(resource), true)
+		if got := verdicts(res.Missing); got != want {
+			t.Errorf("known secret_arn, need on %s: %q, want %q", resource, got, want)
+		}
+	}
+
+	unknown := `{"resource_changes": [` + role + `, ` + secretPolicy("") + `]}`
+	if got := verdicts(checkPlan(t, unknown, need("app-db-AbCdEf"), false).Missing); got != "" {
+		t.Errorf("unknown secret_arn, default: %q, want covered", got)
+	}
+	res := checkPlan(t, unknown, need("app-db-AbCdEf"), true)
+	if got, want := verdicts(res.Missing), "Fetch secretsmanager:GetSecretValue resource_scope"; got != want {
+		t.Errorf("unknown secret_arn, strict: %q, want %q", got, want)
+	}
+	if len(res.Sources) != 1 || res.Sources[0].Match != plan.LinkMaybe {
+		t.Errorf("sources = %+v, want the secret policy as a maybe", res.Sources)
 	}
 }
 

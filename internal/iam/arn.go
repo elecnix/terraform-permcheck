@@ -156,3 +156,19 @@ func plannedARN(c *plan.ResourceChange, derive func(*plan.ResourceChange) []stri
 	}
 	return derive(c)
 }
+
+// ownARNPatterns maps a resource type that a resource policy attaches to
+// onto the function that builds its ARN pattern from its known attributes.
+// A type that the plan reads resource policies for has a row here.
+var ownARNPatterns = map[string]func(*plan.ResourceChange) []string{
+	"aws_secretsmanager_secret": secretARNPatterns,
+}
+
+// ResourceARNPatterns returns the ARN patterns of a planned resource that a
+// resource policy attaches to: its arn when the plan knows it, or the target
+// pattern built from its known attributes, such as a secret's name followed
+// by AWS's random suffix. It returns nil when the arn is unknown and
+// ownARNPatterns has no row for the type, or the row can't build a pattern.
+func ResourceARNPatterns(rc *plan.ResourceChange) []string {
+	return plannedARN(rc, ownARNPatterns[rc.Type])
+}

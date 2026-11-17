@@ -123,19 +123,21 @@ type Grants interface {
 // limited to some resources as unverified. A need on "*" needs a grant on
 // every resource. Every case goes through Coverage.
 func CheckNeeds(needs []Need, doc *policy.Document, strict bool) []MissingAction {
-	return CheckNeedsWith(needs, func(string) Grants { return doc }, strict)
+	return CheckNeedsWith(needs, func(string, string) Grants { return doc }, strict)
 }
 
 // CheckNeedsWith checks the needs as CheckNeeds does, against the policies
-// that grantsFor returns for each action. The policies of a mapped principal
-// depend on the action, since a resource policy applies only to the actions
-// of its service.
-func CheckNeedsWith(needs []Need, grantsFor func(action string) Grants, strict bool) []MissingAction {
+// that grantsFor returns for each action and resource of a need. The
+// policies of a mapped principal depend on both: a resource policy applies
+// only to the actions of its service, and only to the resource it is
+// attached to. resource is one entry of the need's resources, "*" for a need
+// on every resource, or "" for a need without resources and for a dependent
+// action, whose resource is unknown.
+func CheckNeedsWith(needs []Need, grantsFor func(action, resource string) Grants, strict bool) []MissingAction {
 	var missing []MissingAction
 	for _, n := range needs {
 		for _, action := range n.Actions {
-			doc := grantsFor(action)
-			add := func(resource string, res policy.Result) {
+			add := func(doc Grants, resource string, res policy.Result) {
 				m := newFinding(action, ClassManagement, res)
 				m.Need = n.Sid
 				m.NeedResource = resource
@@ -148,12 +150,14 @@ func CheckNeedsWith(needs []Need, grantsFor func(action string) Grants, strict b
 				missing = append(missing, m)
 			}
 			if len(n.Resources) == 0 {
+				doc := grantsFor(action, "")
 				if v := doc.Coverage(action, nil, nil, strict); v.Verdict != policy.Covered {
-					add("", v)
+					add(doc, "", v)
 				}
 				continue
 			}
 			for _, r := range n.Resources {
+				doc := grantsFor(action, r)
 				// A need on "*" needs a grant on every resource, so a grant
 				// limited to some resources falls short of it even without
 				// strict mode. A grant on every resource whose condition the
@@ -161,12 +165,12 @@ func CheckNeedsWith(needs []Need, grantsFor func(action string) Grants, strict b
 				// reports it unverified.
 				if r == "*" {
 					if res := doc.CoverageOfEveryResource(action, strict); res.Verdict != policy.Covered {
-						add(r, res)
+						add(doc, r, res)
 					}
 					continue
 				}
 				if v := doc.Coverage(action, []string{r}, nil, strict); v.Verdict != policy.Covered {
-					add(r, v)
+					add(doc, r, v)
 				}
 			}
 		}
@@ -184,7 +188,7 @@ func CheckNeedsWith(needs []Need, grantsFor func(action string) Grants, strict b
 					continue
 				}
 				listed[dep.action] = true
-				if res := dependencyVerdict(dep.action, grantsFor(dep.action), strict); res.Verdict != policy.Covered {
+				if res := dependencyVerdict(dep.action, grantsFor(dep.action, ""), strict); res.Verdict != policy.Covered {
 					m := newFinding(dep.action, ClassManagement, res)
 					m.Need = n.Sid
 					m.Reason = n.Reason

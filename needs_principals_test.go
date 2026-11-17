@@ -100,11 +100,12 @@ func TestPrincipals_WorkedExample1_NoSecretPolicyIsMissing(t *testing.T) {
 	}
 }
 
-// Worked example 1 with the secret policy: this version doesn't read
-// Secrets Manager resource policies yet, so the policy is an unknown source.
-// The need is covered by default, with a notice, and unverified with
-// policy_unknown under --strict-resources.
-func TestPrincipals_WorkedExample1_SecretPolicyIsUnknownSource(t *testing.T) {
+// Worked example 1 with the secret policy: the secret policy grants
+// GetSecretValue to a role ARN whose name is the task role's, and the plan
+// doesn't know the role's account. The need is covered by default, without a
+// notice, since the plan shows the policy text. It is unverified with
+// condition under --strict-resources.
+func TestPrincipals_WorkedExample1_SecretPolicyMayGrant(t *testing.T) {
 	stdout, stderr, err := runValidate(t, "--plan-file", ecsTaskPlan, "--config", ecsTaskConfig)
 	if err != nil {
 		t.Fatalf("default mode: want a pass, got %v\nstderr:\n%s", err, stderr)
@@ -112,15 +113,15 @@ func TestPrincipals_WorkedExample1_SecretPolicyIsUnknownSource(t *testing.T) {
 	if !strings.Contains(stdout, "All required permissions covered") {
 		t.Errorf("stdout = %q, want the all-clear line", stdout)
 	}
-	if !strings.Contains(stderr, secretPolicyNoticeLine) || !strings.Contains(stderr, `needs of "task" may be granted by it`) {
-		t.Errorf("stderr has no notice for the secret policy:\n%s", stderr)
+	if strings.Contains(stderr, secretPolicyNoticeLine) {
+		t.Errorf("stderr has a notice for a secret policy whose text the plan shows:\n%s", stderr)
 	}
 
 	r, err := runValidateJSON(t, "--plan-file", ecsTaskPlan, "--config", ecsTaskConfig, "--strict-resources")
 	if !errors.Is(err, errGapsFound) {
 		t.Fatalf("strict mode: want errGapsFound, got %v", err)
 	}
-	want := []string{"FetchSecrets secretsmanager:GetSecretValue unverified policy_unknown"}
+	want := []string{"FetchSecrets secretsmanager:GetSecretValue unverified condition"}
 	if got := verdicts(r); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("strict findings = %q, want %q", got, want)
 	}

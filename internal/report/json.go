@@ -98,8 +98,9 @@ type JSONPolicySource struct {
 	// when the plan can't decide it, or can't decide which policy the
 	// attached ARN names. The check counts the Allows of a
 	// "maybe" source as grants it can't check, and ignores its Denies. A
-	// resource policy is "maybe", since this version doesn't read whom its
-	// statements grant.
+	// resource policy is "yes" when its resource is the resource of a
+	// checked need, and "maybe" when it may be, or when this version doesn't
+	// read its type yet.
 	Link string `json:"link"`
 }
 

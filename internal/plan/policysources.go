@@ -70,6 +70,32 @@ type PolicySource struct {
 	Managed bool
 	// Link ties the source to the principal or resource it attaches to.
 	Link PolicyLink
+	// Resources are the resources that a resource policy source may attach
+	// to, from its link (see attachedResources). They are set for a source
+	// type that this version reads, and nil for an identity or boundary
+	// source and for an unread type.
+	Resources []AttachedResource
+	// ResourceUnknown is true when the plan can't tell which resource a
+	// resource policy source attaches to, such as a link attribute that a
+	// variable sets. The source may then attach to any resource of its
+	// type, in the plan or outside it.
+	ResourceUnknown bool
+}
+
+// AttachedResource is a resource that a resource policy source may attach
+// to.
+type AttachedResource struct {
+	// Change is the resource in the plan. It is nil when the link
+	// attribute holds a known ARN, which decides the resource without it.
+	Change *ResourceChange
+	// ARN is the known ARN that the link attribute holds, such as the
+	// secret_arn of an aws_secretsmanager_secret_policy. It is empty when
+	// terraform computes the value at apply time.
+	ARN string
+	// Match is LinkYes when the source attaches to the resource, and
+	// LinkMaybe when the plan can't decide which of several resources it
+	// attaches to.
+	Match LinkMatch
 }
 
 // PolicyLink ties a policy source to the principal or resource it attaches
@@ -377,8 +403,12 @@ var sourceSpecs = map[string][]sourceSpec{
 	"aws_iam_group_policy_attachment": {{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("group", "aws_iam_group")}},
 
 	// Resource policies.
-	"aws_secretsmanager_secret_policy": {{kind: KindResource, unread: true, service: "secretsmanager", texts: unreadText("policy"), link: attributeLink("secret_arn", "aws_secretsmanager_secret")}},
-	"aws_secretsmanager_secret":        {{kind: KindResource, unread: true, service: "secretsmanager", texts: unreadText("policy"), link: selfLink}},
+	// A resource policy source links to the resource it is attached to: the
+	// resource type and the link attribute, or the resource itself. A read
+	// type also needs a row in iam's ownARNPatterns, which builds the
+	// resource's ARN pattern when the plan doesn't know its arn.
+	"aws_secretsmanager_secret_policy": {{kind: KindResource, service: "secretsmanager", texts: attributeText("policy"), link: attributeLink("secret_arn", "aws_secretsmanager_secret")}},
+	"aws_secretsmanager_secret":        {{kind: KindResource, service: "secretsmanager", texts: configuredText("policy"), link: selfLink}},
 	"aws_s3_bucket_policy":             {{kind: KindResource, unread: true, service: "s3", texts: unreadText("policy"), link: attributeLink("bucket", "aws_s3_bucket")}},
 	"aws_sqs_queue_policy":             {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: attributeLink("queue_url", "aws_sqs_queue")}},
 	"aws_sqs_queue":                    {{kind: KindResource, unread: true, service: "sqs", texts: unreadText("policy"), link: selfLink}},
@@ -430,6 +460,9 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 				if spec.arn != "" {
 					s.PolicyARN = rc.AttributeValues[spec.arn]
 					s.OutsidePlan = outsidePlan(rc, spec.arn, ctx)
+				}
+				if spec.kind == KindResource && !spec.unread {
+					s.Resources, s.ResourceUnknown = attachedResources(link, rc, ctx)
 				}
 				out = append(out, s)
 			}
@@ -681,6 +714,56 @@ func resolvePolicyARN(rc *ResourceChange, attr, arn string, refs []string, ctx s
 func policyTarget(p *ResourceChange, maybe bool) policyText {
 	t := readText(p, "policy")
 	return policyText{policy: p.Address, text: t.text, unknown: t.unknown, maybe: maybe}
+}
+
+// attachedResources returns the resources that a resource policy source of
+// rc may attach to, through its link:
+//
+//   - A source that belongs to the resource itself, such as the policy of an
+//     aws_secretsmanager_secret, attaches to rc.
+//   - A link attribute with a known ARN attaches to the resource with that
+//     ARN, whether the plan contains it or not.
+//   - Otherwise the references of the link attribute name the resources of
+//     the plan it may attach to, as PolicyLink.Match decides for a principal.
+//
+// It reports true when the plan can't tell the resource: the references
+// name no resource of the link's type, or they may carry another value, such
+// as a variable or a data source.
+func attachedResources(link PolicyLink, rc *ResourceChange, ctx sourceContext) ([]AttachedResource, bool) {
+	if link.Self != "" {
+		return []AttachedResource{{Change: rc, Match: LinkYes}}, false
+	}
+	if strings.HasPrefix(link.Value, "arn:") {
+		return []AttachedResource{{ARN: link.Value, Match: LinkYes}}, false
+	}
+	var out []AttachedResource
+	for _, c := range ctx.changes {
+		if c.Type != link.Type || c.Change == "delete" {
+			continue
+		}
+		m, decided := link.matchReferences(c)
+		if !decided {
+			return nil, true
+		}
+		if m != LinkNo {
+			out = append(out, AttachedResource{Change: c, Match: m})
+		}
+	}
+	return out, len(out) == 0
+}
+
+// configuredText reads the policy text from a top-level attribute, when the
+// resource may set that attribute (see maySet). The policy attribute of an
+// aws_secretsmanager_secret is one: the provider computes it when the
+// configuration leaves it out, and it then holds the policy that an
+// aws_secretsmanager_secret_policy sets.
+func configuredText(attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, _ sourceContext) []policyText {
+		if !maySet(rc, attr) {
+			return nil
+		}
+		return []policyText{readText(rc, attr)}
+	}
 }
 
 // unreadText gives one source with unknown text at the attribute attr, when

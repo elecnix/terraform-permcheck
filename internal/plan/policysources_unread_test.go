@@ -21,8 +21,6 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 		{"aws_iam_group_policy", `"group": "ops", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_group_policy_attachment", `"group": "ops", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_group"},
 		{"aws_iam_user", `"name": "ci", "permissions_boundary": "arn:aws:iam::123456789012:policy/b"`, "permissions_boundary", KindBoundary, "", "aws_iam_user"},
-		{"aws_secretsmanager_secret_policy", `"secret_arn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:app-db-AbCdEf", "policy": "{}"`, "policy", KindResource, "secretsmanager", "aws_secretsmanager_secret"},
-		{"aws_secretsmanager_secret", `"name": "app-db", "policy": "{}"`, "policy", KindResource, "secretsmanager", "aws_secretsmanager_secret"},
 		{"aws_s3_bucket_policy", `"bucket": "app-data", "policy": "{}"`, "policy", KindResource, "s3", "aws_s3_bucket"},
 		{"aws_sqs_queue_policy", `"queue_url": "https://sqs.us-east-1.amazonaws.com/123456789012/app-jobs", "policy": "{}"`, "policy", KindResource, "sqs", "aws_sqs_queue"},
 		{"aws_sqs_queue", `"name": "app-jobs", "policy": "{}"`, "policy", KindResource, "sqs", "aws_sqs_queue"},

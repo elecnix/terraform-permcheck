@@ -22,25 +22,38 @@ import "strings"
 // "arn:aws:*") or a missing segment is undecidable and counts as overlap, so
 // the caller only reports a gap when non-coverage is provable.
 func arnIntersect(a, b string) bool {
+	may, _ := ARNOverlap(a, b)
+	return may
+}
+
+// ARNOverlap reports whether two ARN patterns can match a common ARN, as
+// arnIntersect does, and whether the answer is decidable. A decidable true
+// means the patterns share an ARN. A decidable false means they provably
+// share none. An undecidable answer is always true: a cross-segment wildcard
+// such as "arn:aws:*", a missing segment, or a segment with a construct the
+// matcher doesn't model, such as a ${...} policy variable.
+func ARNOverlap(a, b string) (overlap, decidable bool) {
 	if a == "" || b == "" {
-		return a == b
+		return a == b, true
 	}
 	as := strings.Split(a, ":")
 	bs := strings.Split(b, ":")
 	if (len(as) == 1 && as[0] == "*") || (len(bs) == 1 && bs[0] == "*") {
-		return true // "*" matches every ARN
+		return true, true // "*" matches every ARN
 	}
 	if len(as) != len(bs) {
 		// Cross-segment wildcard or malformed ARN — overlap undecidable.
-		return true
+		return true, false
 	}
+	decidable = true
 	for i := range as {
 		may, dec := globIntersect(as[i], bs[i])
 		if dec && !may {
-			return false
+			return false, true
 		}
+		decidable = decidable && dec
 	}
-	return true
+	return true, decidable
 }
 
 // globIntersect reports whether two glob patterns (supporting * and ?) share
