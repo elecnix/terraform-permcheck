@@ -23,7 +23,7 @@ func checkPlan(t *testing.T, raw string, needs []iam.Need, strict bool) Result {
 	for i := range needs {
 		needs[i].Principal = "task"
 	}
-	res, err := Check(Principal{Label: "task", Role: role}, needs, plan.PolicySources(changes), strict)
+	res, err := Check(Principal{Label: "task", Role: role}, needs, plan.PolicySources(changes, nil), strict)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestCheck_UnparsablePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Check(Principal{Label: "task", Role: changes[0]}, nil, plan.PolicySources(changes), false)
+	_, err = Check(Principal{Label: "task", Role: changes[0]}, nil, plan.PolicySources(changes, nil), false)
 	if err == nil || !strings.Contains(err.Error(), "aws_iam_role_policy.p") {
 		t.Errorf("error = %v, want one that names the source", err)
 	}

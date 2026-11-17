@@ -1,0 +1,318 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "data.local_file.deferred",
+          "mode": "data",
+          "type": "local_file",
+          "name": "deferred",
+          "provider_name": "registry.terraform.io/hashicorp/local",
+          "schema_version": 0,
+          "sensitive_values": {}
+        },
+        {
+          "address": "data.local_file.depends",
+          "mode": "data",
+          "type": "local_file",
+          "name": "depends",
+          "provider_name": "registry.terraform.io/hashicorp/local",
+          "schema_version": 0,
+          "values": {
+            "filename": "./policy.json"
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "terraform_data.later",
+          "mode": "managed",
+          "type": "terraform_data",
+          "name": "later",
+          "provider_name": "terraform.io/builtin/terraform",
+          "schema_version": 0,
+          "values": {
+            "input": "policy.json",
+            "triggers_replace": null
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "terraform_data.uses",
+          "mode": "managed",
+          "type": "terraform_data",
+          "name": "uses",
+          "provider_name": "terraform.io/builtin/terraform",
+          "schema_version": 0,
+          "values": {
+            "input": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:DescribeImages\",\"Resource\":\"*\"}]}",
+            "triggers_replace": null
+          },
+          "sensitive_values": {}
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "data.local_file.deferred",
+      "mode": "data",
+      "type": "local_file",
+      "name": "deferred",
+      "provider_name": "registry.terraform.io/hashicorp/local",
+      "change": {
+        "actions": [
+          "read"
+        ],
+        "before": null,
+        "after": {},
+        "after_unknown": {
+          "content": true,
+          "filename": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "action_reason": "read_because_config_unknown"
+    },
+    {
+      "address": "data.local_file.depends",
+      "mode": "data",
+      "type": "local_file",
+      "name": "depends",
+      "provider_name": "registry.terraform.io/hashicorp/local",
+      "change": {
+        "actions": [
+          "read"
+        ],
+        "before": null,
+        "after": {
+          "filename": "./policy.json"
+        },
+        "after_unknown": {
+          "content": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "action_reason": "read_because_dependency_pending"
+    },
+    {
+      "address": "terraform_data.later",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "later",
+      "provider_name": "terraform.io/builtin/terraform",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "input": "policy.json",
+          "triggers_replace": null
+        },
+        "after_unknown": {
+          "id": true,
+          "output": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "terraform_data.uses",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "uses",
+      "provider_name": "terraform.io/builtin/terraform",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "input": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:DescribeImages\",\"Resource\":\"*\"}]}",
+          "triggers_replace": null
+        },
+        "after_unknown": {
+          "id": true,
+          "output": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.15.6",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.local_file.known",
+            "mode": "data",
+            "type": "local_file",
+            "name": "known",
+            "provider_name": "registry.terraform.io/hashicorp/local",
+            "schema_version": 0,
+            "values": {
+              "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:DescribeImages\",\"Resource\":\"*\"}]}",
+              "filename": "./policy.json",
+              "id": "d4879f4020cb78a2e784092427c604d26d76a00c"
+            },
+            "sensitive_values": {}
+          }
+        ],
+        "child_modules": [
+          {
+            "resources": [
+              {
+                "address": "module.app.data.local_file.in_module",
+                "mode": "data",
+                "type": "local_file",
+                "name": "in_module",
+                "provider_name": "registry.terraform.io/hashicorp/local",
+                "schema_version": 0,
+                "values": {
+                  "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:DescribeImages\",\"Resource\":\"*\"}]}",
+                  "filename": "./policy.json",
+                  "id": "d4879f4020cb78a2e784092427c604d26d76a00c"
+                },
+                "sensitive_values": {}
+              }
+            ],
+            "address": "module.app"
+          }
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "provider_config": {
+      "local": {
+        "name": "local",
+        "full_name": "registry.terraform.io/hashicorp/local",
+        "version_constraint": "2.5.2"
+      },
+      "terraform": {
+        "name": "terraform",
+        "full_name": "terraform.io/builtin/terraform"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "terraform_data.later",
+          "mode": "managed",
+          "type": "terraform_data",
+          "name": "later",
+          "provider_config_key": "terraform",
+          "expressions": {
+            "input": {
+              "constant_value": "policy.json"
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "terraform_data.uses",
+          "mode": "managed",
+          "type": "terraform_data",
+          "name": "uses",
+          "provider_config_key": "terraform",
+          "expressions": {
+            "input": {
+              "references": [
+                "data.local_file.known.content",
+                "data.local_file.known"
+              ]
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "data.local_file.deferred",
+          "mode": "data",
+          "type": "local_file",
+          "name": "deferred",
+          "provider_config_key": "local",
+          "expressions": {
+            "filename": {
+              "references": [
+                "path.module",
+                "terraform_data.later.id",
+                "terraform_data.later"
+              ]
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "data.local_file.depends",
+          "mode": "data",
+          "type": "local_file",
+          "name": "depends",
+          "provider_config_key": "local",
+          "expressions": {
+            "filename": {
+              "references": [
+                "path.module"
+              ]
+            }
+          },
+          "schema_version": 0,
+          "depends_on": [
+            "terraform_data.later"
+          ]
+        },
+        {
+          "address": "data.local_file.known",
+          "mode": "data",
+          "type": "local_file",
+          "name": "known",
+          "provider_config_key": "local",
+          "expressions": {
+            "filename": {
+              "references": [
+                "path.module"
+              ]
+            }
+          },
+          "schema_version": 0
+        }
+      ],
+      "module_calls": {
+        "app": {
+          "source": "./mod",
+          "module": {
+            "resources": [
+              {
+                "address": "data.local_file.in_module",
+                "mode": "data",
+                "type": "local_file",
+                "name": "in_module",
+                "provider_config_key": "local",
+                "expressions": {
+                  "filename": {
+                    "references": [
+                      "path.root"
+                    ]
+                  }
+                },
+                "schema_version": 0
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "applyable": true,
+  "complete": true,
+  "errored": false
+}

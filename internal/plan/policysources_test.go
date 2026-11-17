@@ -36,7 +36,7 @@ func TestPolicySources_RolePolicyKnownAndComputed(t *testing.T) {
 	changes := parseFixture(t, "testdata/policysources/role_policy.json")
 	role := changeAt(t, changes, "aws_iam_role.task", "create")
 
-	sources := PolicySources(changes)
+	sources := PolicySources(changes, nil)
 	if len(sources) != 2 {
 		t.Fatalf("got %d sources, want 2: %+v", len(sources), sources)
 	}
@@ -114,7 +114,7 @@ func TestPolicySources_RoleInlinePolicy(t *testing.T) {
 	task := changeAt(t, changes, "aws_iam_role.task", "create")
 	other := changeAt(t, changes, "aws_iam_role.other", "create")
 
-	sources := PolicySources(changes)
+	sources := PolicySources(changes, nil)
 	if len(sources) != 2 {
 		t.Fatalf("got %d sources, want 2, since an inline_policy the configuration omits is no source: %+v", len(sources), sources)
 	}
@@ -152,7 +152,7 @@ func TestPolicySources_RoleInlinePolicyComputedWhole(t *testing.T) {
 			 "expressions": {"inline_policy": [{"policy": {"references": ["local.p"]}}]}}
 		]}}
 	}`)
-	sources := PolicySources(changes)
+	sources := PolicySources(changes, nil)
 	if len(sources) != 1 || !sources[0].Unknown || sources[0].Path != "inline_policy" {
 		t.Fatalf("sources = %+v, want one unknown inline_policy source", sources)
 	}
@@ -239,7 +239,7 @@ func TestPolicyLink_Match(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			changes := parseRaw(t, rolePolicyPlan(tc.roles, tc.roleAfter, tc.roleExpr))
-			sources := PolicySources(changes)
+			sources := PolicySources(changes, nil)
 			if len(sources) != 1 {
 				t.Fatalf("got %d sources, want 1", len(sources))
 			}
@@ -285,7 +285,7 @@ func TestPolicySources_Actions(t *testing.T) {
 				{"address": "aws_iam_role_policy.p", "type": "aws_iam_role_policy", "name": "p",
 				 "change": {"actions": `+tc.actions+`, "before": `+tc.before+`, "after": `+tc.after+`, "after_unknown": {}}}
 			]}`)
-			sources := PolicySources(changes)
+			sources := PolicySources(changes, nil)
 			if len(sources) != len(tc.want) {
 				t.Fatalf("got %d sources, want %d: %+v", len(sources), len(tc.want), sources)
 			}
@@ -354,7 +354,7 @@ func TestPolicySources_CountAndForEach(t *testing.T) {
 					{"address": "aws_iam_role_policy.p", "mode": "managed", "type": "aws_iam_role_policy", "name": "p",
 					 "expressions": {"policy": {}, "role": {"references": `+tc.roleExpr+`}}}
 				]}}}`)
-			sources := PolicySources(changes)
+			sources := PolicySources(changes, nil)
 			if len(sources) != 2 {
 				t.Fatalf("got %d sources, want 2", len(sources))
 			}
@@ -400,7 +400,7 @@ func TestPolicySources_ModulePath(t *testing.T) {
 			]}}}
 		}}
 	}`)
-	sources := sourcesAt(PolicySources(changes), `module.app["eu"].aws_iam_role_policy.p`)
+	sources := sourcesAt(PolicySources(changes, nil), `module.app["eu"].aws_iam_role_policy.p`)
 	if len(sources) != 1 {
 		t.Fatalf("got %d sources, want 1", len(sources))
 	}

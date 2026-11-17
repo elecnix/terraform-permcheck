@@ -46,9 +46,18 @@ type PolicySource struct {
 	// It is empty when the source holds its text itself, or when terraform
 	// computes the ARN at apply time.
 	PolicyARN string
-	// OutsidePlan is true when PolicyARN names a managed policy that the
-	// plan doesn't create, such as an AWS managed policy. The plan can't
-	// show its text.
+	// Policy is the address of the aws_iam_policy resource, or of the
+	// data "aws_iam_policy" source, that holds the text of the managed
+	// policy the source attaches. It is empty when the source holds its
+	// text itself, and when the attached ARN names no policy of the plan.
+	Policy string
+	// PolicyMaybe is true when the plan can't decide whether the attached
+	// ARN names Policy or, for a source with OutsidePlan, a managed policy
+	// outside the plan. The source may then not apply to the principal.
+	PolicyMaybe bool
+	// OutsidePlan is true when the attached ARN names a managed policy that
+	// the plan doesn't create and no data source of the plan reads, such as
+	// an AWS managed policy. The plan can't show its text.
 	OutsidePlan bool
 	// Link ties the source to the principal or resource it attaches to.
 	Link PolicyLink
@@ -273,11 +282,25 @@ func closingBracket(s string) int {
 	return -1
 }
 
-// policyText is one policy text a resource sets, at an attribute path.
+// policyText is one policy text a resource sets, at an attribute path. For a
+// source that attaches a managed policy, it also says which policy.
 type policyText struct {
 	path    string
 	text    string
 	unknown bool
+	// policyARN, policy, maybe and outside fill the PolicySource fields of
+	// the same names (PolicyARN, Policy, PolicyMaybe, OutsidePlan).
+	policyARN string
+	policy    string
+	maybe     bool
+	outside   bool
+}
+
+// sourceContext is what a source reads besides its own resource: every
+// change and every data source of the plan.
+type sourceContext struct {
+	changes []*ResourceChange
+	data    []DataSource
 }
 
 // sourceSpec says how one resource type sets a policy source: its kind,
@@ -294,11 +317,11 @@ type sourceSpec struct {
 	// grant, such as secretsmanager. It is empty for an identity or
 	// boundary source.
 	service string
-	// arn is the attribute that holds the ARN of the managed policy the
-	// source attaches, such as policy_arn. It is empty when the source
-	// holds its policy text itself.
+	// arn is the attribute of an unread source that holds the ARN of the
+	// managed policy it attaches, such as policy_arn. It sets PolicyARN and
+	// OutsidePlan. A read source sets them through its texts function.
 	arn   string
-	texts func(rc *ResourceChange) []policyText
+	texts func(rc *ResourceChange, ctx sourceContext) []policyText
 	link  func(rc *ResourceChange) PolicyLink
 }
 
@@ -311,19 +334,20 @@ type sourceSpec struct {
 // The membership resources aws_iam_user_group_membership and
 // aws_iam_group_membership set no policy, so they have no spec. An
 // aws_iam_policy holds the text of a managed policy, but it attaches to no
-// principal by itself, so it has no spec either.
+// principal by itself, so it has no spec either. A source that attaches it
+// reads its text (see resolvePolicyARN).
 var sourceSpecs = map[string][]sourceSpec{
 	// Identity policies of a role.
 	"aws_iam_role_policy": {{kind: KindIdentity, texts: attributeText("policy"), link: attributeLink("role", "aws_iam_role")}},
 	"aws_iam_role": {
 		{kind: KindIdentity, texts: blockTexts("inline_policy", "policy"), link: selfLink},
-		{kind: KindIdentity, unread: true, texts: unreadText("managed_policy_arns"), link: selfLink},
+		{kind: KindIdentity, texts: managedPolicyList("managed_policy_arns"), link: selfLink},
 		{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink},
 	},
-	"aws_iam_role_policy_attachment":            {{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("role", "aws_iam_role")}},
+	"aws_iam_role_policy_attachment":            {{kind: KindIdentity, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("role", "aws_iam_role")}},
 	"aws_iam_role_policy_attachments_exclusive": {{kind: KindIdentity, unread: true, texts: unreadText("policy_arns"), link: attributeLink("role_name", "aws_iam_role")}},
 	"aws_iam_policy_attachment": {
-		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
+		{kind: KindIdentity, texts: managedPolicy("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
 		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "users"), link: attributeLink("users", "aws_iam_user")},
 		{kind: KindIdentity, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "groups"), link: attributeLink("groups", "aws_iam_group")},
 	},
@@ -353,7 +377,12 @@ var sourceSpecs = map[string][]sourceSpec{
 // order. A create or update reads the planned value, and a no-op reads the
 // current value. A delete adds no source, since the policy goes away, so a
 // replace adds one source, from its create.
-func PolicySources(changes []*ResourceChange) []PolicySource {
+//
+// data are the data sources of the plan (see ParseDataSources). A
+// data "aws_iam_policy" source gives the text of a managed policy that the
+// plan attaches but doesn't create.
+func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource {
+	ctx := sourceContext{changes: changes, data: data}
 	var out []PolicySource
 	for _, rc := range changes {
 		if rc.Change == "delete" {
@@ -361,23 +390,28 @@ func PolicySources(changes []*ResourceChange) []PolicySource {
 		}
 		for _, spec := range sourceSpecs[rc.Type] {
 			link := spec.link(rc)
-			for _, t := range spec.texts(rc) {
+			for _, t := range spec.texts(rc, ctx) {
 				s := PolicySource{
-					Address: rc.Address,
-					Path:    t.path,
-					Kind:    spec.kind,
-					Service: spec.service,
-					Text:    t.text,
-					Unknown: t.unknown || spec.unread,
-					Unread:  spec.unread,
-					Link:    link,
+					Address:     rc.Address,
+					Path:        t.path,
+					Kind:        spec.kind,
+					Service:     spec.service,
+					Text:        t.text,
+					Unknown:     t.unknown || spec.unread,
+					Unread:      spec.unread,
+					PolicyARN:   t.policyARN,
+					Policy:      t.policy,
+					PolicyMaybe: t.maybe,
+					OutsidePlan: t.outside,
+					Link:        link,
 				}
 				if spec.unread {
 					s.Text = ""
+					s.Policy = ""
 				}
 				if spec.arn != "" {
 					s.PolicyARN = rc.AttributeValues[spec.arn]
-					s.OutsidePlan = outsidePlan(rc, spec.arn, changes)
+					s.OutsidePlan = outsidePlan(rc, spec.arn, ctx)
 				}
 				out = append(out, s)
 			}
@@ -386,58 +420,243 @@ func PolicySources(changes []*ResourceChange) []PolicySource {
 	return out
 }
 
+// policyType is the resource type of a customer managed policy.
+const policyType = "aws_iam_policy"
+
 // awsManagedPolicyPrefix starts the ARN of every AWS managed policy. AWS
 // owns these policies, so no plan creates one.
 const awsManagedPolicyPrefix = "arn:aws:iam::aws:policy/"
 
 // outsidePlan reports whether the attribute attr of rc holds the known ARN
-// of a managed policy that no aws_iam_policy in the plan can be. That is
-// true for an AWS managed policy. For any other ARN, it is true when the
-// attribute references no aws_iam_policy, and every aws_iam_policy in the
-// plan has a known ARN or name that differs from it. A policy whose ARN and
-// name are both unknown, such as one with name_prefix, may be any ARN.
-func outsidePlan(rc *ResourceChange, attr string, changes []*ResourceChange) bool {
+// of a managed policy that the plan provably doesn't contain: no
+// aws_iam_policy of the plan may have it, and no data source of the plan
+// reads it.
+func outsidePlan(rc *ResourceChange, attr string, ctx sourceContext) bool {
 	arn := rc.AttributeValues[attr]
 	if arn == "" {
 		return false
 	}
-	if strings.HasPrefix(arn, awsManagedPolicyPrefix) {
-		return true
+	targets := resolvePolicyARN(rc, attr, arn, rc.References[attr], ctx)
+	return len(targets) == 1 && targets[0].outside && !targets[0].maybe
+}
+
+// managedPolicy reads the text of the managed policy that the attribute attr
+// attaches, such as the policy_arn of an aws_iam_role_policy_attachment. It
+// gives a source only when the resource may set the attribute when. An
+// aws_iam_policy_attachment that names only users, say, gives no source for
+// roles. See resolvePolicyARN for how the ARN names a policy.
+func managedPolicy(attr, when string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, ctx sourceContext) []policyText {
+		if !maySet(rc, when) {
+			return nil
+		}
+		arn := rc.AttributeValues[attr]
+		return resolvePolicyARN(rc, attr, arn, rc.References[attr], ctx).texts(attr, arn)
 	}
-	for _, ref := range rc.References[attr] {
-		if typ, _, _, ok := parseResourceRef(ref); !ok || typ == "aws_iam_policy" {
-			return false
+}
+
+// managedPolicyList reads the text of each managed policy that a list of
+// ARNs attaches, such as the managed_policy_arns of an aws_iam_role. It
+// gives a source only when the configuration writes the list, since a
+// computed list that the configuration omits holds what other resources
+// attach.
+//
+// A known ARN in the list names its policy by value: the references of the
+// attribute belong to the whole list, not to one ARN. An ARN that terraform
+// computes at apply time comes from a reference, so it names one of the
+// referenced aws_iam_policy resources whose ARN is unknown. When the list
+// has one such ARN and its references name one such policy, it names that
+// policy. Otherwise each referenced policy may be one of them. A list that
+// terraform computes whole, or whose computed ARNs the references don't
+// name, is one source with unknown text.
+func managedPolicyList(attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, ctx sourceContext) []policyText {
+		if !maySet(rc, attr) {
+			return nil
+		}
+		if rc.paths == nil || unknownAlong(rc.paths.unknown, attr) {
+			return []policyText{{path: attr, unknown: true}}
+		}
+		list, _ := walk(rc.paths.state, attr)
+		items, _ := list.([]any)
+		var out []policyText
+		computed := 0
+		for i, item := range items {
+			path := attr + "." + strconv.Itoa(i)
+			arn, _ := item.(string)
+			if unknownAlong(rc.paths.unknown, path) || arn == "" {
+				computed++
+				continue
+			}
+			out = append(out, resolvePolicyARN(rc, attr, arn, nil, ctx).texts(path, arn)...)
+		}
+		if computed == 0 {
+			return out
+		}
+		policies, ok := referencedPolicies(rc, rc.References[attr], ctx)
+		var targets policyTargets
+		for _, p := range policies {
+			// A reference to a policy whose ARN is known gives a known ARN.
+			if p.AttributeValues["arn"] == "" {
+				targets = append(targets, policyTarget(p, computed > 1))
+			}
+		}
+		if !ok || len(targets) == 0 {
+			return append(out, policyText{path: attr, unknown: true})
+		}
+		if len(targets) > 1 {
+			for i := range targets {
+				targets[i].maybe = true
+			}
+		}
+		return append(out, targets.texts(attr, "")...)
+	}
+}
+
+// referencedPolicies returns the aws_iam_policy changes that the references
+// of a list attribute of rc name, in plan order. A reference with an
+// instance key names that instance, and a reference without one names each
+// instance. It reports false when a reference may carry another value, such
+// as a variable or an attribute of another resource type.
+func referencedPolicies(rc *ResourceChange, refs []string, ctx sourceContext) ([]*ResourceChange, bool) {
+	named := map[string]bool{}
+	keys := map[string]map[string]bool{}
+	for _, ref := range refs {
+		typ, name, key, ok := parseResourceRef(ref)
+		switch {
+		case !ok && (strings.HasPrefix(ref, "count.index") || strings.HasPrefix(ref, "each.key")):
+			continue
+		case !ok || typ != policyType:
+			return nil, false
+		}
+		named[name] = true
+		if key != "" {
+			if keys[name] == nil {
+				keys[name] = map[string]bool{}
+			}
+			keys[name][key] = true
 		}
 	}
-	name := arn[strings.LastIndex(arn, "/")+1:]
-	for _, p := range changes {
-		if p.Type != "aws_iam_policy" || p.Change == "delete" {
+	var out []*ResourceChange
+	for _, p := range ctx.changes {
+		if p.Type != policyType || p.Change == "delete" || p.ModuleAddress != rc.ModuleAddress || !named[p.Name] {
 			continue
 		}
-		if known := p.AttributeValues["arn"]; known != "" {
-			if known == arn {
-				return false
-			}
+		// Terraform lists aws_iam_policy.p[0] and aws_iam_policy.p for one
+		// reference to an instance, so a keyed reference decides alone.
+		if k := keys[p.Name]; k != nil && !k[strings.TrimPrefix(p.InstanceName(), p.Name)] {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, true
+}
+
+// policyTargets are the policies that one attached ARN may name, as
+// policyText values without their path and ARN.
+type policyTargets []policyText
+
+// texts returns the targets with the attribute path and the known ARN set.
+func (ts policyTargets) texts(path, arn string) []policyText {
+	out := make([]policyText, len(ts))
+	for i, t := range ts {
+		t.path = path
+		t.policyARN = arn
+		out[i] = t
+	}
+	return out
+}
+
+// resolvePolicyARN returns the policies that a managed policy ARN may name.
+// The attribute attr of rc holds the ARN, refs are its references, and arn
+// is its known value, or empty when terraform computes it at apply time.
+// The ARN names a policy in the order a principal link does (see
+// PolicyLink.Match):
+//
+//  1. The references of the attribute. policy_arn = aws_iam_policy.x.arn
+//     names aws_iam_policy.x. A reference without an instance key to a
+//     policy with count or for_each names one of its instances, decided by
+//     known ARNs or undecidable.
+//  2. The known ARN against the known arn of each aws_iam_policy of the
+//     plan, then of each data "aws_iam_policy" source. A data source that
+//     terraform read during the plan gives the text of a policy that the
+//     plan doesn't create, such as an AWS managed policy.
+//  3. Otherwise a known ARN may name an aws_iam_policy whose ARN is
+//     unknown, unless its known name differs. Each such policy is a target
+//     that may apply, and so is a policy outside the plan.
+//
+// A computed ARN that the references don't decide gives one target with
+// unknown text. A known ARN that names no policy of the plan gives one
+// target outside the plan. A policy whose text terraform computes at apply
+// time gives a target with unknown text.
+func resolvePolicyARN(rc *ResourceChange, attr, arn string, refs []string, ctx sourceContext) policyTargets {
+	link := PolicyLink{Type: policyType, Module: rc.ModuleAddress, Attribute: attr, References: refs, Value: arn}
+	var out policyTargets
+	for _, p := range ctx.changes {
+		if p.Type != policyType || p.Change == "delete" {
+			continue
+		}
+		m, decided := link.matchReferences(p)
+		if !decided {
+			// The references decide for every policy or for none.
+			break
+		}
+		if m != LinkNo {
+			out = append(out, policyTarget(p, m == LinkMaybe))
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	if arn == "" {
+		return policyTargets{{unknown: true}}
+	}
+
+	for _, p := range ctx.changes {
+		if p.Type == policyType && p.Change != "delete" && p.AttributeValues["arn"] == arn {
+			return policyTargets{policyTarget(p, false)}
+		}
+	}
+	for _, d := range ctx.data {
+		if d.Type == policyType && d.Values["arn"] == arn {
+			text := d.Values["policy"]
+			return policyTargets{{policy: d.Address, text: text, unknown: d.Deferred || text == ""}}
+		}
+	}
+	if strings.HasPrefix(arn, awsManagedPolicyPrefix) {
+		return policyTargets{{unknown: true, outside: true}}
+	}
+	name := arn[strings.LastIndex(arn, "/")+1:]
+	for _, p := range ctx.changes {
+		if p.Type != policyType || p.Change == "delete" || p.AttributeValues["arn"] != "" {
 			continue
 		}
 		if known := p.AttributeValues["name"]; known == "" || known == name {
-			return false
+			out = append(out, policyTarget(p, true))
 		}
 	}
-	return true
+	return append(out, policyText{unknown: true, outside: true, maybe: len(out) > 0})
+}
+
+// policyTarget returns the aws_iam_policy p as a target, with the text of
+// its policy attribute. A text that terraform computes at apply time is
+// unknown.
+func policyTarget(p *ResourceChange, maybe bool) policyText {
+	t := readText(p, "policy")
+	return policyText{policy: p.Address, text: t.text, unknown: t.unknown, maybe: maybe}
 }
 
 // unreadText gives one source with unknown text at the attribute attr, when
 // the resource may set that attribute.
-func unreadText(attr string) func(rc *ResourceChange) []policyText {
+func unreadText(attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
 	return unreadTextWhen(attr, attr)
 }
 
 // unreadTextWhen gives one source with unknown text at the attribute attr,
 // when the resource may set the attribute when. An aws_iam_policy_attachment
-// that names only users, say, gives no source for roles.
-func unreadTextWhen(attr, when string) func(rc *ResourceChange) []policyText {
-	return func(rc *ResourceChange) []policyText {
+// that names only users, say, gives no source for users.
+func unreadTextWhen(attr, when string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, _ sourceContext) []policyText {
 		if !maySet(rc, when) {
 			return nil
 		}
@@ -465,8 +684,8 @@ func maySet(rc *ResourceChange, attr string) bool {
 // attributeText reads the policy text from a top-level attribute. A value
 // that terraform computes at apply time, or that the plan leaves null, is
 // unknown.
-func attributeText(attr string) func(rc *ResourceChange) []policyText {
-	return func(rc *ResourceChange) []policyText {
+func attributeText(attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, _ sourceContext) []policyText {
 		return []policyText{readText(rc, attr)}
 	}
 }
@@ -476,8 +695,8 @@ func attributeText(attr string) func(rc *ResourceChange) []policyText {
 // computes at apply time is one unknown source. The blocks are a source only
 // when the configuration writes them, since a computed block that the
 // configuration omits holds policies that other resources set.
-func blockTexts(block, attr string) func(rc *ResourceChange) []policyText {
-	return func(rc *ResourceChange) []policyText {
+func blockTexts(block, attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
+	return func(rc *ResourceChange, _ sourceContext) []policyText {
 		if rc.Configured != nil && !rc.Configured[block] {
 			return nil
 		}

@@ -25,7 +25,8 @@ type Applied struct {
 	plan.PolicySource
 	// Match says whether the source attaches to the principal. A resource
 	// policy is LinkMaybe, since this version doesn't read the Principal
-	// element of its statements.
+	// element of its statements. So is a source whose attached ARN may name
+	// another policy (see plan.PolicySource.PolicyMaybe).
 	Match plan.LinkMatch
 }
 
@@ -119,7 +120,12 @@ func applies(s plan.PolicySource, role *plan.ResourceChange, action string) plan
 		}
 		return plan.LinkNo
 	}
-	return s.Link.Match(role)
+	m := s.Link.Match(role)
+	if m == plan.LinkYes && s.PolicyMaybe {
+		// The role attaches the ARN, and the ARN may name another policy.
+		return plan.LinkMaybe
+	}
+	return m
 }
 
 // mayGrant returns the statements of a source whose link to the principal

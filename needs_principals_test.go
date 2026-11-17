@@ -28,6 +28,8 @@ type principalsJSON struct {
 			Kind          string `json:"kind"`
 			Text          string `json:"text"`
 			UnknownReason string `json:"unknown_reason"`
+			Policy        string `json:"policy"`
+			Link          string `json:"link"`
 		} `json:"sources"`
 	} `json:"policy_sources"`
 	PlanResourcesSkipped bool `json:"plan_resources_skipped"`
@@ -125,9 +127,11 @@ func TestPrincipals_WorkedExample1_SecretPolicyIsUnknownSource(t *testing.T) {
 }
 
 // Worked example 2: the deploy role's grants come from two policy
-// attachments, which this version doesn't read yet. RollService is
-// unverified under --strict-resources, not missing. VerifyImage and
-// ReadParams are covered by default, with a notice for each attachment.
+// attachments. deploy_ecs references aws_iam_policy.deploy_ecs, whose text
+// the plan shows, so RollService is covered under --strict-resources too.
+// deploy_ecr attaches an AWS managed policy that the plan doesn't contain.
+// VerifyImage and ReadParams are covered by default, with a notice for
+// deploy_ecr only, and unverified under --strict-resources.
 func TestPrincipals_WorkedExample2_AttachmentsAreUnknownSources(t *testing.T) {
 	stdout, stderr, err := runValidate(t, "--plan-file", ciDeployPlan, "--config", ciDeployConfig)
 	if err != nil {
@@ -136,13 +140,19 @@ func TestPrincipals_WorkedExample2_AttachmentsAreUnknownSources(t *testing.T) {
 	if !strings.Contains(stdout, "All required permissions covered") {
 		t.Errorf("stdout = %q, want the all-clear line", stdout)
 	}
-	for _, addr := range []string{"aws_iam_role_policy_attachment.deploy_ecr", "aws_iam_role_policy_attachment.deploy_ecs"} {
-		if n := strings.Count(stderr, "notice: "+addr+": "); n != 1 {
-			t.Errorf("stderr has %d notices for %s, want 1:\n%s", n, addr, stderr)
+	for addr, want := range map[string]int{
+		"aws_iam_role_policy_attachment.deploy_ecr": 1,
+		"aws_iam_role_policy_attachment.deploy_ecs": 0,
+	} {
+		if n := strings.Count(stderr, "notice: "+addr+": "); n != want {
+			t.Errorf("stderr has %d notices for %s, want %d:\n%s", n, addr, want, stderr)
 		}
 	}
 	if !strings.Contains(stderr, "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser") {
 		t.Errorf("the notice for deploy_ecr does not name the managed policy:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, `a data "aws_iam_policy" block with this arn`) {
+		t.Errorf("the notice for deploy_ecr does not give the fix:\n%s", stderr)
 	}
 
 	r, err := runValidateJSON(t, "--plan-file", ciDeployPlan, "--config", ciDeployConfig, "--strict-resources")
@@ -151,7 +161,6 @@ func TestPrincipals_WorkedExample2_AttachmentsAreUnknownSources(t *testing.T) {
 	}
 	want := []string{
 		"VerifyImage ecr:DescribeImages unverified policy_unknown",
-		"RollService ecs:UpdateService unverified policy_unknown",
 		"ReadParams ssm:GetParameter unverified policy_unknown",
 	}
 	if got := verdicts(r); strings.Join(got, "\n") != strings.Join(want, "\n") {

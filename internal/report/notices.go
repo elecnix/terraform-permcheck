@@ -34,22 +34,33 @@ func (r *Report) notices() string {
 
 // sourceNotice says why the text of a policy source is unknown, and that the
 // needs of the principal may depend on it. A boundary can only limit what
-// the other policies grant, and any other source may grant a need.
+// the other policies grant, and any other source may grant a need. For a
+// managed policy outside the plan, it also gives the fix: a
+// data "aws_iam_policy" block with the same arn gives PermCheck the text.
 func sourceNotice(label string, s principal.Applied) string {
-	var why string
+	var why, fix string
 	switch unknownReason(s) {
 	case reasonOutsidePlan:
 		why = s.PolicyARN + " is a managed policy that the plan doesn't contain"
+		if s.PolicyMaybe {
+			why = s.PolicyARN + " may be a managed policy that the plan doesn't contain"
+		}
+		if !s.Unread {
+			fix = `; a data "aws_iam_policy" block with this arn gives PermCheck its text`
+		}
 	case reasonUnread:
 		why = fmt.Sprintf("this version doesn't read the %s attribute of %s yet", s.Path, resourceType(s.Address))
 	default:
 		why = "policy text is known only after apply"
+		if s.Policy != "" {
+			why = "the text of " + s.Policy + " is known only after apply"
+		}
 	}
 	effect := "granted"
 	if s.Kind == plan.KindBoundary {
 		effect = "limited"
 	}
-	return fmt.Sprintf("notice: %s: %s; needs of %q may be %s by it", s.Address, why, label, effect)
+	return fmt.Sprintf("notice: %s: %s; needs of %q may be %s by it%s", s.Address, why, label, effect, fix)
 }
 
 // resourceType returns the resource type of a terraform address, or the

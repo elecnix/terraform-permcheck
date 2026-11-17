@@ -65,8 +65,14 @@ type JSONPolicySource struct {
 	// PolicyARN is the known ARN of the managed policy the source attaches.
 	// It is absent for a source that holds its text itself.
 	PolicyARN string `json:"policy_arn,omitempty"`
+	// Policy is the address of the aws_iam_policy resource, or of the
+	// data "aws_iam_policy" source, whose text the check read for the
+	// managed policy the source attaches. It is absent for a source that
+	// holds its text itself, and for a managed policy outside the plan.
+	Policy string `json:"policy,omitempty"`
 	// Link is "yes" when the source attaches to the principal, and "maybe"
-	// when the plan can't decide it. The check counts the Allows of a
+	// when the plan can't decide it, or can't decide which policy the
+	// attached ARN names. The check counts the Allows of a
 	// "maybe" source as grants it can't check, and ignores its Denies. A
 	// resource policy is "maybe", since this version doesn't read whom its
 	// statements grant.
@@ -241,6 +247,7 @@ func jsonPolicySource(s principal.Applied) JSONPolicySource {
 		Kind:      string(s.Kind),
 		Text:      "known",
 		PolicyARN: s.PolicyARN,
+		Policy:    s.Policy,
 		Link:      s.Match.String(),
 	}
 	if s.Unknown {

@@ -16,7 +16,6 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 		service  string
 		linkType string
 	}{
-		{"aws_iam_role_policy_attachment", `"role": "app-task", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_role"},
 		{"aws_iam_role_policy_attachments_exclusive", `"role_name": "app-task", "policy_arns": ["arn:aws:iam::123456789012:policy/x"]`, "policy_arns", KindIdentity, "", "aws_iam_role"},
 		{"aws_iam_user_policy", `"user": "ci", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_user"},
 		{"aws_iam_user_policy_attachment", `"user": "ci", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_user"},
@@ -39,7 +38,7 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 			changes := parseRaw(t, `{"resource_changes": [
 				{"address": "`+c.typ+`.x", "type": "`+c.typ+`", "name": "x",
 				 "change": {"actions": ["create"], "after": {`+c.after+`}, "after_unknown": {}}}]}`)
-			sources := PolicySources(changes)
+			sources := PolicySources(changes, nil)
 			if len(sources) != 1 {
 				t.Fatalf("got %d sources, want 1: %+v", len(sources), sources)
 			}
@@ -55,12 +54,12 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 	}
 }
 
-// TestPolicySources_UnreadRoleAttributes checks the managed_policy_arns and
+// TestPolicySources_RoleAttributes checks the managed_policy_arns and
 // permissions_boundary of a role. Each is a source only when the
 // configuration writes it and the plan doesn't hold it as null or empty,
 // since a role's computed managed_policy_arns lists what other resources
-// attach.
-func TestPolicySources_UnreadRoleAttributes(t *testing.T) {
+// attach. This version reads managed_policy_arns and not the boundary.
+func TestPolicySources_RoleAttributes(t *testing.T) {
 	changes := parseRaw(t, `{
 		"resource_changes": [
 			{"address": "aws_iam_role.set", "type": "aws_iam_role", "name": "set",
@@ -85,12 +84,12 @@ func TestPolicySources_UnreadRoleAttributes(t *testing.T) {
 			 "expressions": {"name": {}, "managed_policy_arns": {}, "permissions_boundary": {"references": ["var.boundary"]}}}
 		]}}
 	}`)
-	sources := PolicySources(changes)
+	sources := PolicySources(changes, nil)
 	if len(sources) != 2 {
 		t.Fatalf("got %d sources, want 2: %+v", len(sources), sources)
 	}
 	arns, boundary := sources[0], sources[1]
-	if arns.Address != "aws_iam_role.set" || arns.Path != "managed_policy_arns" || arns.Kind != KindIdentity || !arns.Unread {
+	if arns.Address != "aws_iam_role.set" || arns.Path != "managed_policy_arns.0" || arns.Kind != KindIdentity || arns.Unread || !arns.OutsidePlan {
 		t.Errorf("managed_policy_arns source = %+v", arns)
 	}
 	if boundary.Address != "aws_iam_role.set" || boundary.Path != "permissions_boundary" || boundary.Kind != KindBoundary || !boundary.Unread {
@@ -123,7 +122,7 @@ func TestPolicySources_PolicyAttachmentLists(t *testing.T) {
 				"after_unknown": {"id": true}}}
 		]
 	}`)
-	sources := PolicySources(changes)
+	sources := PolicySources(changes, nil)
 	var got []string
 	for _, s := range sources {
 		got = append(got, s.Address+" "+s.Link.Type)
@@ -144,47 +143,6 @@ func TestPolicySources_PolicyAttachmentLists(t *testing.T) {
 	}
 }
 
-// TestPolicySources_OutsidePlan checks when an attached managed policy is
-// one the plan can't contain: an AWS managed policy, or a known ARN that no
-// aws_iam_policy in the plan may have.
-func TestPolicySources_OutsidePlan(t *testing.T) {
-	attachment := func(name, arn string) string {
-		unknown := `"policy_arn": true`
-		if arn != "" {
-			unknown = `"id": true`
-		}
-		return `{"address": "aws_iam_role_policy_attachment.` + name + `", "type": "aws_iam_role_policy_attachment", "name": "` + name + `",
-			"change": {"actions": ["create"], "after": {"role": "app-task"` + arn + `}, "after_unknown": {` + unknown + `}}}`
-	}
-	policy := func(name, after string) string {
-		return `{"address": "aws_iam_policy.` + name + `", "type": "aws_iam_policy", "name": "` + name + `",
-			"change": {"actions": ["create"], "after": {` + after + `}, "after_unknown": {"arn": true}}}`
-	}
-	cases := []struct {
-		name     string
-		changes  string
-		outside  bool
-		arnKnown bool
-	}{
-		{"an AWS managed policy", attachment("a", `, "policy_arn": "arn:aws:iam::aws:policy/ReadOnlyAccess"`) + "," + policy("p", `"name_prefix": "x-"`), true, true},
-		{"a customer policy no plan policy may be", attachment("a", `, "policy_arn": "arn:aws:iam::123456789012:policy/shared-reads"`) + "," + policy("p", `"name": "app-writes"`), true, true},
-		{"a customer policy a plan policy has the name of", attachment("a", `, "policy_arn": "arn:aws:iam::123456789012:policy/app-writes"`) + "," + policy("p", `"name": "app-writes"`), false, true},
-		{"a customer policy a plan policy with an unknown name may be", attachment("a", `, "policy_arn": "arn:aws:iam::123456789012:policy/shared-reads"`) + "," + policy("p", `"name_prefix": "x-"`), false, true},
-		{"a computed ARN", attachment("a", ""), false, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			sources := PolicySources(parseRaw(t, `{"resource_changes": [`+c.changes+`]}`))
-			if len(sources) != 1 {
-				t.Fatalf("sources = %+v, want 1", sources)
-			}
-			if sources[0].OutsidePlan != c.outside || (sources[0].PolicyARN != "") != c.arnKnown {
-				t.Errorf("outside plan = %v, policy ARN = %q; want %v, known %v", sources[0].OutsidePlan, sources[0].PolicyARN, c.outside, c.arnKnown)
-			}
-		})
-	}
-}
-
 // TestPolicySources_UnconfiguredResourcePolicy checks that a resource policy
 // attribute the configuration doesn't write gives no source, such as the
 // policy AWS gives a new SNS topic.
@@ -199,7 +157,7 @@ func TestPolicySources_UnconfiguredResourcePolicy(t *testing.T) {
 			 "expressions": {"name": {"constant_value": "app-events"}}}
 		]}}
 	}`)
-	if sources := PolicySources(changes); len(sources) != 0 {
+	if sources := PolicySources(changes, nil); len(sources) != 0 {
 		t.Errorf("sources = %+v, want none", sources)
 	}
 }

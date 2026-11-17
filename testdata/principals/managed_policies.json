@@ -1,0 +1,727 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.reader",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "reader",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-reader",
+          "path": "/",
+          "permissions_boundary": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.reads",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "reads",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "arn": "arn:aws:iam::123456789012:policy/app-reads",
+          "description": null,
+          "id": "arn:aws:iam::123456789012:policy/app-reads",
+          "name": "app-reads",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::app-data/*\"}]}",
+          "tags": null
+        },
+        "after": {
+          "arn": "arn:aws:iam::123456789012:policy/app-reads",
+          "description": null,
+          "id": "arn:aws:iam::123456789012:policy/app-reads",
+          "name": "app-reads",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::app-data/*\"}]}",
+          "tags": null
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_policy_attachment.shared_reads",
+      "mode": "managed",
+      "type": "aws_iam_policy_attachment",
+      "name": "shared_reads",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "groups": null,
+          "name": "shared-reads",
+          "policy_arn": "arn:aws:iam::123456789012:policy/app-reads",
+          "roles": [
+            "app-reader",
+            "app-other"
+          ],
+          "users": null
+        },
+        "after_unknown": {
+          "id": true,
+          "roles": [
+            false,
+            false
+          ]
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.worker",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "worker",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-worker",
+          "path": "/",
+          "permissions_boundary": null,
+          "managed_policy_arns": [
+            null
+          ]
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": [
+            true
+          ],
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.queue",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "queue",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": null,
+          "name": "app-queue",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sqs:*\",\"Resource\":\"*\"},{\"Effect\":\"Deny\",\"Action\":\"sqs:DeleteQueue\",\"Resource\":\"*\"}]}",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.builder",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "builder",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-builder",
+          "path": "/",
+          "permissions_boundary": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.build",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "build",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": null,
+          "name": "app-build",
+          "path": "/",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true,
+          "policy": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.builder",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "builder",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "app-builder"
+        },
+        "after_unknown": {
+          "id": true,
+          "policy_arn": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.auditor",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "auditor",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-auditor",
+          "path": "/",
+          "permissions_boundary": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.audit",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "audit",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": null,
+          "name_prefix": "app-",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"cloudtrail:LookupEvents\",\"Resource\":\"*\"}]}",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true,
+          "name": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.auditor",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "auditor",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "policy_arn": "arn:aws:iam::123456789012:policy/app-audit",
+          "role": "app-auditor"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.shard[0]",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "shard",
+      "index": 0,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-shard-0",
+          "path": "/",
+          "permissions_boundary": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.shard[1]",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "shard",
+      "index": 1,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}",
+          "name": "app-shard-1",
+          "path": "/",
+          "permissions_boundary": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "create_date": true,
+          "id": true,
+          "inline_policy": true,
+          "managed_policy_arns": true,
+          "name_prefix": true,
+          "tags_all": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.shard[0]",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "shard",
+      "index": 0,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": null,
+          "name": "app-shard-0",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"dynamodb:GetItem\",\"Resource\":\"arn:aws:dynamodb:us-east-1:123456789012:table/shard-0\"}]}",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_policy.shard[1]",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "shard",
+      "index": 1,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "description": null,
+          "name": "app-shard-1",
+          "path": "/",
+          "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"dynamodb:GetItem\",\"Resource\":\"arn:aws:dynamodb:us-east-1:123456789012:table/shard-1\"}]}",
+          "tags": null
+        },
+        "after_unknown": {
+          "arn": true,
+          "attachment_count": true,
+          "id": true,
+          "name_prefix": true,
+          "policy_id": true,
+          "tags_all": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.shard[0]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "shard",
+      "index": 0,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "app-shard-0"
+        },
+        "after_unknown": {
+          "id": true,
+          "policy_arn": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.shard[1]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "shard",
+      "index": 1,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "app-shard-1"
+        },
+        "after_unknown": {
+          "id": true,
+          "policy_arn": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.reader",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "reader",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-reader"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_policy.reads",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "reads",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-reads"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_policy_attachment.shared_reads",
+          "mode": "managed",
+          "type": "aws_iam_policy_attachment",
+          "name": "shared_reads",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "shared-reads"
+            },
+            "policy_arn": {
+              "constant_value": "arn:aws:iam::123456789012:policy/app-reads"
+            },
+            "roles": {
+              "constant_value": [
+                "app-reader",
+                "app-other"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.worker",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "worker",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-worker"
+            },
+            "managed_policy_arns": {
+              "references": [
+                "aws_iam_policy.queue.arn",
+                "aws_iam_policy.queue"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_policy.queue",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "queue",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-queue"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_role.builder",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "builder",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-builder"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_policy.build",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "build",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-build"
+            },
+            "policy": {
+              "references": [
+                "aws_ecr_repository.app.arn",
+                "aws_ecr_repository.app"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.builder",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "builder",
+          "provider_config_key": "aws",
+          "expressions": {
+            "role": {
+              "references": [
+                "aws_iam_role.builder.name",
+                "aws_iam_role.builder"
+              ]
+            },
+            "policy_arn": {
+              "references": [
+                "aws_iam_policy.build.arn",
+                "aws_iam_policy.build"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.auditor",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "auditor",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-auditor"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_policy.audit",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "audit",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name_prefix": {
+              "constant_value": "app-"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.auditor",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "auditor",
+          "provider_config_key": "aws",
+          "expressions": {
+            "role": {
+              "references": [
+                "aws_iam_role.auditor.name",
+                "aws_iam_role.auditor"
+              ]
+            },
+            "policy_arn": {
+              "references": [
+                "var.audit_policy_arn"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.shard",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "shard",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "references": [
+                "count.index"
+              ]
+            }
+          },
+          "count_expression": {
+            "constant_value": 2
+          }
+        },
+        {
+          "address": "aws_iam_policy.shard",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "shard",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "references": [
+                "count.index"
+              ]
+            },
+            "policy": {
+              "references": [
+                "count.index"
+              ]
+            }
+          },
+          "count_expression": {
+            "constant_value": 2
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.shard",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "shard",
+          "provider_config_key": "aws",
+          "expressions": {
+            "role": {
+              "references": [
+                "aws_iam_role.shard",
+                "count.index"
+              ]
+            },
+            "policy_arn": {
+              "references": [
+                "aws_iam_policy.shard",
+                "count.index"
+              ]
+            }
+          },
+          "count_expression": {
+            "constant_value": 2
+          }
+        }
+      ]
+    }
+  }
+}

@@ -133,6 +133,7 @@ func (f Filter) config() iam.FilterConfig {
 // or the resource blocks of a terraform root in static HCL mode.
 type Input struct {
 	changes []*plan.ResourceChange
+	data    []plan.DataSource
 	blocks  []hcl.ResourceBlock
 	static  bool
 }
@@ -140,6 +141,14 @@ type Input struct {
 // FromPlan returns the input for plan mode.
 func FromPlan(changes []*plan.ResourceChange) Input {
 	return Input{changes: changes}
+}
+
+// WithDataSources returns the input with the data sources of the plan (see
+// plan.ParseDataSources). The needs of a mapped principal read the text of
+// a managed policy outside the plan from a data "aws_iam_policy" source.
+func (in Input) WithDataSources(data []plan.DataSource) Input {
+	in.data = data
+	return in
 }
 
 // FromHCL returns the input for static HCL mode. Static mode does not know
@@ -337,7 +346,7 @@ func Run(in Input, loadPolicy func() ([]byte, error), opts Options) (Result, err
 	}
 
 	if len(mapped) > 0 {
-		sources := plan.PolicySources(in.changes)
+		sources := plan.PolicySources(in.changes, in.data)
 		for _, label := range slices.Sorted(maps.Keys(mapped)) {
 			address := opts.Principals[label].Address
 			role, err := principal.Find(in.changes, label, address)

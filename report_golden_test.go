@@ -95,14 +95,14 @@ func goldenCases() []goldenCase {
 	}
 	computed := identity("aws_iam_role_policy.task_secrets", "policy", plan.LinkYes)
 	computed.Unknown = true
-	unread := identity("aws_iam_role_policy_attachment.deploy_ecs", "policy_arn", plan.LinkYes)
-	unread.Unknown, unread.Unread = true, true
+	attached := identity("aws_iam_role_policy_attachment.deploy_ecs", "policy_arn", plan.LinkYes)
+	attached.Policy = "aws_iam_policy.deploy_ecs"
 	managed := identity("aws_iam_role_policy_attachment.deploy_ecr", "policy_arn", plan.LinkYes)
-	managed.Unknown, managed.Unread, managed.OutsidePlan, managed.PolicyARN = true, true, true, "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+	managed.Unknown, managed.OutsidePlan, managed.PolicyARN = true, true, "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
 	boundary := principal.Applied{PolicySource: plan.PolicySource{Address: "aws_iam_role.deploy", Path: "permissions_boundary", Kind: plan.KindBoundary, Unknown: true, Unread: true}, Match: plan.LinkYes}
 	secretPolicy := principal.Applied{PolicySource: plan.PolicySource{Address: "aws_secretsmanager_secret_policy.app", Path: "policy", Kind: plan.KindResource, Service: "secretsmanager", Unknown: true, Unread: true}, Match: plan.LinkMaybe}
 	principals := []check.PrincipalSources{
-		{Label: "deploy", Address: "aws_iam_role.deploy", Sources: []principal.Applied{boundary, managed, unread}},
+		{Label: "deploy", Address: "aws_iam_role.deploy", Sources: []principal.Applied{boundary, managed, attached}},
 		{Label: "task", Address: "aws_iam_role.task", Sources: []principal.Applied{
 			identity("aws_iam_role_policy.task_logs", "policy", plan.LinkYes),
 			computed,

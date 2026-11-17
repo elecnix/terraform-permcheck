@@ -339,11 +339,15 @@ func validateCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("parse plan: %w", err)
 	}
+	data, err := plan.ParseDataSources(planRaw)
+	if err != nil {
+		return fmt.Errorf("parse plan: %w", err)
+	}
 	if err := resolver(planRaw, false); err != nil {
 		return err
 	}
 
-	res, err := check.Run(check.FromPlan(changes), loadPolicy, opts)
+	res, err := check.Run(check.FromPlan(changes).WithDataSources(data), loadPolicy, opts)
 	if err != nil {
 		return err
 	}

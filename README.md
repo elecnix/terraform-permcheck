@@ -622,13 +622,39 @@ NAME and the needs without a principal, as before. A label that isn't in the
 map runs only when `--principal` selects it.
 
 This version reads the policy text of `aws_iam_role_policy` and of the
-`inline_policy` blocks of `aws_iam_role`. PermCheck merges them as AWS does in
-one account: any `Allow` grants, and a definite `Deny` overrides it. It knows
-the other policy sources of a role, such as `aws_iam_role_policy_attachment`,
-`managed_policy_arns`, a permissions boundary, and the resource policies of
-Secrets Manager, S3, SQS, SNS, ECR and KMS, but doesn't read their text yet.
-Each one that may apply to a need is an unknown source, and so is a policy
-whose text terraform computes at apply time. A resource policy applies to the
+`inline_policy` blocks of `aws_iam_role`. It also reads the managed policies
+that `aws_iam_role_policy_attachment`, the `roles` of
+`aws_iam_policy_attachment`, and the `managed_policy_arns` of `aws_iam_role`
+attach. PermCheck merges them as AWS does in one account: any `Allow` grants,
+and a definite `Deny` overrides it. It knows the other policy sources of a
+role, such as a permissions boundary and the resource policies of Secrets
+Manager, S3, SQS, SNS, ECR and KMS, but doesn't read their text yet. Each one
+that may apply to a need is an unknown source, and so is a policy whose text
+terraform computes at apply time.
+
+PermCheck finds the text of an attached managed policy in an `aws_iam_policy`
+of the plan. The attachment's references decide first, as in
+`policy_arn = aws_iam_policy.deploy.arn`. Then its known ARN must equal the
+known `arn` of an `aws_iam_policy`. An AWS managed policy, or a policy that
+another stack creates, isn't in the plan, so it's an unknown source. To give
+PermCheck its text, add a data source with the same ARN:
+
+```hcl
+data "aws_iam_policy" "ecr_power_user" {
+  arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+}
+```
+
+Terraform reads a data source during the plan when it knows every argument
+and no dependency has a pending change. `terraform show -json` then records
+the data source's values in `prior_state`, and PermCheck reads the `policy`
+attribute from there. When terraform defers the read to the apply, the policy
+text stays unknown. A known ARN may also match an `aws_iam_policy` whose ARN
+the plan doesn't know yet, such as one with `name_prefix`. PermCheck then
+can't decide which policy the ARN names. That policy's `Allow` statements
+count as grants PermCheck can't check, with the reason `condition`, and
+PermCheck ignores its `Deny` statements. The ARN may also belong to a policy
+outside the plan, which is an unknown source. A resource policy applies to the
 needs whose action is in its service. An unknown source may grant the need,
 so PermCheck counts the need as covered by default and reports it unverified
 under `--strict-resources`, with the reason `policy_unknown`. An unknown boundary can only limit a need,
@@ -652,8 +678,15 @@ source has an `address`, a `path`, a `kind` (`identity`, `boundary` or
 when PermCheck can't decide it from the plan). An unknown source adds `unknown_reason`:
 `computed`, `unread`, or `outside_plan` for a managed policy the plan doesn't
 contain, such as an AWS managed policy. A source that attaches a managed
-policy by a known ARN adds `policy_arn`. These keys appear only when a run
-checks a mapped need.
+policy by a known ARN adds `policy_arn`. A source whose text PermCheck reads
+from an `aws_iam_policy` or a `data "aws_iam_policy"` adds `policy`, that
+resource's address. These keys appear only when a run checks a mapped need.
+
+The notice for a managed policy outside the plan gives the fix:
+
+```
+notice: aws_iam_role_policy_attachment.deploy_ecr: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser is a managed policy that the plan doesn't contain; needs of "deploy" may be granted by it; a data "aws_iam_policy" block with this arn gives PermCheck its text
+```
 
 A run whose selected needs are all mapped works without a `--policy-*`
 source. It checks those needs and skips the plan's resources. A notice on

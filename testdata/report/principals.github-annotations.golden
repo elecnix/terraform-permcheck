@@ -6,7 +6,6 @@
 1 resource change, 3 declared needs checked, 2 distinct missing permissions found, 1 unverified (policy unknown).
 --- stderr ---
 notice: aws_iam_role.deploy: this version doesn't read the permissions_boundary attribute of aws_iam_role yet; needs of "deploy" may be limited by it
-notice: aws_iam_role_policy_attachment.deploy_ecr: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser is a managed policy that the plan doesn't contain; needs of "deploy" may be granted by it
-notice: aws_iam_role_policy_attachment.deploy_ecs: this version doesn't read the policy_arn attribute of aws_iam_role_policy_attachment yet; needs of "deploy" may be granted by it
+notice: aws_iam_role_policy_attachment.deploy_ecr: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser is a managed policy that the plan doesn't contain; needs of "deploy" may be granted by it; a data "aws_iam_policy" block with this arn gives PermCheck its text
 notice: aws_iam_role_policy.task_secrets: policy text is known only after apply; needs of "task" may be granted by it
 notice: aws_secretsmanager_secret_policy.app: this version doesn't read the policy attribute of aws_secretsmanager_secret_policy yet; needs of "task" may be granted by it

@@ -62,8 +62,8 @@
           "address": "aws_iam_role_policy_attachment.deploy_ecs",
           "path": "policy_arn",
           "kind": "identity",
-          "text": "unknown",
-          "unknown_reason": "unread",
+          "text": "known",
+          "policy": "aws_iam_policy.deploy_ecs",
           "link": "yes"
         }
       ]
