@@ -412,8 +412,10 @@ ARN, and a value computed at apply time is absent from the plan.
 denies every action outside its list. A `NotResource` grant covers any target
 outside its list, and doesn't cover a target that a listed pattern contains.
 
-Permission boundaries, service control policies, session policies and
-resource-based policies are out of scope.
+A run that checks one policy document leaves out permission boundaries,
+service control policies, session policies and resource-based policies. The
+needs of a mapped role read the role's permissions boundary and the resource
+policies of the plan (see [Needs of a role in the plan](#needs-of-a-role-in-the-plan)).
 
 ### Excluding known false positives
 
@@ -643,9 +645,10 @@ that `aws_iam_role_policy_attachment`, the `roles` of
 the `policy_arns` of `aws_iam_role_policy_attachments_exclusive` attach, and
 the resource policies of Secrets Manager, S3, SQS, SNS and ECR, and KMS key
 policies and grants (see [Resource policies](#resource-policies)). PermCheck merges them as AWS does in one account: any `Allow` grants,
-and a definite `Deny` overrides it. It knows the other policy sources of a
-role, such as a permissions boundary, but doesn't read
-their text yet. Each one that may apply to
+and a definite `Deny` overrides it. It also reads the `permissions_boundary`
+of `aws_iam_role` (see [Permissions boundaries](#permissions-boundaries)). It
+knows the other policy sources of a principal, such as the policies of an IAM
+user, but doesn't read their text yet. Each one that may apply to
 a need is an unknown source, and so is a policy whose text terraform computes
 at apply time.
 
@@ -760,6 +763,58 @@ can't tell whether it stays. It treats such a policy as one whose link to the
 role it can't decide: its `Allow` statements count as grants it can't check,
 with the reason `condition`, and it ignores its `Deny` statements. That way
 the removal can't turn into a missing need that the apply would disprove.
+
+##### Permissions boundaries
+
+A role's `permissions_boundary` is a policy ARN. PermCheck finds its text as
+it finds the text of an attached managed policy: in an `aws_iam_policy` of the
+plan, or in a `data "aws_iam_policy"` block with the same ARN. In the `json`
+report, the boundary is a source with the kind `boundary`.
+
+The identity policies and the boundary give "the intersection of the two
+categories"
+([evaluating identity-based policies with permissions boundaries](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-bound)).
+PermCheck checks each need against the boundary on its own. When the boundary
+doesn't allow the action, or denies it, the need is missing, even when an
+identity policy grants it. The finding then gives the boundary:
+
+```
+  s3:GetObject [required]
+    → needs "ReadData" of task on arn:aws:s3:::app-data/report.csv
+      not allowed by the permissions boundary aws_iam_policy.logs_only
+```
+
+The `github-annotations` format appends `; not allowed by the permissions
+boundary <name>` to the need, and the `json` entry adds `boundary`. The name is
+the address of the `aws_iam_policy` or `data "aws_iam_policy"` that has the
+boundary's text.
+
+A boundary also limits a resource policy statement that grants the role's
+ARN. It doesn't limit a statement that grants a session of the role
+([how AWS enforcement code logic evaluates requests](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html),
+[permissions boundaries](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html)).
+PermCheck can't tell whether the session in such a statement makes the
+request. So a need that a session grant covers, and the boundary doesn't
+allow, is covered by default and unverified under `--strict-resources`, with
+the reason `condition`. A statement with the principal `"*"` counts the same
+way. The KMS guide doesn't say how a boundary combines with a key policy, so
+PermCheck applies the same rule to a key policy statement.
+
+A boundary whose text the plan lacks, such as an AWS managed policy without a
+data block, is an unknown source. A boundary can only limit a need, so it
+never changes a covered verdict by default. Under `--strict-resources`, the
+need is unverified with the reason `policy_unknown`. The notice gives the fix:
+
+```
+notice: aws_iam_role.task: arn:aws:iam::aws:policy/PowerUserAccess is a managed policy that the plan doesn't contain; needs of "task" may be limited by it; a data "aws_iam_policy" block with this arn gives PermCheck its text
+```
+
+The plan doesn't show the boundary of a role outside the plan. PermCheck
+counts it as allowing, as it counts a service control policy. A `NotPrincipal`
+Deny in a resource policy always denies a role with a boundary
+([NotPrincipal](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notprincipal.html)),
+so PermCheck counts such a Deny as definite for a role whose plan sets
+`permissions_boundary`.
 
 ##### Resource policies
 

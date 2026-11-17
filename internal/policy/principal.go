@@ -102,15 +102,32 @@ func (p Principal) arnPatterns() []string {
 		prefix := "arn:*:iam::" + account + ":" + p.Kind.arnType() + "/"
 		patterns = append(patterns, prefix+name, prefix+"*/"+name)
 	}
-	if p.Kind == KindRole {
-		// A role session ARN names the role without its path
-		// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html#principal-role-session).
-		patterns = append(patterns, "arn:*:sts::"+account+":assumed-role/"+name+"/*")
-	}
 	for i, pat := range patterns {
 		patterns[i] = strings.ToLower(pat)
 	}
+	if session := p.sessionPattern(); session != "" {
+		patterns = append(patterns, session)
+	}
 	return patterns
+}
+
+// sessionPattern returns the ARN pattern of the sessions of the principal's
+// role, in lower case, or "" for a user. A part the tool does not know is a
+// wildcard. A role session ARN names the role without its path
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html#principal-role-session).
+func (p Principal) sessionPattern() string {
+	if p.Kind != KindRole {
+		return ""
+	}
+	account := p.account()
+	if account == "" {
+		account = "*"
+	}
+	name := p.name()
+	if name == "" {
+		name = "*"
+	}
+	return strings.ToLower("arn:*:sts::" + account + ":assumed-role/" + name + "/*")
 }
 
 // mayBe reports whether an ARN entry of a Principal element may name the
@@ -214,6 +231,9 @@ type principalOptions struct {
 	// accountGrants makes a statement whose Principal is the principal's
 	// account grant the principal.
 	accountGrants bool
+	// beyondBoundary keeps only the Allow statements whose grant a
+	// permissions boundary doesn't limit.
+	beyondBoundary bool
 }
 
 // ResourceSide makes ForPrincipal read a resource policy for the resource
@@ -232,6 +252,31 @@ type principalOptions struct {
 //     (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html#key-policy-elements).
 func ResourceSide() PrincipalOption {
 	return func(o *principalOptions) { o.accountGrants = true }
+}
+
+// BeyondBoundary makes ForPrincipal keep only the Allow statements of a
+// resource policy whose grant a permissions boundary of the principal doesn't
+// limit. In one account, "Resource-based policies that grant permissions to
+// an IAM role ARN are limited by an implicit deny in a permissions boundary",
+// while "Permissions granted directly to a session are not limited by an
+// implicit deny in an identity-based policy, a permissions boundary, or
+// session policy", and a grant to "an IAM user ARN (that is not a federated
+// user session) [is] not limited by an implicit deny in an identity-based
+// policy or permissions boundary"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+// So a statement is kept when its Principal names the user, or may name a
+// session of the role. An account entry grants through the identity
+// policies, which the boundary limits, so it is dropped.
+//
+// A statement whose Principal is "*" grants the session that makes the
+// request. The same page says that a boundary doesn't limit a grant through
+// the aws:PrincipalArn condition key with "*" in the Principal element, and
+// it doesn't say more about "*" alone. So such a statement, and one whose
+// Principal the tool can't compare, is kept marked as a grant the tool can't
+// check. A Deny is dropped: the caller applies each Deny of the policies
+// apart, as an explicit Deny in any policy denies the request.
+func BeyondBoundary() PrincipalOption {
+	return func(o *principalOptions) { o.beyondBoundary = true }
 }
 
 // ForPrincipal returns the statements of a resource policy that apply to the
@@ -281,6 +326,9 @@ func (d *Document) ForPrincipal(p Principal, opts ...PrincipalOption) *Document 
 // decide returns matchYes to keep the statement as it is, matchMaybe to keep
 // it marked as a grant the tool cannot check, and matchNone to drop it.
 func (o principalOptions) decide(s Statement, p Principal) match {
+	if o.beyondBoundary {
+		return beyondBoundary(s, p)
+	}
 	switch {
 	case s.Principal != nil && s.NotPrincipal != nil:
 		return matchNone
@@ -303,6 +351,58 @@ func (o principalOptions) decide(s Statement, p Principal) match {
 		}
 		return matchNone
 	case s.Effect == "Allow":
+		return matchMaybe
+	}
+	return matchNone
+}
+
+// beyondBoundary decides a statement for BeyondBoundary.
+func beyondBoundary(s Statement, p Principal) match {
+	switch {
+	case s.Effect != "Allow" || s.NotPrincipal != nil:
+		return matchNone
+	case s.Principal == nil:
+		// A resource policy statement without a Principal is one the tool
+		// can't compare (see ForPrincipal).
+		return matchMaybe
+	}
+	f := *s.Principal
+	if f.everyone || f.unreadable {
+		return matchMaybe
+	}
+	best := matchNone
+	for _, e := range f.aws {
+		if m := unboundedEntry(e, p); m > best {
+			best = m
+		}
+	}
+	return best
+}
+
+// unboundedEntry reports whether an AWS entry of an Allow grants the
+// principal in a way a permissions boundary doesn't limit (see
+// BeyondBoundary).
+func unboundedEntry(e string, p Principal) match {
+	if e == "*" {
+		return matchMaybe
+	}
+	if _, ok := accountEntry(e); ok {
+		return matchNone
+	}
+	if !strings.HasPrefix(e, "arn:") {
+		// An entry the tool can't compare, such as a unique id.
+		return matchMaybe
+	}
+	if p.Kind == KindUser {
+		switch {
+		case p.ARN != "" && e == p.ARN:
+			return matchYes
+		case p.mayBe(e):
+			return matchMaybe
+		}
+		return matchNone
+	}
+	if session := p.sessionPattern(); session != "" && arnIntersect(strings.ToLower(e), session) {
 		return matchMaybe
 	}
 	return matchNone

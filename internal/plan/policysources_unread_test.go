@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -47,7 +49,8 @@ func TestPolicySources_UnreadTypes(t *testing.T) {
 // permissions_boundary of a role. Each is a source only when the
 // configuration writes it and the plan doesn't hold it as null or empty,
 // since a role's computed managed_policy_arns lists what other resources
-// attach. This version reads managed_policy_arns and not the boundary.
+// attach. A boundary that references a policy the plan doesn't contain has
+// unknown text.
 func TestPolicySources_RoleAttributes(t *testing.T) {
 	changes := parseRaw(t, `{
 		"resource_changes": [
@@ -81,7 +84,7 @@ func TestPolicySources_RoleAttributes(t *testing.T) {
 	if arns.Address != "aws_iam_role.set" || arns.Path != "managed_policy_arns.0" || arns.Kind != KindIdentity || arns.Unread || !arns.OutsidePlan {
 		t.Errorf("managed_policy_arns source = %+v", arns)
 	}
-	if boundary.Address != "aws_iam_role.set" || boundary.Path != "permissions_boundary" || boundary.Kind != KindBoundary || !boundary.Unread {
+	if boundary.Address != "aws_iam_role.set" || boundary.Path != "permissions_boundary" || boundary.Kind != KindBoundary || boundary.Unread || !boundary.Unknown || boundary.OutsidePlan {
 		t.Errorf("permissions_boundary source = %+v", boundary)
 	}
 	set := changeAt(t, changes, "aws_iam_role.set", "create")
@@ -171,5 +174,48 @@ func TestAddressType(t *testing.T) {
 		if got != want || ok != (want != "") {
 			t.Errorf("AddressType(%q) = %q, %v; want %q", addr, got, ok, want)
 		}
+	}
+}
+
+// TestPolicySources_RoleBoundary checks how the permissions_boundary of a role
+// resolves to its policy text, as a managed policy attachment does: an
+// aws_iam_policy of the plan by reference or by known ARN, a
+// data "aws_iam_policy" block, or a managed policy outside the plan.
+func TestPolicySources_RoleBoundary(t *testing.T) {
+	boundaryText := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"logs:*\",\"Resource\":\"*\"}]}`
+	changes := parseRaw(t, `{
+		"resource_changes": [
+			{"address": "aws_iam_policy.b", "type": "aws_iam_policy", "name": "b",
+			 "change": {"actions": ["create"], "after": {"name": "app-boundary", "policy": "`+boundaryText+`"}, "after_unknown": {"arn": true}}},
+			{"address": "aws_iam_role.ref", "type": "aws_iam_role", "name": "ref",
+			 "change": {"actions": ["create"], "after": {"name": "app-ref"}, "after_unknown": {"arn": true, "permissions_boundary": true}}},
+			{"address": "aws_iam_role.data", "type": "aws_iam_role", "name": "data",
+			 "change": {"actions": ["create"], "after": {"name": "app-data", "permissions_boundary": "arn:aws:iam::aws:policy/ReadOnlyAccess"}, "after_unknown": {"arn": true}}},
+			{"address": "aws_iam_role.aws", "type": "aws_iam_role", "name": "aws",
+			 "change": {"actions": ["create"], "after": {"name": "app-aws", "permissions_boundary": "arn:aws:iam::aws:policy/PowerUserAccess"}, "after_unknown": {"arn": true}}}
+		],
+		"configuration": {"root_module": {"resources": [
+			{"address": "aws_iam_role.ref", "mode": "managed", "type": "aws_iam_role", "name": "ref",
+			 "expressions": {"name": {}, "permissions_boundary": {"references": ["aws_iam_policy.b.arn", "aws_iam_policy.b"]}}},
+			{"address": "aws_iam_role.data", "mode": "managed", "type": "aws_iam_role", "name": "data",
+			 "expressions": {"name": {}, "permissions_boundary": {}}},
+			{"address": "aws_iam_role.aws", "mode": "managed", "type": "aws_iam_role", "name": "aws",
+			 "expressions": {"name": {}, "permissions_boundary": {}}}
+		]}}
+	}`)
+	data := []DataSource{{Address: "data.aws_iam_policy.read_only", Type: "aws_iam_policy",
+		Values: map[string]string{"arn": "arn:aws:iam::aws:policy/ReadOnlyAccess", "policy": "{}"}}}
+	var got []string
+	for _, s := range PolicySources(changes, data) {
+		got = append(got, strings.Join([]string{s.Address, s.Path, string(s.Kind), s.Policy, s.PolicyARN,
+			fmt.Sprintf("unknown=%v outside=%v unread=%v text=%v", s.Unknown, s.OutsidePlan, s.Unread, s.Text != "")}, " "))
+	}
+	want := []string{
+		"aws_iam_role.ref permissions_boundary boundary aws_iam_policy.b  unknown=false outside=false unread=false text=true",
+		"aws_iam_role.data permissions_boundary boundary data.aws_iam_policy.read_only arn:aws:iam::aws:policy/ReadOnlyAccess unknown=false outside=false unread=false text=true",
+		"aws_iam_role.aws permissions_boundary boundary  arn:aws:iam::aws:policy/PowerUserAccess unknown=true outside=true unread=false text=false",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sources =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

@@ -120,6 +120,11 @@ type MissingAction struct {
 	// resources that do not cover the target. Empty when the policy does not
 	// grant Action at all, or grants it on every resource.
 	GrantedOn []string
+	// Boundary names the permissions boundary of a mapped principal that
+	// makes Action missing while its other policies allow it, such as the
+	// address of the aws_iam_policy that holds the boundary's text (see
+	// policy.Result.Boundary). It is empty for any other finding.
+	Boundary string
 	// Unresolved marks a resource change whose type no schema source knows.
 	// The tool has no permission data for it, so Action is empty and the
 	// change was not checked.
@@ -326,6 +331,9 @@ func newFinding(action string, class Class, res policy.Result) MissingAction {
 		Action:  action,
 		Service: actionService(action),
 		Class:   class,
+	}
+	if res.Verdict == policy.Missing {
+		m.Boundary = res.Boundary
 	}
 	switch res.Reason {
 	case policy.ReasonCondition:

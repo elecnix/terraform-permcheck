@@ -79,3 +79,18 @@ func (s Statement) Unverified(reason UnverifiedReason) Statement {
 	s.unverified = reason
 	return s
 }
+
+// Denies returns a document that holds the Deny statements of d, in order.
+// The policy set of a principal with a permissions boundary checks a grant
+// that the boundary doesn't limit against the Deny statements of every
+// policy: an explicit Deny in any policy denies the request
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+func (d *Document) Denies() *Document {
+	out := &Document{Version: d.Version}
+	for _, s := range d.Statements {
+		if s.Effect == "Deny" {
+			out.Statements = append(out.Statements, s)
+		}
+	}
+	return out
+}

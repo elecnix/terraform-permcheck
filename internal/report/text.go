@@ -69,6 +69,9 @@ func writeSources(b *strings.Builder, findings []finding) {
 		if note := grantNote(f.MissingAction); note != "" {
 			b.WriteString("      " + note + "\n")
 		}
+		if note := boundaryNote(f.MissingAction); note != "" {
+			b.WriteString("      " + note + "\n")
+		}
 	}
 }
 

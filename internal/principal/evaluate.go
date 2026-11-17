@@ -2,6 +2,7 @@ package principal
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -124,6 +125,13 @@ type Result struct {
 // grants the tool can't check, and its Denies don't. Dropping the source
 // would turn its grants into a gap that the apply may disprove.
 //
+// The permissions boundary of a role in the plan is a policy source of the
+// kind plan.KindBoundary (see Set). The plan doesn't show whether a role
+// outside the plan has a boundary, or what it allows. The check treats it as
+// it treats a service control policy or a session policy: as allowing. A
+// boundary can only remove permissions, so a missing verdict stays provable,
+// and a covered verdict means covered by the policies the plan shows.
+//
 // It returns an error when the plan shows a policy text that doesn't parse.
 func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusives []plan.Exclusive, strict bool) (Result, error) {
 	docs := make([]*policy.Document, len(sources))
@@ -154,7 +162,8 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 	outsideSeen := map[string]bool{}
 	grantsFor := func(action, resource string) iam.Grants {
 		var set Set
-		var merged, resourceSide []*policy.Document
+		var merged, resourceSide, beyond, boundaries []*policy.Document
+		var boundaryNames []string
 		service, _, _ := strings.Cut(action, ":")
 		service = strings.ToLower(service)
 		required := requiredResourcePolicy[service] && resource != "*"
@@ -166,6 +175,7 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 				r := resourcePolicy(s, docs[i], identity, action, resource, required)
 				m, resourceDoc = r.match, r.principalSide
 				resourceSide = append(resourceSide, r.resourceSide)
+				beyond = append(beyond, r.beyondBoundary)
 				found = found || r.on
 			}
 			if m == plan.LinkNo {
@@ -176,9 +186,10 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 			}
 			switch {
 			case s.Kind == plan.KindBoundary:
-				// No boundary type is read yet, so every boundary is an
-				// unknown source. It can only remove permissions.
-				set.Boundaries = append(set.Boundaries, policy.UnknownSource())
+				boundaries = append(boundaries, boundaryDoc(s, docs[i], m))
+				if name := boundaryName(s); !slices.Contains(boundaryNames, name) {
+					boundaryNames = append(boundaryNames, name)
+				}
 			case s.Kind == plan.KindResource:
 				merged = append(merged, resourceDoc)
 			case s.Unknown:
@@ -202,6 +213,7 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 			// the principal itself (see requiredResourcePolicy).
 			merged = append(merged, policy.UnknownSource())
 			resourceSide = append(resourceSide, policy.UnknownSource())
+			beyond = append(beyond, policy.UnknownSource())
 			if !outsideSeen[resource] {
 				outsideSeen[resource] = true
 				match := plan.LinkYes
@@ -219,6 +231,11 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 		set.Policies = policy.Merge(merged...)
 		if required {
 			set.ResourceSide = policy.Merge(resourceSide...)
+		}
+		if len(boundaries) > 0 {
+			set.Boundary = policy.Merge(boundaries...)
+			set.BoundaryName = strings.Join(boundaryNames, " or ")
+			set.BeyondBoundary = policy.Merge(beyond...)
 		}
 		return set
 	}
@@ -310,6 +327,10 @@ type appliedResourcePolicy struct {
 	// whose resource policy is required (see requiredResourcePolicy). It is
 	// nil for any other service.
 	resourceSide *policy.Document
+	// beyondBoundary holds the Allow statements of principalSide whose grant
+	// a permissions boundary of the principal doesn't limit (see
+	// policy.BeyondBoundary).
+	beyondBoundary *policy.Document
 	// on is true when the need's resource is provably the resource that
 	// the source attaches to, and the source is a policy of that resource,
 	// not a grant.
@@ -372,7 +393,7 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 	case !strings.EqualFold(service, s.Service):
 		return appliedResourcePolicy{}
 	case s.Unread:
-		return appliedResourcePolicy{match: plan.LinkMaybe, principalSide: policy.UnknownSource(), resourceSide: sideOf(required, policy.UnknownSource())}
+		return appliedResourcePolicy{match: plan.LinkMaybe, principalSide: policy.UnknownSource(), beyondBoundary: policy.UnknownSource(), resourceSide: sideOf(required, policy.UnknownSource())}
 	case resource == "*":
 		return appliedResourcePolicy{}
 	}
@@ -381,7 +402,7 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 		attached = []plan.AttachedResource{{Match: plan.LinkMaybe}}
 	}
 	out := appliedResourcePolicy{}
-	var principalSide, resourceSide []*policy.Document
+	var principalSide, resourceSide, beyond []*policy.Document
 	for _, a := range attached {
 		patterns := attachedPatterns(s.Link.Type, a)
 		m := a.Match
@@ -449,8 +470,10 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 			d := shape(doc.ForPrincipal(identity, policy.ResourceSide()))
 			principalSide = append(principalSide, d)
 			resourceSide = append(resourceSide, d)
+			beyond = append(beyond, shape(doc.ForPrincipal(identity, policy.BeyondBoundary())))
 		default:
 			principalSide = append(principalSide, shape(doc.ForPrincipal(identity)))
+			beyond = append(beyond, shape(doc.ForPrincipal(identity, policy.BeyondBoundary())))
 			if required {
 				resourceSide = append(resourceSide, shape(doc.ForPrincipal(identity, policy.ResourceSide())))
 			}
@@ -461,9 +484,11 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 		return appliedResourcePolicy{}
 	case s.Unknown:
 		out.principalSide = policy.UnknownSource()
+		out.beyondBoundary = policy.UnknownSource()
 		out.resourceSide = sideOf(required, policy.UnknownSource())
 	default:
 		out.principalSide = policy.Merge(principalSide...)
+		out.beyondBoundary = policy.Merge(beyond...)
 		out.resourceSide = sideOf(required, policy.Merge(resourceSide...))
 	}
 	return out
@@ -665,53 +690,116 @@ func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicyS
 	return out
 }
 
+// boundaryDoc returns the document that a boundary source adds to the
+// boundary of the principal. The boundary is one policy, so the documents of
+// its sources merge into one: each source is a policy that the boundary's
+// ARN may name (see plan.PolicySource.PolicyMaybe). A boundary allows an
+// action when one of them may allow it.
+//
+// A source whose text the plan doesn't show is an unknown source, which may
+// allow anything. A source that may not be the boundary gives its Allows as
+// grants the tool can't check, with the reason condition, and its Denies
+// don't count.
+func boundaryDoc(s plan.PolicySource, doc *policy.Document, m plan.LinkMatch) *policy.Document {
+	switch {
+	case s.Unknown:
+		return policy.UnknownSource()
+	case m == plan.LinkMaybe:
+		return doc.MayGrant(policy.ReasonCondition)
+	}
+	return doc
+}
+
+// boundaryName names a boundary source in a finding: the address of the
+// aws_iam_policy or data "aws_iam_policy" that holds its text, or else the
+// ARN of the policy.
+func boundaryName(s plan.PolicySource) string {
+	switch {
+	case s.Policy != "":
+		return s.Policy
+	case s.PolicyARN != "":
+		return s.PolicyARN
+	}
+	return s.Address
+}
+
 // Set is the policies that decide one action of a principal in one account.
 // Policies merges the identity policies of the principal with the resource
-// policies that may apply, and Boundaries are its permissions boundaries.
+// policies that may apply.
 //
 // AWS allows a request in one account when an identity or a resource policy
 // allows it and none denies it
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-rdp),
-// which policy.Merge computes. A permissions boundary must allow it too:
-// the identity policies and the boundary give "the intersection of the two
-// categories"
+// which policy.Merge computes.
+//
+// Boundary is the permissions boundary of the principal, or nil when it has
+// none. The identity policies and the boundary give "the intersection of the
+// two categories"
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-bound).
-// So Set's verdict is the worst of the merged verdict and each boundary's.
+// The boundary also limits a resource policy grant to the role's ARN, but not
+// a grant to a session of the role or to an IAM user's ARN
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+// BeyondBoundary holds the grants of the resource policies that the boundary
+// doesn't limit (see policy.BeyondBoundary). So the set allows an action in
+// two ways, and its verdict is the better of the two:
+//
+//   - Policies and Boundary both allow it.
+//   - BeyondBoundary allows it, and no Deny of Policies or Boundary denies
+//     it. "If the enforcement code finds even one explicit deny that
+//     applies, the enforcement code returns a final decision of Deny"
+//     (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+//
+// A missing verdict that only the boundary causes names the boundary with
+// BoundaryName (see policy.Result.Boundary).
 //
 // ResourceSide holds the resource policies that must allow the action as
 // well, apart from the merged policies, such as a KMS key policy (see
 // requiredResourcePolicy). It is nil when the action needs no such Allow.
-// When it is set, Set's verdict is also no better than its verdict.
+// When it is set, Set's verdict is also no better than its verdict. The KMS
+// documentation doesn't say how a boundary combines with a key policy, so the
+// check applies the IAM rule above to the principal side: a key policy
+// statement for the role's ARN, and an account statement through the
+// identity policies, are limited by the boundary, and a statement for a
+// session of the role isn't.
 type Set struct {
-	Policies     *policy.Document
-	ResourceSide *policy.Document
-	Boundaries   []*policy.Document
+	Policies       *policy.Document
+	ResourceSide   *policy.Document
+	Boundary       *policy.Document
+	BoundaryName   string
+	BeyondBoundary *policy.Document
 }
 
 // Coverage reports whether the set grants action on a resource matching any
-// of the target ARN patterns: the worst of the merged policies' verdict, the
-// resource side's and each boundary's.
+// of the target ARN patterns (see Set).
 func (s Set) Coverage(action string, targets []string, conds policy.Conditions, strict bool) policy.Result {
-	res := s.Policies.Coverage(action, targets, conds, strict)
-	if s.ResourceSide != nil {
-		res = worst(res, s.ResourceSide.Coverage(action, targets, conds, strict))
-	}
-	for _, b := range s.Boundaries {
-		res = worst(res, b.Coverage(action, targets, conds, strict))
-	}
-	return res
+	return s.verdict(func(d *policy.Document) policy.Result {
+		return d.Coverage(action, targets, conds, strict)
+	})
 }
 
 // CoverageOfEveryResource reports whether the set grants action on every
-// resource: the worst of the merged policies' verdict, the resource side's
-// and each boundary's.
+// resource (see Set).
 func (s Set) CoverageOfEveryResource(action string, strict bool) policy.Result {
-	res := s.Policies.CoverageOfEveryResource(action, strict)
-	if s.ResourceSide != nil {
-		res = worst(res, s.ResourceSide.CoverageOfEveryResource(action, strict))
+	return s.verdict(func(d *policy.Document) policy.Result {
+		return d.CoverageOfEveryResource(action, strict)
+	})
+}
+
+// verdict combines the verdicts that coverage gives for each document of the
+// set, as Set describes.
+func (s Set) verdict(coverage func(*policy.Document) policy.Result) policy.Result {
+	policies := coverage(s.Policies)
+	res := policies
+	if s.Boundary != nil {
+		bounded := worst(policies, coverage(s.Boundary))
+		beyond := coverage(policy.Merge(s.BeyondBoundary, s.Policies.Denies(), s.Boundary.Denies()))
+		res = best(bounded, beyond)
+		if res.Verdict == policy.Missing && policies.Verdict != policy.Missing {
+			res.Boundary = s.BoundaryName
+		}
 	}
-	for _, b := range s.Boundaries {
-		res = worst(res, b.CoverageOfEveryResource(action, strict))
+	if s.ResourceSide != nil {
+		res = worst(res, coverage(s.ResourceSide))
 	}
 	return res
 }
@@ -723,10 +811,19 @@ func (s Set) GrantedResources(action string) []string {
 	return s.Policies.GrantedResources(action)
 }
 
+// best returns the result that allows more: Covered before Unverified before
+// Missing. Between two unverified results it keeps the first.
+func best(a, b policy.Result) policy.Result {
+	if rank(b.Verdict) < rank(a.Verdict) {
+		return b
+	}
+	return a
+}
+
 // worst returns the result that allows less: Missing before Unverified
 // before Covered. Between two unverified results it keeps the first, so the
-// reason of the merged policies comes before the resource side's and a
-// boundary's.
+// reason of the merged policies comes before the boundary's and the resource
+// side's.
 func worst(a, b policy.Result) policy.Result {
 	if rank(b.Verdict) > rank(a.Verdict) {
 		return b

@@ -144,7 +144,10 @@ func CheckNeedsWith(needs []Need, grantsFor func(action, resource string) Grants
 				m.Reason = n.Reason
 				// A grant limited to other resources is the likely cause of a
 				// miss on a resource the need names: say where it does apply.
-				if res.Verdict == policy.Missing && resource != "" {
+				// A miss that a permissions boundary causes names the
+				// boundary instead (see newFinding), since the policies grant
+				// the action on the need's resource.
+				if res.Verdict == policy.Missing && resource != "" && res.Boundary == "" {
 					m.GrantedOn = doc.GrantedResources(action)
 				}
 				missing = append(missing, m)

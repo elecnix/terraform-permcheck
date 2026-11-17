@@ -23,6 +23,9 @@ func (r *Report) annotations() string {
 			if note := grantNote(f.MissingAction); note != "" {
 				src += "; " + note
 			}
+			if note := boundaryNote(f.MissingAction); note != "" {
+				src += "; " + note
+			}
 			sources = append(sources, src)
 		}
 

@@ -183,6 +183,11 @@ type JSONMissing struct {
 	// sorted, when it grants it only on resources that do not cover the
 	// target. It is absent when the policy does not grant the action at all.
 	GrantedOn []string `json:"granted_on,omitempty"`
+	// Boundary names the permissions boundary of a mapped principal that
+	// makes missing_action missing while the principal's other policies
+	// allow it: the address of the aws_iam_policy or data "aws_iam_policy"
+	// that holds its text. It is absent for any other finding.
+	Boundary string `json:"boundary,omitempty"`
 }
 
 // json renders the report as one JSON object. Unlike the other formats it
@@ -244,6 +249,7 @@ func (r *Report) json() string {
 				ConditionAttribute: f.ConditionAttribute,
 				Reason:             f.Reason,
 				GrantedOn:          f.GrantedOn,
+				Boundary:           f.Boundary,
 			}
 			if reason := f.unverifiedReason(); reason != iam.ReasonNone {
 				item.Unverified = reason.Value()

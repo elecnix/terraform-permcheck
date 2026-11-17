@@ -394,3 +394,50 @@ func TestForPrincipal_MergedWithIdentityPolicy(t *testing.T) {
 		})
 	}
 }
+
+// BeyondBoundary keeps the Allow statements whose grant a permissions
+// boundary doesn't limit. A grant to the role's ARN is limited, and so is a
+// grant to its account, which delegates to the identity policies. A grant to
+// a session of the role, or to an IAM user's own ARN, isn't. A Deny is
+// dropped, since the caller applies every Deny apart.
+func TestForPrincipal_BeyondBoundary(t *testing.T) {
+	user := Principal{Kind: KindUser, ARN: "arn:aws:iam::123456789012:user/app-ci"}
+	session := `{"AWS":"arn:aws:sts::123456789012:assumed-role/app-task/app-session"}`
+	cases := []struct {
+		name      string
+		statement string
+		p         Principal
+		want      outcome
+	}{
+		{"the role ARN", withPrincipal("Allow", `{"AWS":"arn:aws:iam::123456789012:role/app-task"}`), taskRole, dropped},
+		{"the account", withPrincipal("Allow", `{"AWS":"123456789012"}`), taskRole, dropped},
+		{"a session of the role", withPrincipal("Allow", session), taskRole, mayGrant},
+		{"a session of the role, name only", withPrincipal("Allow", session), taskRoleNameOnly, mayGrant},
+		{"the role ARN and a session", withPrincipal("Allow", `{"AWS":["arn:aws:iam::123456789012:role/app-task","arn:aws:sts::123456789012:assumed-role/app-task/app-session"]}`), taskRole, mayGrant},
+		{"a session of another role", withPrincipal("Allow", `{"AWS":"arn:aws:sts::123456789012:assumed-role/app-web/app-session"}`), taskRole, dropped},
+		{"every principal", withPrincipal("Allow", `"*"`), taskRole, mayGrant},
+		{"every AWS principal", withPrincipal("Allow", `{"AWS":"*"}`), taskRole, mayGrant},
+		{"an id the tool can't compare", withPrincipal("Allow", `{"AWS":"AROAEXAMPLEID"}`), taskRole, mayGrant},
+		{"a service", withPrincipal("Allow", `{"Service":"ecs-tasks.amazonaws.com"}`), taskRole, dropped},
+		{"no Principal element", `{"Effect":"Allow","Action":"secretsmanager:GetSecretValue","Resource":"*"}`, taskRole, mayGrant},
+		{"the user's ARN", withPrincipal("Allow", `{"AWS":"arn:aws:iam::123456789012:user/app-ci"}`), user, grants},
+		{"a Deny for every principal", withPrincipal("Deny", `"*"`), taskRole, dropped},
+		{"a NotPrincipal Deny", withNotPrincipal("Deny", `{"AWS":"arn:aws:iam::123456789012:role/app-web"}`), taskRoleBounded, dropped},
+	}
+	for _, c := range cases {
+		if got := forPrincipalOutcome(t, c.statement, c.p, BeyondBoundary()); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+}
+
+// Denies keeps the Deny statements of a document, in order.
+func TestDocument_Denies(t *testing.T) {
+	doc := mustPolicy(t, `{"Version":"2012-10-17","Statement":[
+		{"Effect":"Allow","Action":"s3:GetObject","Resource":"*"},
+		{"Effect":"Deny","Action":"s3:PutObject","Resource":"*"}]}`)
+	got := doc.Denies()
+	if len(got.Statements) != 1 || got.Statements[0].Effect != "Deny" {
+		t.Errorf("Denies = %+v, want the Deny alone", got.Statements)
+	}
+}

@@ -262,3 +262,106 @@ func TestCheck_ExclusiveOmitsSourceOfRoleInPlan(t *testing.T) {
 		t.Error("a role in the plan is not complete")
 	}
 }
+
+// boundedRole is the role app-task, whose ARN the plan knows, with the
+// boundary aws_iam_policy.boundary. The boundary policy allows logs:* only.
+const boundedRole = `{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
+	"change": {"actions": ["no-op"],
+		"before": {"name": "app-task", "arn": "arn:aws:iam::123456789012:role/app-task", "permissions_boundary": "arn:aws:iam::123456789012:policy/app-boundary"},
+		"after": {"name": "app-task", "arn": "arn:aws:iam::123456789012:role/app-task", "permissions_boundary": "arn:aws:iam::123456789012:policy/app-boundary"},
+		"after_unknown": {}}},
+	{"address": "aws_iam_policy.boundary", "type": "aws_iam_policy", "name": "boundary",
+	 "change": {"actions": ["no-op"],
+		"before": {"name": "app-boundary", "arn": "arn:aws:iam::123456789012:policy/app-boundary", "policy": "{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"logs:*\",\"Resource\":\"*\"}]}"},
+		"after": {"name": "app-boundary", "arn": "arn:aws:iam::123456789012:policy/app-boundary", "policy": "{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"logs:*\",\"Resource\":\"*\"}]}"},
+		"after_unknown": {}}}`
+
+// kmsKey is a KMS key whose key policy has the given statements, as they
+// appear inside a JSON string of a plan.
+func kmsKey(statements string) string {
+	policy := `{\"Version\":\"2012-10-17\",\"Statement\":[` + statements + `]}`
+	state := `{"arn": "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab", "key_id": "1234abcd-12ab-34cd-56ef-1234567890ab", "policy": "` + policy + `"}`
+	return `{"address": "aws_kms_key.k", "type": "aws_kms_key", "name": "k",
+		"change": {"actions": ["no-op"], "before": ` + state + `, "after": ` + state + `, "after_unknown": {}}}`
+}
+
+// The KMS documentation doesn't say how a permissions boundary combines with
+// a key policy, so the check applies IAM's rule for resource policies. A key
+// policy statement for the role's ARN is limited by the boundary, so a need
+// that the boundary doesn't allow is missing and names the boundary. A
+// statement for a session of the role isn't limited, and it may or may not
+// grant the session that makes the request, so the need is covered by
+// default and unverified under --strict-resources. An account statement
+// delegates to the identity policies, which the boundary limits.
+func TestCheck_BoundaryWithKeyPolicy(t *testing.T) {
+	need := func() []iam.Need {
+		return []iam.Need{{Sid: "Decrypt", Actions: []string{"kms:Decrypt"},
+			Resources: []string{"arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab"}}}
+	}
+	allowKMS := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"kms:Decrypt\",\"Resource\":\"*\"}]}`
+	identity := `{"address": "aws_iam_role_policy.p", "type": "aws_iam_role_policy", "name": "p",
+		"change": {"actions": ["create"], "after": {"role": "app-task", "policy": "` + allowKMS + `"}, "after_unknown": {}}}`
+	cases := []struct {
+		name, statement, identity string
+		want, wantStrict          string
+		boundary                  string
+	}{
+		{"the role's ARN", `{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::123456789012:role/app-task\"},\"Action\":\"kms:Decrypt\",\"Resource\":\"*\"}`, "",
+			"Decrypt kms:Decrypt", "Decrypt kms:Decrypt", "aws_iam_policy.boundary"},
+		{"a session of the role", `{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:sts::123456789012:assumed-role/app-task/app-session\"},\"Action\":\"kms:Decrypt\",\"Resource\":\"*\"}`, "",
+			"", "Decrypt kms:Decrypt condition", ""},
+		{"the account and an identity policy", `{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::123456789012:root\"},\"Action\":\"kms:*\",\"Resource\":\"*\"}`, ", " + identity,
+			"Decrypt kms:Decrypt", "Decrypt kms:Decrypt", "aws_iam_policy.boundary"},
+	}
+	for _, c := range cases {
+		raw := `{"resource_changes": [` + boundedRole + `, ` + kmsKey(c.statement) + c.identity + `]}`
+		res := checkPlan(t, raw, need(), false)
+		if got := verdicts(res.Missing); got != c.want {
+			t.Errorf("%s, default: %q, want %q", c.name, got, c.want)
+		}
+		if len(res.Missing) == 1 && res.Missing[0].Boundary != c.boundary {
+			t.Errorf("%s: boundary = %q, want %q", c.name, res.Missing[0].Boundary, c.boundary)
+		}
+		if got := verdicts(checkPlan(t, raw, need(), true).Missing); got != c.wantStrict {
+			t.Errorf("%s, strict: %q, want %q", c.name, got, c.wantStrict)
+		}
+	}
+}
+
+// A boundary ARN that may name either of two policies is one of them. The
+// need is missing only when neither allows it. When one of them allows it,
+// the need is covered by default and unverified with the reason condition
+// under --strict-resources.
+func TestCheck_BoundaryMayNameEitherPolicy(t *testing.T) {
+	policy := func(index, action string) string {
+		text := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"` + action + `\",\"Resource\":\"*\"}]}`
+		return `{"address": "aws_iam_policy.b[` + index + `]", "type": "aws_iam_policy", "name": "b", "index": ` + index + `,
+			"change": {"actions": ["create"], "after": {"policy": "` + text + `"}, "after_unknown": {"arn": true, "name": true}}}`
+	}
+	allowS3 := `{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"*\"}]}`
+	plan := func(second string) string {
+		return `{"resource_changes": [
+			{"address": "aws_iam_role.task", "type": "aws_iam_role", "name": "task",
+			 "change": {"actions": ["create"], "after": {"name": "app-task"}, "after_unknown": {"arn": true, "permissions_boundary": true}}},
+			` + policy("0", "logs:*") + `, ` + policy("1", second) + `,
+			{"address": "aws_iam_role_policy.p", "type": "aws_iam_role_policy", "name": "p",
+			 "change": {"actions": ["create"], "after": {"role": "app-task", "policy": "` + allowS3 + `"}, "after_unknown": {}}}],
+			"configuration": {"root_module": {"resources": [
+				{"address": "aws_iam_role.task", "mode": "managed", "type": "aws_iam_role", "name": "task",
+				 "expressions": {"name": {}, "permissions_boundary": {"references": ["aws_iam_policy.b.arn", "aws_iam_policy.b"]}}}]}}}`
+	}
+	need := func() []iam.Need { return []iam.Need{{Sid: "Read", Actions: []string{"s3:GetObject"}}} }
+	res := checkPlan(t, plan("sqs:*"), need(), false)
+	if got, want := verdicts(res.Missing), "Read s3:GetObject"; got != want {
+		t.Errorf("neither allows: %q, want %q", got, want)
+	}
+	if len(res.Missing) == 1 && res.Missing[0].Boundary != "aws_iam_policy.b[0] or aws_iam_policy.b[1]" {
+		t.Errorf("boundary = %q, want both policies", res.Missing[0].Boundary)
+	}
+	if got := verdicts(checkPlan(t, plan("s3:*"), need(), false).Missing); got != "" {
+		t.Errorf("one allows, default: %q, want covered", got)
+	}
+	if got, want := verdicts(checkPlan(t, plan("s3:*"), need(), true).Missing), "Read s3:GetObject condition"; got != want {
+		t.Errorf("one allows, strict: %q, want %q", got, want)
+	}
+}

@@ -1,0 +1,1246 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.15.6",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_iam_policy.s3_read_only",
+            "mode": "data",
+            "type": "aws_iam_policy",
+            "name": "s3_read_only",
+            "provider_name": "registry.terraform.io/hashicorp/aws",
+            "schema_version": 0,
+            "values": {
+              "arn": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+              "attachment_count": 1,
+              "description": "Provides read only access to all buckets via the AWS Management Console.",
+              "id": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+              "name": "AmazonS3ReadOnlyAccess",
+              "name_prefix": null,
+              "path": "/",
+              "path_prefix": null,
+              "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": [\"s3:Get*\", \"s3:List*\", \"s3:Describe*\", \"s3-object-lambda:Get*\", \"s3-object-lambda:List*\"], \"Resource\": \"*\"}]}",
+              "policy_id": "ANPAEXAMPLEPOLICYID02",
+              "tags": {}
+            },
+            "sensitive_values": {
+              "tags": {}
+            }
+          }
+        ]
+      }
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_iam_policy.logs_only",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "logs_only",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "app-logs-only",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "id": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"logs:*\", \"Resource\": \"*\"}]}",
+          "description": ""
+        },
+        "after": {
+          "name": "app-logs-only",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "id": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"logs:*\", \"Resource\": \"*\"}]}",
+          "description": ""
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_policy.s3_read",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "s3_read",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "app-s3-read",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "id": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"*\"}]}",
+          "description": ""
+        },
+        "after": {
+          "name": "app-s3-read",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "id": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"*\"}]}",
+          "description": ""
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_policy.deny_data",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "deny_data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "app-deny-data",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "id": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"*\", \"Resource\": \"*\"}, {\"Effect\": \"Deny\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "description": ""
+        },
+        "after": {
+          "name": "app-deny-data",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "id": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"*\", \"Resource\": \"*\"}, {\"Effect\": \"Deny\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "description": ""
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_policy.computed",
+      "mode": "managed",
+      "type": "aws_iam_policy",
+      "name": "computed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "app-computed-boundary",
+          "path": "/",
+          "description": ""
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "policy": true,
+          "policy_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role.limited",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "limited",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-limited",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-limited",
+          "id": "app-limited",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-limited",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-limited",
+          "id": "app-limited",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.limited",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "limited",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "limited",
+          "role": "app-limited",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-limited:limited"
+        },
+        "after": {
+          "name": "limited",
+          "role": "app-limited",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-limited:limited"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.allowed",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "allowed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-allowed",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "arn": "arn:aws:iam::123456789012:role/app-allowed",
+          "id": "app-allowed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-allowed",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "arn": "arn:aws:iam::123456789012:role/app-allowed",
+          "id": "app-allowed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.allowed",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "allowed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "allowed",
+          "role": "app-allowed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-allowed:allowed"
+        },
+        "after": {
+          "name": "allowed",
+          "role": "app-allowed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-allowed:allowed"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.computed",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "computed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-computed",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-computed",
+          "id": "app-computed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-computed",
+          "path": "/",
+          "arn": "arn:aws:iam::123456789012:role/app-computed",
+          "id": "app-computed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {
+          "permissions_boundary": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.computed",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "computed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "computed",
+          "role": "app-computed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-computed:computed"
+        },
+        "after": {
+          "name": "computed",
+          "role": "app-computed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-computed:computed"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.denied",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "denied",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-denied",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "arn": "arn:aws:iam::123456789012:role/app-denied",
+          "id": "app-denied",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-denied",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-deny-data",
+          "arn": "arn:aws:iam::123456789012:role/app-denied",
+          "id": "app-denied",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.denied",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "denied",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "denied",
+          "role": "app-denied",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-denied:denied"
+        },
+        "after": {
+          "name": "denied",
+          "role": "app-denied",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-denied:denied"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.managed",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "managed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-managed",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+          "arn": "arn:aws:iam::123456789012:role/app-managed",
+          "id": "app-managed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-managed",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+          "arn": "arn:aws:iam::123456789012:role/app-managed",
+          "id": "app-managed",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.managed",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "managed",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "managed",
+          "role": "app-managed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}, {\"Effect\": \"Allow\", \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+          "id": "app-managed:managed"
+        },
+        "after": {
+          "name": "managed",
+          "role": "app-managed",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}, {\"Effect\": \"Allow\", \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+          "id": "app-managed:managed"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.managed_unread",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "managed_unread",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-managed-unread",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::aws:policy/PowerUserAccess",
+          "arn": "arn:aws:iam::123456789012:role/app-managed-unread",
+          "id": "app-managed-unread",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-managed-unread",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::aws:policy/PowerUserAccess",
+          "arn": "arn:aws:iam::123456789012:role/app-managed-unread",
+          "id": "app-managed-unread",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.managed_unread",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "managed_unread",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "managed_unread",
+          "role": "app-managed-unread",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}, {\"Effect\": \"Allow\", \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+          "id": "app-managed-unread:managed_unread"
+        },
+        "after": {
+          "name": "managed_unread",
+          "role": "app-managed-unread",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}, {\"Effect\": \"Allow\", \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+          "id": "app-managed-unread:managed_unread"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.bucket_reader",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "bucket_reader",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-bucket-reader",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-bucket-reader",
+          "id": "app-bucket-reader",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-bucket-reader",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-bucket-reader",
+          "id": "app-bucket-reader",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.session_reader",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "session_reader",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-session-reader",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-session-reader",
+          "id": "app-session-reader",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-session-reader",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-logs-only",
+          "arn": "arn:aws:iam::123456789012:role/app-session-reader",
+          "id": "app-session-reader",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket.shared",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "shared",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "bucket": "app-shared",
+          "arn": "arn:aws:s3:::app-shared",
+          "id": "app-shared",
+          "force_destroy": false
+        },
+        "after": {
+          "bucket": "app-shared",
+          "arn": "arn:aws:s3:::app-shared",
+          "id": "app-shared",
+          "force_destroy": false
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket_policy.shared",
+      "mode": "managed",
+      "type": "aws_s3_bucket_policy",
+      "name": "shared",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "bucket": "app-shared",
+          "id": "app-shared",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-shared/*\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:role/app-bucket-reader\"}}, {\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-shared/*\", \"Principal\": {\"AWS\": \"arn:aws:sts::123456789012:assumed-role/app-session-reader/app-session\"}}]}"
+        },
+        "after": {
+          "bucket": "app-shared",
+          "id": "app-shared",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-shared/*\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:role/app-bucket-reader\"}}, {\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-shared/*\", \"Principal\": {\"AWS\": \"arn:aws:sts::123456789012:assumed-role/app-session-reader/app-session\"}}]}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.excluded",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "excluded",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-excluded",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "arn": "arn:aws:iam::123456789012:role/app-excluded",
+          "id": "app-excluded",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-excluded",
+          "path": "/",
+          "permissions_boundary": "arn:aws:iam::123456789012:policy/app-s3-read",
+          "arn": "arn:aws:iam::123456789012:role/app-excluded",
+          "id": "app-excluded",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.excluded",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "excluded",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "excluded",
+          "role": "app-excluded",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-locked/*\"}]}",
+          "id": "app-excluded:excluded"
+        },
+        "after": {
+          "name": "excluded",
+          "role": "app-excluded",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-locked/*\"}]}",
+          "id": "app-excluded:excluded"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket.locked",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "locked",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "bucket": "app-locked",
+          "arn": "arn:aws:s3:::app-locked",
+          "id": "app-locked",
+          "force_destroy": false
+        },
+        "after": {
+          "bucket": "app-locked",
+          "arn": "arn:aws:s3:::app-locked",
+          "id": "app-locked",
+          "force_destroy": false
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket_policy.locked",
+      "mode": "managed",
+      "type": "aws_s3_bucket_policy",
+      "name": "locked",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "bucket": "app-locked",
+          "id": "app-locked",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Deny\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-locked/*\", \"NotPrincipal\": {\"AWS\": [\"arn:aws:iam::123456789012:role/app-excluded\", \"arn:aws:iam::123456789012:root\"]}}]}"
+        },
+        "after": {
+          "bucket": "app-locked",
+          "id": "app-locked",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Deny\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-locked/*\", \"NotPrincipal\": {\"AWS\": [\"arn:aws:iam::123456789012:role/app-excluded\", \"arn:aws:iam::123456789012:root\"]}}]}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role.plain",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "plain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-plain",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-plain",
+          "id": "app-plain",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-plain",
+          "path": "/",
+          "permissions_boundary": null,
+          "arn": "arn:aws:iam::123456789012:role/app-plain",
+          "id": "app-plain",
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.plain",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "plain",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "plain",
+          "role": "app-plain",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-plain:plain"
+        },
+        "after": {
+          "name": "plain",
+          "role": "app-plain",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"s3:GetObject\", \"Resource\": \"arn:aws:s3:::app-data/*\"}]}",
+          "id": "app-plain:plain"
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_policy.logs_only",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "logs_only",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-logs-only"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_policy.s3_read",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "s3_read",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-s3-read"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_policy.deny_data",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "deny_data",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-deny-data"
+            },
+            "policy": {}
+          }
+        },
+        {
+          "address": "aws_iam_policy.computed",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "computed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "app-computed-boundary"
+            },
+            "policy": {
+              "references": [
+                "data.aws_iam_policy_document.computed.json",
+                "data.aws_iam_policy_document.computed"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.limited",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "limited",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-limited"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.logs_only.arn",
+                "aws_iam_policy.logs_only"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.limited",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "limited",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "limited"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.limited.id",
+                "aws_iam_role.limited"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.allowed",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "allowed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-allowed"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.s3_read.arn",
+                "aws_iam_policy.s3_read"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.allowed",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "allowed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "allowed"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.allowed.id",
+                "aws_iam_role.allowed"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.computed",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "computed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-computed"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.computed.arn",
+                "aws_iam_policy.computed"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.computed",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "computed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "computed"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.computed.id",
+                "aws_iam_role.computed"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.denied",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "denied",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-denied"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.deny_data.arn",
+                "aws_iam_policy.deny_data"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.denied",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "denied",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "denied"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.denied.id",
+                "aws_iam_role.denied"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.managed",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "managed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-managed"
+            },
+            "permissions_boundary": {
+              "constant_value": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.managed",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "managed",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "managed"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.managed.id",
+                "aws_iam_role.managed"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.managed_unread",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "managed_unread",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-managed-unread"
+            },
+            "permissions_boundary": {
+              "constant_value": "arn:aws:iam::aws:policy/PowerUserAccess"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.managed_unread",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "managed_unread",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "managed_unread"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.managed_unread.id",
+                "aws_iam_role.managed_unread"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.bucket_reader",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "bucket_reader",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-bucket-reader"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.logs_only.arn",
+                "aws_iam_policy.logs_only"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.session_reader",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "session_reader",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-session-reader"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.logs_only.arn",
+                "aws_iam_policy.logs_only"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_s3_bucket.shared",
+          "mode": "managed",
+          "type": "aws_s3_bucket",
+          "name": "shared",
+          "provider_config_key": "aws",
+          "expressions": {
+            "bucket": {
+              "constant_value": "app-shared"
+            }
+          }
+        },
+        {
+          "address": "aws_s3_bucket_policy.shared",
+          "mode": "managed",
+          "type": "aws_s3_bucket_policy",
+          "name": "shared",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "bucket": {
+              "references": [
+                "aws_s3_bucket.shared.id",
+                "aws_s3_bucket.shared"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.excluded",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "excluded",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-excluded"
+            },
+            "permissions_boundary": {
+              "references": [
+                "aws_iam_policy.s3_read.arn",
+                "aws_iam_policy.s3_read"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.excluded",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "excluded",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "excluded"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.excluded.id",
+                "aws_iam_role.excluded"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_s3_bucket.locked",
+          "mode": "managed",
+          "type": "aws_s3_bucket",
+          "name": "locked",
+          "provider_config_key": "aws",
+          "expressions": {
+            "bucket": {
+              "constant_value": "app-locked"
+            }
+          }
+        },
+        {
+          "address": "aws_s3_bucket_policy.locked",
+          "mode": "managed",
+          "type": "aws_s3_bucket_policy",
+          "name": "locked",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "bucket": {
+              "references": [
+                "aws_s3_bucket.locked.id",
+                "aws_s3_bucket.locked"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role.plain",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "plain",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-plain"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.plain",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "plain",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "plain"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.plain.id",
+                "aws_iam_role.plain"
+              ]
+            }
+          }
+        },
+        {
+          "address": "data.aws_iam_policy.s3_read_only",
+          "mode": "data",
+          "type": "aws_iam_policy",
+          "name": "s3_read_only",
+          "provider_config_key": "aws",
+          "expressions": {
+            "arn": {
+              "constant_value": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

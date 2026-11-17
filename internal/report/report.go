@@ -369,6 +369,16 @@ func grantNote(m iam.MissingAction) string {
 	return "granted only on " + strings.Join(m.GrantedOn, ", ")
 }
 
+// boundaryNote says which permissions boundary makes the finding's action
+// missing while the principal's other policies allow it. It is empty for a
+// finding that no boundary causes.
+func boundaryNote(m iam.MissingAction) string {
+	if m.Boundary == "" {
+		return ""
+	}
+	return "not allowed by the permissions boundary " + m.Boundary
+}
+
 // classTag is the tag of a permission class in every format. The json
 // report keeps the brackets, as it always has. A finding with no action has
 // no tag.

@@ -417,7 +417,10 @@ var sourceSpecs = map[string][]sourceSpec{
 	"aws_iam_role": {
 		{kind: KindIdentity, texts: blockTexts("inline_policy", "policy"), link: selfLink},
 		{kind: KindIdentity, managed: true, texts: managedPolicyList("managed_policy_arns"), link: selfLink},
-		{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink},
+		// The permissions boundary is a managed policy ARN. It resolves to
+		// its text as an attached managed policy does (see
+		// resolvePolicyARN).
+		{kind: KindBoundary, texts: managedPolicy("permissions_boundary", "permissions_boundary"), link: selfLink},
 	},
 	"aws_iam_role_policy_attachment": {{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("role", "aws_iam_role")}},
 	// An aws_iam_role_policy_attachments_exclusive attaches each ARN of its

@@ -138,6 +138,12 @@ type Result struct {
 	// Reason says why the tool could not check the grant. It is set only
 	// when the verdict is Unverified.
 	Reason UnverifiedReason
+	// Boundary names the permissions boundary that makes the verdict
+	// Missing while the other policies allow the action, such as the
+	// address of the aws_iam_policy that holds the boundary's text. It is
+	// empty for any other result. Document.Coverage never sets it: the
+	// policy set of a mapped principal does.
+	Boundary string
 }
 
 // Coverage reports whether the policy grants action on a resource matching
