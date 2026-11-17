@@ -59,7 +59,11 @@ const (
 	// text the plan does not show (see UnknownSource).
 	ReasonPolicyUnknown
 	// ReasonCrossAccount means the need crosses accounts and the resource
-	// policy in the other account is not in the plan.
+	// policy in the other account is not in the plan (see
+	// CrossAccountSource). It comes last in the order of firstReason, so a
+	// grant the tool read on the resource side, or a resource policy whose
+	// text is computed, names the reason first. Between the identity side
+	// and the resource side, the identity side's reason comes first.
 	ReasonCrossAccount
 )
 

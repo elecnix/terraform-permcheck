@@ -54,6 +54,21 @@ func Merge(docs ...*Document) *Document {
 // The marker does not survive a JSON round trip: the JSON form of the
 // document is a plain Allow of every action.
 func UnknownSource() *Document {
+	return unknownSource(ReasonPolicyUnknown)
+}
+
+// CrossAccountSource returns the document that stands for the resource
+// policy of a resource in another account than the principal's, when the
+// plan doesn't contain that policy. It is an unknown source (see
+// UnknownSource) with ReasonCrossAccount: it may allow any action and never
+// denies.
+func CrossAccountSource() *Document {
+	return unknownSource(ReasonCrossAccount)
+}
+
+// unknownSource returns a document whose one statement allows every action
+// on every resource, marked unverified with reason.
+func unknownSource(reason UnverifiedReason) *Document {
 	allowAll := Statement{
 		Effect:   "Allow",
 		Action:   actionField{"*"},
@@ -61,7 +76,7 @@ func UnknownSource() *Document {
 	}
 	return &Document{
 		Version:    mergedVersion,
-		Statements: []Statement{allowAll.Unverified(ReasonPolicyUnknown)},
+		Statements: []Statement{allowAll.Unverified(reason)},
 	}
 }
 

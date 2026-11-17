@@ -45,6 +45,9 @@ func sourceNotice(p check.PrincipalSources, s principal.Applied) string {
 	if len(s.Unlisted) > 0 {
 		return outsideRoleNotice(p, s.Unlisted)
 	}
+	if s.CrossAccount {
+		return crossAccountNotice(p, s.Resource)
+	}
 	if s.ResourceOutside {
 		return outsideKeyNotice(p, s.Resource)
 	}
@@ -118,6 +121,14 @@ func outsideKeyNotice(p check.PrincipalSources, resource string) string {
 	return fmt.Sprintf("notice: KMS key %s isn't in the plan, so its key policy is unknown; needs of %q may be granted by it", resource, p.Label)
 }
 
+// crossAccountNotice is the notice of the implicit source of a resource in
+// another account than the principal's, whose resource policy the plan
+// doesn't show. Across accounts that policy must allow the needs on the
+// resource too.
+func crossAccountNotice(p check.PrincipalSources, resource string) string {
+	return fmt.Sprintf("notice: %s is outside the account of %q, and its resource policy isn't in the plan; needs of %q on it depend on that policy", resource, p.Label, p.Label)
+}
+
 // resourceType returns the resource type of a terraform address, or the
 // address itself when it has another form.
 func resourceType(address string) string {
@@ -136,6 +147,9 @@ const (
 	// reasonAttachedOutside is the reason of the implicit source of a role
 	// outside the plan.
 	reasonAttachedOutside = "attached_outside_plan"
+	// reasonCrossAccount is the reason of the implicit source of a resource
+	// in another account than the principal's.
+	reasonCrossAccount = "cross_account"
 )
 
 // unknownReason says why the text of a policy source is unknown. A managed
@@ -147,6 +161,8 @@ func unknownReason(s principal.Applied) string {
 		return ""
 	case len(s.Unlisted) > 0:
 		return reasonAttachedOutside
+	case s.CrossAccount:
+		return reasonCrossAccount
 	case s.OutsidePlan:
 		return reasonOutsidePlan
 	case s.Unread:

@@ -365,3 +365,28 @@ func TestCheck_BoundaryMayNameEitherPolicy(t *testing.T) {
 		t.Errorf("one allows, strict: %q, want %q", got, want)
 	}
 }
+
+// A need crosses accounts only when the tool knows both account ids and they
+// differ.
+func TestCrossAccount(t *testing.T) {
+	role := policy.Principal{Kind: policy.KindRole, ARN: "arn:aws:iam::111122223333:role/app-task"}
+	for _, c := range []struct {
+		name     string
+		identity policy.Principal
+		resource string
+		want     bool
+	}{
+		{"other account", role, "arn:aws:secretsmanager:us-east-1:444455556666:secret:app-db-AbCdEf", true},
+		{"same account", role, "arn:aws:secretsmanager:us-east-1:111122223333:secret:app-db-AbCdEf", false},
+		{"role in another account", role, "arn:aws:iam::444455556666:role/deploy", true},
+		{"principal ARN unknown", policy.Principal{Kind: policy.KindRole, Name: "app-task"}, "arn:aws:iam::444455556666:role/deploy", false},
+		{"S3 object", role, "arn:aws:s3:::app-data/report.csv", false},
+		{"wildcard account", role, "arn:aws:sqs:us-east-1:*:app-jobs", false},
+		{"every resource", role, "*", false},
+		{"no resources", role, "", false},
+	} {
+		if got := crossAccount(c.identity, c.resource); got != c.want {
+			t.Errorf("%s: crossAccount = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

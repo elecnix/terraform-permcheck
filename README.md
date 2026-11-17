@@ -945,6 +945,36 @@ AWS does.
 A release older than the `principals` key ignores it and checks every need
 against the `--policy-*` document.
 
+##### Needs on a resource in another account
+
+AWS evaluates a request across accounts twice, and "The request is allowed
+only if both evaluations return a decision of `Allow`"
+([cross-account policy evaluation logic](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html)).
+PermCheck treats a need as cross-account when the account in the need's ARN
+differs from the account in the role's ARN. The role's identity policies and
+its boundary must then allow the need on their own. A resource policy grant
+to the role, or to a session of the role, doesn't make up for a gap there.
+The resource policy must allow the need too. A statement for the role's
+account counts as an `Allow` on that side. A KMS key in another account
+follows the same rule, so a key policy statement for the role needs an
+identity grant as well
+([allowing users in other accounts to use a KMS key](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-modifying-external-accounts.html)).
+
+When the plan doesn't contain the resource's policy, PermCheck counts the need
+as covered by default and prints a notice for the resource. Under
+`--strict-resources` it reports the need unverified with the reason
+`cross_account`. The same goes for a policy that PermCheck doesn't read, such
+as a role's trust policy for `sts:AssumeRole`:
+
+```
+notice: arn:aws:iam::444455556666:role/deploy is outside the account of "task", and its resource policy isn't in the plan; needs of "task" on it depend on that policy
+```
+
+PermCheck uses the one-account rule when it can't read both accounts. That
+happens when the plan creates the role and AWS assigns its ARN at apply time,
+when the need has no `resources`, and for S3. A bucket ARN has an empty
+account field, and the plan doesn't say which account a provider alias uses.
+
 ## Supported clouds
 
 | Cloud | Schema source | Status |

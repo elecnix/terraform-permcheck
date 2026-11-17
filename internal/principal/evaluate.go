@@ -77,9 +77,14 @@ type Applied struct {
 	Unlisted []string
 	// ResourceOutside is set on the implicit source of a resource whose
 	// resource policy must allow a need and that the plan doesn't show, such
-	// as a KMS key outside the plan (see requiredResourcePolicy). This source
-	// has no address and unknown text.
+	// as a KMS key outside the plan (see requiredResourcePolicy), or a
+	// resource in another account (see CrossAccount). This source has no
+	// address and unknown text.
 	ResourceOutside bool
+	// CrossAccount is set on the implicit source of a resource in another
+	// account than the principal's, whose resource policy the plan doesn't
+	// show (see crossAccount). It implies ResourceOutside.
+	CrossAccount bool
 	// Resource is the need's resource of a source with ResourceOutside. It
 	// is empty for a need without resources, which may act on any resource
 	// of the service.
@@ -167,12 +172,14 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 		service, _, _ := strings.Cut(action, ":")
 		service = strings.ToLower(service)
 		required := requiredResourcePolicy[service] && resource != "*"
+		cross := crossAccount(identity, resource)
+		twoSided := required || cross
 		found := false
 		for i, s := range sources {
 			m := links[i]
 			var resourceDoc *policy.Document
 			if s.Kind == plan.KindResource {
-				r := resourcePolicy(s, docs[i], identity, action, resource, required)
+				r := resourcePolicy(s, docs[i], identity, action, resource, required, cross)
 				m, resourceDoc = r.match, r.principalSide
 				resourceSide = append(resourceSide, r.resourceSide)
 				beyond = append(beyond, r.beyondBoundary)
@@ -208,12 +215,19 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 		for range extra {
 			merged = append(merged, policy.UnknownSource())
 		}
-		if required && !found {
-			// The plan doesn't show the resource's policy, which may grant
-			// the principal itself (see requiredResourcePolicy).
-			merged = append(merged, policy.UnknownSource())
-			resourceSide = append(resourceSide, policy.UnknownSource())
-			beyond = append(beyond, policy.UnknownSource())
+		if twoSided && !found {
+			// The plan doesn't show the resource's policy. For a required
+			// resource policy in the principal's account, it may grant the
+			// principal itself (see requiredResourcePolicy). Across
+			// accounts, it may allow the resource side only (see
+			// crossAccount).
+			if cross {
+				resourceSide = append(resourceSide, policy.CrossAccountSource())
+			} else {
+				merged = append(merged, policy.UnknownSource())
+				resourceSide = append(resourceSide, policy.UnknownSource())
+				beyond = append(beyond, policy.UnknownSource())
+			}
 			if !outsideSeen[resource] {
 				outsideSeen[resource] = true
 				match := plan.LinkYes
@@ -224,12 +238,13 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 					PolicySource:    plan.PolicySource{Kind: plan.KindResource, Service: service, Unknown: true, OutsidePlan: true},
 					Match:           match,
 					ResourceOutside: true,
+					CrossAccount:    cross,
 					Resource:        resource,
 				})
 			}
 		}
 		set.Policies = policy.Merge(merged...)
-		if required {
+		if twoSided {
 			set.ResourceSide = policy.Merge(resourceSide...)
 		}
 		if len(boundaries) > 0 {
@@ -304,6 +319,90 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 // so the identity policies decide it.
 var requiredResourcePolicy = map[string]bool{"kms": true}
 
+// crossAccount reports whether a need's resource is in another account than
+// the principal's. That is so when the tool knows both account ids and they
+// differ: the account of the resource's ARN, and the account of the
+// principal's known ARN.
+//
+// For a request across accounts, "AWS performs two evaluations" and "The
+// request is allowed only if both evaluations return a decision of Allow"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html).
+// Check evaluates such a need on two sides, as it does a need with a
+// required resource policy (see Set.ResourceSide):
+//
+//   - The identity side is the principal's identity policies and its
+//     boundary, with no statement of a resource policy. "The principal's
+//     identity-based policy must allow the requested access to the resource
+//     in the trusting service" (same page), so a provable gap there makes the
+//     need missing, whatever the resource policy says.
+//   - The resource side is the resource policies of the plan whose resource
+//     may be the need's resource, read with policy.ResourceSide: "the
+//     resource-based policy in AccountB must allow the requester in AccountA
+//     to access the resource" (same page), and a statement for the
+//     principal's account allows it, since the identity side checks the
+//     account's IAM policies. A provable gap there makes the need missing
+//     too. When the plan has a policy source for the resource, the check
+//     reads it as the resource's whole policy.
+//   - When the plan has no policy source for the resource, the resource
+//     side is an unknown source with the reason cross_account (see
+//     policy.CrossAccountSource). This covers the services whose resource
+//     policies the tool doesn't read, such as a role's trust policy for
+//     sts:AssumeRole, or a DynamoDB table. The need is covered by default
+//     when the identity side allows it, and unverified under
+//     --strict-resources.
+//
+// In one account, a resource policy that grants a session of the role is
+// not limited by a permissions boundary (see Set). The enforcement-code page
+// states that exception "Within the same account", and says that "For single
+// account policy evaluation requests, resource-based policy logic differs"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+// So across accounts no resource policy grant joins the identity side, and
+// the boundary limits the identity side as in one account.
+//
+// A KMS key in another account follows the same two sides. "Cross-account
+// access requires permission in the key policy of the KMS key and in an IAM
+// policy in the external user's account", and users and roles named in the
+// key policy "cannot use the KMS key until IAM administrators in the
+// external account attach the proper IAM policies to their identities"
+// (https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-modifying-external-accounts.html).
+// So a key policy statement for the role grants the resource side only. The
+// same page says they can't use the key "until you attach IAM policies that
+// delegate those permissions, or use grants to manage access to the KMS
+// key", so a KMS grant still joins both sides. The default key policy
+// allows the account that owns the key only, so it allows nothing to a
+// principal of another account.
+//
+// The tool doesn't know an account id in three cases, and then the
+// same-account rule applies. It allows more than the cross-account rule, so
+// a wrong guess can hide a gap and can't report a false one:
+//
+//   - The principal's ARN is unknown, as for a role that the plan creates.
+//   - The need has no resources, or its resource is "*" or has a wildcard in
+//     the account field.
+//   - The resource's ARN has no account field. S3 bucket and object ARNs,
+//     such as arn:aws:s3:::app-data/*, are such ARNs. The plan creates a
+//     bucket through a provider, which may assume a role in another
+//     account, and the plan JSON doesn't say which account a provider alias
+//     uses. So the tool never knows a bucket's account.
+func crossAccount(identity policy.Principal, resource string) bool {
+	own := identity.Account
+	if own == "" {
+		own = arnAccount(identity.ARN)
+	}
+	other := arnAccount(resource)
+	return own != "" && other != "" && own != other
+}
+
+// arnAccount returns the account id in the account field of an ARN, or ""
+// when the field is empty, holds a wildcard, or isn't an account id.
+func arnAccount(arn string) string {
+	parts := strings.SplitN(arn, ":", 6)
+	if len(parts) < 6 || parts[0] != "arn" || len(parts[4]) != 12 || strings.Trim(parts[4], "0123456789") != "" {
+		return ""
+	}
+	return parts[4]
+}
+
 // identityLink reports whether an identity or boundary source applies to
 // the principal: its link matches the role.
 func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
@@ -321,11 +420,12 @@ type appliedResourcePolicy struct {
 	// match says whether the source applies to the need.
 	match plan.LinkMatch
 	// principalSide holds the statements that join the principal's
-	// policies.
+	// policies. It is nil across accounts, apart from a KMS grant.
 	principalSide *policy.Document
 	// resourceSide holds the statements of the resource side of a service
-	// whose resource policy is required (see requiredResourcePolicy). It is
-	// nil for any other service.
+	// whose resource policy is required (see requiredResourcePolicy), or of a
+	// need on a resource in another account (see crossAccount). It is nil
+	// for any other need.
 	resourceSide *policy.Document
 	// beyondBoundary holds the Allow statements of principalSide whose grant
 	// a permissions boundary of the principal doesn't limit (see
@@ -348,7 +448,10 @@ type appliedResourcePolicy struct {
 // The table of source types in package plan cites the page of each other
 // service it reads. When required is set, the service's resource policy
 // must allow the need too, and the source also gives the statements of the
-// resource side (see requiredResourcePolicy).
+// resource side (see requiredResourcePolicy). When cross is set, the need's
+// resource is in another account than the principal's: the source gives the
+// resource side only, apart from a KMS grant, and no statement of the
+// principal side (see crossAccount).
 //
 // A source of another service doesn't apply. A source of a type this version
 // doesn't read yet applies to every action of its service, as an unknown
@@ -387,13 +490,14 @@ type appliedResourcePolicy struct {
 // plan sets, has no resource policy that the check can see, so the identity
 // policies decide its needs. A required resource policy is the exception
 // (see requiredResourcePolicy).
-func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.Principal, action, resource string, required bool) appliedResourcePolicy {
+func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.Principal, action, resource string, required, cross bool) appliedResourcePolicy {
 	service, _, _ := strings.Cut(action, ":")
+	twoSided := required || cross
 	switch {
 	case !strings.EqualFold(service, s.Service):
 		return appliedResourcePolicy{}
 	case s.Unread:
-		return appliedResourcePolicy{match: plan.LinkMaybe, principalSide: policy.UnknownSource(), beyondBoundary: policy.UnknownSource(), resourceSide: sideOf(required, policy.UnknownSource())}
+		return appliedResourcePolicy{match: plan.LinkMaybe, principalSide: sideOf(!cross, policy.UnknownSource()), beyondBoundary: sideOf(!cross, policy.UnknownSource()), resourceSide: sideOf(twoSided, policy.UnknownSource())}
 	case resource == "*":
 		return appliedResourcePolicy{}
 	}
@@ -462,6 +566,9 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 			return d
 		}
 		switch {
+		case s.DefaultKeyPolicy && cross:
+			// The default key policy allows the account that owns the key
+			// only (see crossAccount).
 		case s.DefaultKeyPolicy:
 			resourceSide = append(resourceSide, shape(defaultKeyPolicy))
 		case s.Grant:
@@ -472,9 +579,11 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 			resourceSide = append(resourceSide, d)
 			beyond = append(beyond, shape(doc.ForPrincipal(identity, policy.BeyondBoundary())))
 		default:
-			principalSide = append(principalSide, shape(doc.ForPrincipal(identity)))
-			beyond = append(beyond, shape(doc.ForPrincipal(identity, policy.BeyondBoundary())))
-			if required {
+			if !cross {
+				principalSide = append(principalSide, shape(doc.ForPrincipal(identity)))
+				beyond = append(beyond, shape(doc.ForPrincipal(identity, policy.BeyondBoundary())))
+			}
+			if twoSided {
 				resourceSide = append(resourceSide, shape(doc.ForPrincipal(identity, policy.ResourceSide())))
 			}
 		}
@@ -483,21 +592,21 @@ func resourcePolicy(s plan.PolicySource, doc *policy.Document, identity policy.P
 	case out.match == plan.LinkNo:
 		return appliedResourcePolicy{}
 	case s.Unknown:
-		out.principalSide = policy.UnknownSource()
-		out.beyondBoundary = policy.UnknownSource()
-		out.resourceSide = sideOf(required, policy.UnknownSource())
+		out.principalSide = sideOf(!cross, policy.UnknownSource())
+		out.beyondBoundary = sideOf(!cross, policy.UnknownSource())
+		out.resourceSide = sideOf(twoSided, policy.UnknownSource())
 	default:
 		out.principalSide = policy.Merge(principalSide...)
 		out.beyondBoundary = policy.Merge(beyond...)
-		out.resourceSide = sideOf(required, policy.Merge(resourceSide...))
+		out.resourceSide = sideOf(twoSided, policy.Merge(resourceSide...))
 	}
 	return out
 }
 
-// sideOf returns the document of the resource side when the resource policy
-// is required, and nil otherwise.
-func sideOf(required bool, d *policy.Document) *policy.Document {
-	if !required {
+// sideOf returns the document when the side it belongs to takes part in the
+// check, and nil otherwise.
+func sideOf(present bool, d *policy.Document) *policy.Document {
+	if !present {
 		return nil
 	}
 	return d
@@ -754,7 +863,10 @@ func boundaryName(s plan.PolicySource) string {
 //
 // ResourceSide holds the resource policies that must allow the action as
 // well, apart from the merged policies, such as a KMS key policy (see
-// requiredResourcePolicy). It is nil when the action needs no such Allow.
+// requiredResourcePolicy) or the policy of a resource in another account
+// (see crossAccount). Across accounts, Policies holds the identity side
+// only, and BeyondBoundary holds no resource policy statement. It is nil
+// when the action needs no such Allow.
 // When it is set, Set's verdict is also no better than its verdict. The KMS
 // documentation doesn't say how a boundary combines with a key policy, so the
 // check applies the IAM rule above to the principal side: a key policy

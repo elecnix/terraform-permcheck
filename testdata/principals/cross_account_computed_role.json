@@ -1,0 +1,136 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_role.task",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "assume_role_policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ecs-tasks.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+          "name": "app-task",
+          "path": "/",
+          "permissions_boundary": null,
+          "inline_policy": [],
+          "managed_policy_arns": []
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true,
+          "unique_id": true
+        }
+      }
+    },
+    {
+      "address": "aws_iam_role_policy.task",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "name": "task",
+          "role": "app-task",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": [\"logs:CreateLogStream\", \"logs:PutLogEvents\"], \"Resource\": \"*\"}]}",
+          "id": "app-task:task"
+        },
+        "after": {
+          "name": "task",
+          "role": "app-task",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": [\"logs:CreateLogStream\", \"logs:PutLogEvents\"], \"Resource\": \"*\"}]}",
+          "id": "app-task:task"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_secretsmanager_secret_policy.app",
+      "mode": "managed",
+      "type": "aws_secretsmanager_secret_policy",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "block_public_policy": null,
+          "secret_arn": "arn:aws:secretsmanager:us-east-1:444455556666:secret:app-db-AbCdEf",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::111122223333:role/app-task\"}, \"Action\": [\"secretsmanager:GetSecretValue\"], \"Resource\": \"*\"}]}"
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {
+        "name": "aws",
+        "full_name": "registry.terraform.io/hashicorp/aws",
+        "version_constraint": "6.0.0"
+      }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_role.task",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "assume_role_policy": {},
+            "name": {
+              "constant_value": "app-task"
+            }
+          }
+        },
+        {
+          "address": "aws_iam_role_policy.task",
+          "mode": "managed",
+          "type": "aws_iam_role_policy",
+          "name": "task",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": {
+              "constant_value": "task"
+            },
+            "policy": {},
+            "role": {
+              "references": [
+                "aws_iam_role.task.id",
+                "aws_iam_role.task"
+              ]
+            }
+          }
+        },
+        {
+          "address": "aws_secretsmanager_secret_policy.app",
+          "mode": "managed",
+          "type": "aws_secretsmanager_secret_policy",
+          "name": "app",
+          "provider_config_key": "aws",
+          "expressions": {
+            "policy": {},
+            "secret_arn": {
+              "constant_value": "arn:aws:secretsmanager:us-east-1:444455556666:secret:app-db-AbCdEf"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

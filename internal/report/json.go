@@ -78,7 +78,9 @@ type JSONPolicySource struct {
 	// source attaches a managed policy that the plan doesn't contain, or
 	// when an aws_iam_role_policies_exclusive lists an inline policy that
 	// the plan doesn't define. The implicit source of a role outside the
-	// plan has "attached_outside_plan". It is absent when the text is known.
+	// plan has "attached_outside_plan", and the implicit source of a
+	// resource in another account than the principal's has
+	// "cross_account". It is absent when the text is known.
 	UnknownReason string `json:"unknown_reason,omitempty"`
 	// PolicyARN is the known ARN of the managed policy the source attaches.
 	// It is absent for a source that holds its text itself.
@@ -92,7 +94,9 @@ type JSONPolicySource struct {
 	// Resource is set on the implicit source of a KMS key outside the plan:
 	// the need's resource, whose key policy the plan doesn't show. Its
 	// unknown_reason is "outside_plan". The source of a need without
-	// resources has no resource.
+	// resources has no resource. It is also set on the implicit source of a
+	// resource in another account than the principal's, whose resource
+	// policy the plan doesn't show. Its unknown_reason is "cross_account".
 	Resource string `json:"resource,omitempty"`
 	// Policy is the address of the aws_iam_policy resource, or of the
 	// data "aws_iam_policy" source, whose text the check read for the
