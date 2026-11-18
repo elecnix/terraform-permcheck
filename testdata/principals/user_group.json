@@ -1,0 +1,100 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.15.6",
+  "resource_changes": [
+    {
+      "address": "aws_iam_user.deployer",
+      "mode": "managed",
+      "type": "aws_iam_user",
+      "name": "deployer",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "deployer",
+          "path": "/",
+          "force_destroy": false,
+          "permissions_boundary": null,
+          "tags": null
+        },
+        "after_unknown": {"arn": true, "id": true, "unique_id": true, "tags_all": true}
+      }
+    },
+    {
+      "address": "aws_iam_group.deployers",
+      "mode": "managed",
+      "type": "aws_iam_group",
+      "name": "deployers",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"name": "deployers", "path": "/"},
+        "after_unknown": {"arn": true, "id": true, "unique_id": true}
+      }
+    },
+    {
+      "address": "aws_iam_group_policy.deployers",
+      "mode": "managed",
+      "type": "aws_iam_group_policy",
+      "name": "deployers",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "deployers-ecr",
+          "group": "deployers",
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": \"ecr:DescribeImages\", \"Resource\": \"*\"}]}"
+        },
+        "after_unknown": {"id": true}
+      }
+    },
+    {
+      "address": "aws_iam_user_group_membership.deployer",
+      "mode": "managed",
+      "type": "aws_iam_user_group_membership",
+      "name": "deployer",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {"user": "deployer", "groups": ["deployers"]},
+        "after_unknown": {"id": true, "groups": [false]}
+      }
+    }
+  ],
+  "configuration": {
+    "provider_config": {
+      "aws": {"name": "aws", "full_name": "registry.terraform.io/hashicorp/aws", "version_constraint": "6.0.0"}
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_iam_user.deployer", "mode": "managed", "type": "aws_iam_user", "name": "deployer", "provider_config_key": "aws",
+          "expressions": {"name": {"constant_value": "deployer"}}
+        },
+        {
+          "address": "aws_iam_group.deployers", "mode": "managed", "type": "aws_iam_group", "name": "deployers", "provider_config_key": "aws",
+          "expressions": {"name": {"constant_value": "deployers"}}
+        },
+        {
+          "address": "aws_iam_group_policy.deployers", "mode": "managed", "type": "aws_iam_group_policy", "name": "deployers", "provider_config_key": "aws",
+          "expressions": {
+            "name": {"constant_value": "deployers-ecr"},
+            "policy": {},
+            "group": {"references": ["aws_iam_group.deployers.name", "aws_iam_group.deployers"]}
+          }
+        },
+        {
+          "address": "aws_iam_user_group_membership.deployer", "mode": "managed", "type": "aws_iam_user_group_membership", "name": "deployer", "provider_config_key": "aws",
+          "expressions": {
+            "user": {"references": ["aws_iam_user.deployer.name", "aws_iam_user.deployer"]},
+            "groups": {"references": ["aws_iam_group.deployers.name", "aws_iam_group.deployers"]}
+          }
+        }
+      ]
+    }
+  }
+}

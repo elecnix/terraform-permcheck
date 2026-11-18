@@ -9,12 +9,12 @@ import (
 // contain: a known name decides, a reference to a role of the plan names
 // another role, and an unknown value may name the role.
 func TestMatchOutside(t *testing.T) {
-	byName := OutsideRole{Name: "ops-admin"}
-	byARN := OutsideRole{Name: "ops-admin", ARN: "arn:aws:iam::123456789012:role/ops-admin"}
+	byName := OutsidePrincipal{Type: roleType, Name: "ops-admin"}
+	byARN := OutsidePrincipal{Type: roleType, Name: "ops-admin", ARN: "arn:aws:iam::123456789012:role/ops-admin"}
 	cases := []struct {
 		name string
 		link PolicyLink
-		role OutsideRole
+		role OutsidePrincipal
 		want LinkMatch
 	}{
 		{"the same name", PolicyLink{Type: "aws_iam_role", Value: "ops-admin"}, byName, LinkYes},
@@ -65,7 +65,7 @@ func TestExclusives(t *testing.T) {
 	if a.Kind != ExclusiveInline || a.Attribute != "policy_names" || a.Computed || strings.Join(a.Entries, ",") != "ops-logs," {
 		t.Errorf("inline exclusive = %+v", a)
 	}
-	if a.Link.MatchOutside(OutsideRole{Name: "ops-admin"}) != LinkYes {
+	if a.Link.MatchOutside(OutsidePrincipal{Type: roleType, Name: "ops-admin"}) != LinkYes {
 		t.Errorf("inline exclusive link = %+v, want role_name ops-admin", a.Link)
 	}
 	if b.Kind != ExclusiveManaged || b.Attribute != "policy_arns" || !b.Computed || b.Entries != nil {

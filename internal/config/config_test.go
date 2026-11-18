@@ -206,9 +206,9 @@ func TestParse_Principals(t *testing.T) {
 	}
 
 	for body, want := range map[string]string{
-		`{"principals": {"ci": {"address": "aws_iam_user.ci"}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`: "users aren't supported yet",
-		`{"principals": {"ci": {"address": "aws_iam_role.ci"}}, "needs": [{"sid": "S", "principal": "cd", "actions": ["s3:GetObject"]}]}`: `no need has the principal "ci"`,
-		`{"principals": {"ci": {}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`:                             "address is required",
+		`{"principals": {"ci": {"address": "aws_iam_group.ci"}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`: "has the type aws_iam_group",
+		`{"principals": {"ci": {"address": "aws_iam_role.ci"}}, "needs": [{"sid": "S", "principal": "cd", "actions": ["s3:GetObject"]}]}`:  `no need has the principal "ci"`,
+		`{"principals": {"ci": {}}, "needs": [{"sid": "S", "principal": "ci", "actions": ["s3:GetObject"]}]}`:                              "address is required",
 	} {
 		if _, err := parse([]byte(body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("parse(%s) error = %v, want one containing %q", body, err, want)

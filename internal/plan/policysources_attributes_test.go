@@ -6,45 +6,6 @@ import (
 	"testing"
 )
 
-// TestPolicySources_UnreadTypes checks that a resource of each type the
-// design lists, but this version doesn't read, gives a source with unknown
-// text, its kind, its service and its link.
-func TestPolicySources_UnreadTypes(t *testing.T) {
-	cases := []struct {
-		typ      string
-		after    string
-		path     string
-		kind     PolicyKind
-		service  string
-		linkType string
-	}{
-		{"aws_iam_user_policy", `"user": "ci", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_user"},
-		{"aws_iam_user_policy_attachment", `"user": "ci", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_user"},
-		{"aws_iam_group_policy", `"group": "ops", "policy": "{}"`, "policy", KindIdentity, "", "aws_iam_group"},
-		{"aws_iam_group_policy_attachment", `"group": "ops", "policy_arn": "arn:aws:iam::123456789012:policy/x"`, "policy_arn", KindIdentity, "", "aws_iam_group"},
-		{"aws_iam_user", `"name": "ci", "permissions_boundary": "arn:aws:iam::123456789012:policy/b"`, "permissions_boundary", KindBoundary, "", "aws_iam_user"},
-	}
-	for _, c := range cases {
-		t.Run(c.typ, func(t *testing.T) {
-			changes := parseRaw(t, `{"resource_changes": [
-				{"address": "`+c.typ+`.x", "type": "`+c.typ+`", "name": "x",
-				 "change": {"actions": ["create"], "after": {`+c.after+`}, "after_unknown": {}}}]}`)
-			sources := PolicySources(changes, nil)
-			if len(sources) != 1 {
-				t.Fatalf("got %d sources, want 1: %+v", len(sources), sources)
-			}
-			s := sources[0]
-			if !s.Unknown || !s.Unread || s.Text != "" {
-				t.Errorf("unknown = %v, unread = %v, text = %q, want an unread source with no text", s.Unknown, s.Unread, s.Text)
-			}
-			if s.Path != c.path || s.Kind != c.kind || s.Service != c.service || s.Link.Type != c.linkType {
-				t.Errorf("path %q, kind %q, service %q, link type %q; want %q, %q, %q, %q",
-					s.Path, s.Kind, s.Service, s.Link.Type, c.path, c.kind, c.service, c.linkType)
-			}
-		})
-	}
-}
-
 // TestPolicySources_RoleAttributes checks the managed_policy_arns and
 // permissions_boundary of a role. Each is a source only when the
 // configuration writes it and the plan doesn't hold it as null or empty,

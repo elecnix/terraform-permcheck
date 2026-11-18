@@ -24,7 +24,7 @@ func checkPlan(t *testing.T, raw string, needs []iam.Need, strict bool) Result {
 	for i := range needs {
 		needs[i].Principal = "task"
 	}
-	res, err := Check(Principal{Label: "task", Role: role}, needs, plan.PolicySources(changes, nil), plan.Exclusives(changes), strict)
+	res, err := Check(Principal{Label: "task", Change: role}, needs, plan.PolicySources(changes, nil), plan.Exclusives(changes), strict)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,30 +187,49 @@ func TestCheck_UnparsablePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Check(Principal{Label: "task", Role: changes[0]}, nil, plan.PolicySources(changes, nil), nil, false)
+	_, err = Check(Principal{Label: "task", Change: changes[0]}, nil, plan.PolicySources(changes, nil), nil, false)
 	if err == nil || !strings.Contains(err.Error(), "aws_iam_role_policy.p") {
 		t.Errorf("error = %v, want one that names the source", err)
 	}
 }
 
-// TestPrincipal_Identity checks the policy.Principal of a role in the plan
-// and of a role outside it, which the resource policy stages match against
+// TestPrincipal_Identity checks the policy.Principal of a role or user in
+// the plan and of a role or user outside it, which the resource policy stages match against
 // the Principal and NotPrincipal elements.
 func TestPrincipal_Identity(t *testing.T) {
 	changes, err := plan.Parse([]byte(`{"resource_changes": [`+taskRole+`]}`), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := Principal{Label: "task", Role: changes[0]}.Identity()
+	got := Principal{Label: "task", Change: changes[0]}.Identity()
 	want := policy.Principal{Kind: policy.KindRole, Name: "app-task", PermissionsBoundary: true}
 	if got != want {
 		t.Errorf("role in the plan = %+v, want %+v", got, want)
 	}
-	outside := plan.OutsideRole{Name: "ops-admin", ARN: "arn:aws:iam::123456789012:role/ops-admin"}
+	outside := plan.OutsidePrincipal{Type: "aws_iam_role", Name: "ops-admin", ARN: "arn:aws:iam::123456789012:role/ops-admin"}
 	got = Principal{Label: "ops", Outside: &outside}.Identity()
 	want = policy.Principal{Kind: policy.KindRole, Name: "ops-admin", ARN: outside.ARN}
 	if got != want {
 		t.Errorf("role outside the plan = %+v, want %+v", got, want)
+	}
+
+	users, err := plan.Parse([]byte(`{"resource_changes": [
+		{"address": "aws_iam_user.ci", "type": "aws_iam_user", "name": "ci",
+		 "change": {"actions": ["no-op"], "before": {"name": "ci", "arn": "arn:aws:iam::123456789012:user/ci"},
+		 "after": {"name": "ci", "arn": "arn:aws:iam::123456789012:user/ci", "permissions_boundary": "arn:aws:iam::123456789012:policy/b"}, "after_unknown": {}}}]}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = Principal{Label: "ci", Change: users[0]}.Identity()
+	want = policy.Principal{Kind: policy.KindUser, Name: "ci", ARN: "arn:aws:iam::123456789012:user/ci", PermissionsBoundary: true}
+	if got != want {
+		t.Errorf("user in the plan = %+v, want %+v", got, want)
+	}
+	user := plan.OutsidePrincipal{Type: "aws_iam_user", Name: "ci"}
+	got = Principal{Label: "ci", Outside: &user}.Identity()
+	want = policy.Principal{Kind: policy.KindUser, Name: "ci"}
+	if got != want {
+		t.Errorf("user outside the plan = %+v, want %+v", got, want)
 	}
 }
 

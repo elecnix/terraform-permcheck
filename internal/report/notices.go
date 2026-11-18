@@ -51,6 +51,9 @@ func sourceNotice(p check.PrincipalSources, s principal.Applied) string {
 	if s.ResourceOutside {
 		return outsideKeyNotice(p, s.Resource)
 	}
+	if s.OutsideGroup {
+		return outsideGroupNotice(p, s)
+	}
 	var why, fix string
 	switch unknownReason(s) {
 	case reasonOutsidePlan:
@@ -90,24 +93,66 @@ var exclusiveFix = map[string]string{
 	principal.UnlistedManaged: "aws_iam_role_policy_attachments_exclusive",
 }
 
-// outsideRoleNotice is the notice of the implicit source of a role outside
-// the plan: other stacks may attach policies of the unlisted kinds to it.
+// The exclusive resources that make the plan list one kind of policy of a
+// user, by the kind.
+var userExclusiveFix = map[string]string{
+	principal.UnlistedInline:  "aws_iam_user_policies_exclusive",
+	principal.UnlistedManaged: "aws_iam_user_policy_attachments_exclusive",
+}
+
+// outsideRoleNotice is the notice of the implicit source of a role or user
+// outside the plan: other stacks may attach policies of the unlisted kinds
+// to it, and may add a user to groups. No resource makes the plan list a
+// user's groups, so the fix names the exclusive resources of the other
+// kinds only.
 func outsideRoleNotice(p check.PrincipalSources, unlisted []string) string {
-	role := p.Name
+	who := p.Name
 	if p.ARN != "" {
-		role = p.ARN
+		who = p.ARN
 	}
-	kinds := strings.Join(unlisted, " and ")
-	fixes := make([]string, len(unlisted))
-	for i, k := range unlisted {
-		fixes[i] = "an " + exclusiveFix[k]
+	kind, fixes := "role", exclusiveFix
+	if p.User {
+		kind, fixes = "user", userExclusiveFix
+	}
+	var attached []string
+	groups := false
+	for _, k := range unlisted {
+		if k == principal.UnlistedGroups {
+			groups = true
+		} else {
+			attached = append(attached, k)
+		}
+	}
+	var may []string
+	if len(attached) > 0 {
+		may = append(may, "attach "+strings.Join(attached, " and ")+" policies to it")
+	}
+	if groups {
+		may = append(may, "add it to groups")
+	}
+	line := fmt.Sprintf("notice: %s %s is outside the plan, and other stacks may %s; needs of %q may be granted by them",
+		kind, who, strings.Join(may, " or "), p.Label)
+	if len(attached) == 0 {
+		return line
+	}
+	names := make([]string, len(attached))
+	for i, k := range attached {
+		names[i] = "an " + fixes[k]
 	}
 	verb := "makes"
-	if len(fixes) > 1 {
+	if len(names) > 1 {
 		verb = "make"
 	}
-	return fmt.Sprintf("notice: role %s is outside the plan, and other stacks may attach %s policies to it; needs of %q may be granted by them; %s for the role %s the plan list every policy of that kind",
-		role, kinds, p.Label, strings.Join(fixes, " and "), verb)
+	return fmt.Sprintf("%s; %s for the %s %s the plan list every policy of that kind", line, strings.Join(names, " and "), kind, verb)
+}
+
+// outsideGroupNotice is the notice of a group that a membership may put the
+// user in, and whose policies the plan doesn't show.
+func outsideGroupNotice(p check.PrincipalSources, s principal.Applied) string {
+	if s.Group == "" {
+		return fmt.Sprintf("notice: %s: the name of a group is known only after apply, and the group may be outside the plan, so the plan may not show its policies; needs of %q may be granted by them", s.Address, p.Label)
+	}
+	return fmt.Sprintf("notice: %s: group %s isn't in the plan, so the plan doesn't show its policies; needs of %q may be granted by them", s.Address, s.Group, p.Label)
 }
 
 // outsideKeyNotice is the notice of the implicit source of a KMS key outside

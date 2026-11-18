@@ -1,0 +1,13 @@
+{
+  "principals": {
+    "deployer": { "address": "aws_iam_user.deployer" }
+  },
+  "needs": [
+    {
+      "sid": "ReadImages",
+      "principal": "deployer",
+      "actions": ["ecr:DescribeImages"],
+      "resources": ["arn:aws:ecr:us-east-1:123456789012:repository/app"]
+    }
+  ]
+}

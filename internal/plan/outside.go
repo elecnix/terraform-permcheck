@@ -8,47 +8,66 @@ import (
 // roleType is the resource type of an IAM role.
 const roleType = "aws_iam_role"
 
-// rolePolicyType is the resource type of an inline policy of a role.
-const rolePolicyType = "aws_iam_role_policy"
+// The resource types of the inline policies of a role, a user and a group.
+const (
+	rolePolicyType  = "aws_iam_role_policy"
+	userPolicyType  = "aws_iam_user_policy"
+	groupPolicyType = "aws_iam_group_policy"
+)
 
-// OutsideRole is an IAM role that the plan doesn't contain, known by the
-// name or ARN that the config gives it.
-type OutsideRole struct {
-	// Name is the role's name, without its path. A role known by its ARN
-	// has the last part of the ARN's path as its name.
+// userType is the resource type of an IAM user.
+const userType = "aws_iam_user"
+
+// groupType is the resource type of an IAM group.
+const groupType = "aws_iam_group"
+
+// OutsidePrincipal is an IAM role or user that the plan doesn't contain,
+// known by the name or ARN that the config gives it. Package plan also uses
+// it for an IAM group that the plan names but doesn't contain (see Groups).
+type OutsidePrincipal struct {
+	// Type is the resource type of the principal: aws_iam_role,
+	// aws_iam_user, or aws_iam_group.
+	Type string
+	// Name is the principal's name, without its path. A principal known by
+	// its ARN has the last part of the ARN's path as its name. It is empty
+	// for a group whose name the plan doesn't know.
 	Name string
-	// ARN is the role's ARN, such as arn:aws:iam::123456789012:role/ops-admin.
-	// It is empty for a role known by its name only.
+	// ARN is the principal's ARN, such as
+	// arn:aws:iam::123456789012:role/ops-admin. It is empty for a principal
+	// known by its name only.
 	ARN string
 }
 
-// MatchOutside reports whether the link points to the role r, which the plan
-// doesn't contain. A link that references only roles of the plan points to
-// another role. Otherwise the known value of the link attribute decides: a
-// name equal to the role's name gives LinkYes, and another name gives
-// LinkNo. An unknown value gives LinkMaybe.
+// MatchOutside reports whether the link points to r, which the plan doesn't
+// contain. A link that references only resources of r's type in the plan
+// points to another principal, unless it is a list whose values are all
+// known. Otherwise the known value of the link
+// attribute decides: a name equal to r's name gives LinkYes, and another
+// name gives LinkNo. An unknown value gives LinkMaybe.
 //
-// IAM role names are unique without regard to case
+// IAM role, user and group names are unique without regard to case
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html#reference_iam-quotas-names),
 // so the comparison folds case.
-func (l PolicyLink) MatchOutside(r OutsideRole) LinkMatch {
-	if l.Type != roleType || l.Self != "" {
+func (l PolicyLink) MatchOutside(r OutsidePrincipal) LinkMatch {
+	if l.Type != r.Type || l.Self != "" {
 		return LinkNo
 	}
-	var role, opaque bool
+	var inPlan, opaque bool
 	for _, ref := range l.References {
 		typ, _, _, ok := parseResourceRef(ref)
 		switch {
 		case !ok && (strings.HasPrefix(ref, "count.index") || strings.HasPrefix(ref, "each.key")):
-		case ok && typ == roleType:
-			role = true
+		case ok && typ == r.Type:
+			inPlan = true
 		default:
 			// A variable, a data source or another resource's attribute
-			// may hold any role's name.
+			// may hold any principal's name.
 			opaque = true
 		}
 	}
-	if role && !opaque {
+	// A list whose values are all known may mix references with constants,
+	// so its known values decide.
+	if inPlan && !opaque && l.Values == nil {
 		return LinkNo
 	}
 	if l.Values != nil {
@@ -66,10 +85,10 @@ func (l PolicyLink) MatchOutside(r OutsideRole) LinkMatch {
 	return matchOutsideValue(l.Value, r)
 }
 
-// matchOutsideValue compares one known value of a link attribute with the
-// role r. An ARN compares with the role's ARN. When the role is known by its
-// name only, an ARN with the same name may name it in another account.
-func matchOutsideValue(value string, r OutsideRole) LinkMatch {
+// matchOutsideValue compares one known value of a link attribute with r. An
+// ARN compares with r's ARN. When r is known by its name only, an ARN with
+// the same name may name it in another account.
+func matchOutsideValue(value string, r OutsidePrincipal) LinkMatch {
 	switch {
 	case value == "":
 		return LinkMaybe
@@ -90,33 +109,51 @@ func matchOutsideValue(value string, r OutsideRole) LinkMatch {
 	}
 }
 
-// ExclusiveKind says which policies of a role an exclusive resource lists.
+// ExclusiveKind says which policies of a role, user or group an exclusive
+// resource lists.
 type ExclusiveKind string
 
 const (
-	// ExclusiveInline is an aws_iam_role_policies_exclusive, which lists the
-	// names of the role's inline policies.
+	// ExclusiveInline is an aws_iam_role_policies_exclusive, an
+	// aws_iam_user_policies_exclusive or an aws_iam_group_policies_exclusive,
+	// which lists the names of the inline policies.
 	ExclusiveInline ExclusiveKind = "inline"
-	// ExclusiveManaged is an aws_iam_role_policy_attachments_exclusive,
-	// which lists the ARNs of the managed policies attached to the role.
+	// ExclusiveManaged is an aws_iam_role_policy_attachments_exclusive, an
+	// aws_iam_user_policy_attachments_exclusive or an
+	// aws_iam_group_policy_attachments_exclusive, which lists the ARNs of the
+	// attached managed policies.
 	ExclusiveManaged ExclusiveKind = "managed"
 )
 
-// exclusiveTypes maps each exclusive resource type to its kind and to the
-// attribute of its list.
-var exclusiveTypes = map[string]struct {
-	kind ExclusiveKind
-	attr string
-}{
-	"aws_iam_role_policies_exclusive":           {ExclusiveInline, "policy_names"},
-	"aws_iam_role_policy_attachments_exclusive": {ExclusiveManaged, "policy_arns"},
+// exclusiveType says how one exclusive resource type lists policies: its
+// kind, the attribute of its list, the attribute and type of its link, and
+// the resource type of the inline policies it names.
+type exclusiveType struct {
+	kind       ExclusiveKind
+	attr       string
+	linkAttr   string
+	target     string
+	inlineType string
 }
 
-// Exclusive is a resource that lists every policy of one kind that a role
-// has after the apply. The provider removes any policy of that kind that the
-// list omits
+// exclusiveTypes maps each exclusive resource type to how it lists policies.
+// The provider has the user and group types at both major versions that
+// PermCheck parses (v5.100.0 and v6.72.0).
+var exclusiveTypes = map[string]exclusiveType{
+	"aws_iam_role_policies_exclusive":            {ExclusiveInline, "policy_names", "role_name", roleType, rolePolicyType},
+	"aws_iam_role_policy_attachments_exclusive":  {ExclusiveManaged, "policy_arns", "role_name", roleType, rolePolicyType},
+	"aws_iam_user_policies_exclusive":            {ExclusiveInline, "policy_names", "user_name", userType, userPolicyType},
+	"aws_iam_user_policy_attachments_exclusive":  {ExclusiveManaged, "policy_arns", "user_name", userType, userPolicyType},
+	"aws_iam_group_policies_exclusive":           {ExclusiveInline, "policy_names", "group_name", groupType, groupPolicyType},
+	"aws_iam_group_policy_attachments_exclusive": {ExclusiveManaged, "policy_arns", "group_name", groupType, groupPolicyType},
+}
+
+// Exclusive is a resource that lists every policy of one kind that a role, a
+// user or a group has after the apply. The provider removes any policy of
+// that kind that the list omits
 // (https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policies_exclusive,
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachments_exclusive).
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachments_exclusive,
+// and the pages of the user and group resources of the same names).
 type Exclusive struct {
 	// Address is the terraform address of the exclusive resource.
 	Address string
@@ -124,7 +161,11 @@ type Exclusive struct {
 	Kind ExclusiveKind
 	// Attribute is the attribute of the list: policy_names or policy_arns.
 	Attribute string
-	// Link ties the resource to its role, through role_name.
+	// InlineType is the resource type of the inline policies of the
+	// resource's role, user or group, such as aws_iam_role_policy.
+	InlineType string
+	// Link ties the resource to its role, user or group, through role_name,
+	// user_name or group_name.
 	Link PolicyLink
 	// Computed is true when terraform computes the whole list at apply
 	// time.
@@ -139,7 +180,7 @@ type Exclusive struct {
 }
 
 // Exclusives returns the exclusive resources of the plan, in plan order. A
-// delete adds none, since destroying an exclusive resource leaves the role's
+// delete adds none, since destroying an exclusive resource leaves the
 // policies as they are.
 func Exclusives(changes []*ResourceChange) []Exclusive {
 	var out []Exclusive
@@ -152,7 +193,8 @@ func Exclusives(changes []*ResourceChange) []Exclusive {
 			Address:    rc.Address,
 			Kind:       t.kind,
 			Attribute:  t.attr,
-			Link:       attributeLink("role_name", roleType)(rc),
+			InlineType: t.inlineType,
+			Link:       attributeLink(t.linkAttr, t.target)(rc),
 			References: rc.References[t.attr],
 		}
 		if rc.paths == nil || unknownAlong(rc.paths.unknown, t.attr) {
@@ -192,8 +234,8 @@ func (e Exclusive) EntriesFromPlan(typ string) bool {
 	return found
 }
 
-// ListsInline reports whether the list of an aws_iam_role_policies_exclusive
-// provably names the inline policy of the source s: the list holds the
+// ListsInline reports whether the list of an exclusive resource of inline
+// policies provably names the inline policy of the source s: the list holds the
 // source's known policy name, or it references the source's resource.
 func (e Exclusive) ListsInline(s PolicySource) bool {
 	if e.Kind != ExclusiveInline {

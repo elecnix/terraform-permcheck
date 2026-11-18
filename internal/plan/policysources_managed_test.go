@@ -250,7 +250,7 @@ func TestPolicySources_PolicyARNCount(t *testing.T) {
 
 // TestPolicySources_PolicyAttachmentRoles checks that an
 // aws_iam_policy_attachment with roles reads the attached policy's text,
-// links to each role, and keeps its users and groups as unread sources.
+// links to each role, and reads it for its users too.
 func TestPolicySources_PolicyAttachmentRoles(t *testing.T) {
 	changes := parseRaw(t, `{
 		"resource_changes": [
@@ -278,8 +278,8 @@ func TestPolicySources_PolicyAttachmentRoles(t *testing.T) {
 	if got := roles.Link.Match(changeAt(t, changes, "aws_iam_role.task", "create")); got != LinkYes {
 		t.Errorf("roles link match = %v, want yes", got)
 	}
-	if users.Link.Type != "aws_iam_user" || !users.Unread || !users.Unknown {
-		t.Errorf("users source = %+v, want an unread source", users)
+	if users.Link.Type != "aws_iam_user" || users.Unread || users.Unknown || users.Policy != "aws_iam_policy.p" {
+		t.Errorf("users source = %+v, want the text of aws_iam_policy.p", users)
 	}
 }
 

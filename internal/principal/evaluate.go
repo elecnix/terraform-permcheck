@@ -11,51 +11,99 @@ import (
 	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
 
-// Principal is a role that the config's principals map gives a label, as
-// the plan shows it. Exactly one of Role and Outside is set.
+// Principal is a role or user that the config's principals map gives a
+// label, as the plan shows it. Exactly one of Change and Outside is set.
 type Principal struct {
-	// Label is the key of the principals map, which the needs of the role
-	// use as their principal.
+	// Label is the key of the principals map, which the needs of the
+	// principal use as their principal.
 	Label string
-	// Role is the change of the role in the plan (see Find). It is nil for
-	// a role outside the plan.
-	Role *plan.ResourceChange
-	// Outside is the role outside the plan that a name or arn entry gives.
-	// It is nil for a role in the plan.
-	Outside *plan.OutsideRole
+	// Change is the change of the role or user in the plan (see Find). It is
+	// nil for a principal outside the plan.
+	Change *plan.ResourceChange
+	// Outside is the role or user outside the plan that a name or arn entry
+	// gives. It is nil for a principal in the plan.
+	Outside *plan.OutsidePrincipal
+	// Groups are the groups and memberships of the plan (see
+	// plan.ParseGroups). A user gets the policies of each group it belongs
+	// to. They play no part for a role.
+	Groups plan.Groups
 }
 
-// link reports whether a policy link points to the principal's role.
-func (p Principal) link(l plan.PolicyLink) plan.LinkMatch {
+// resourceType returns the resource type of the principal: aws_iam_role or
+// aws_iam_user.
+func (p Principal) resourceType() string {
+	switch {
+	case p.Outside != nil:
+		return p.Outside.Type
+	case p.Change != nil:
+		return p.Change.Type
+	}
+	return roleType
+}
+
+// user reports whether the principal is an IAM user.
+func (p Principal) user() bool {
+	return p.resourceType() == userType
+}
+
+// direct reports whether a policy link points to the principal itself.
+func (p Principal) direct(l plan.PolicyLink) plan.LinkMatch {
 	if p.Outside != nil {
 		return l.MatchOutside(*p.Outside)
 	}
-	return l.Match(p.Role)
+	return l.Match(p.Change)
 }
 
-// Identity returns what the plan shows of the principal's role, for matching
-// the Principal and NotPrincipal elements of a resource policy. A role in
-// the plan gives its known arn and name, and whether it sets a permissions
-// boundary. A role outside the plan gives the name or ARN of its entry.
-func (p Principal) Identity() policy.Principal {
-	if p.Outside != nil {
-		return policy.Principal{Kind: policy.KindRole, ARN: p.Outside.ARN, Name: p.Outside.Name}
+// link reports whether a policy link points to the principal. A link to a
+// group points to a user through the memberships of the plan (see
+// plan.Groups.Member).
+func (p Principal) link(l plan.PolicyLink) plan.LinkMatch {
+	m, _ := p.linkGroup(l)
+	return m
+}
+
+// linkGroup is link, and it also returns the group that a link to a group
+// reaches the user through.
+func (p Principal) linkGroup(l plan.PolicyLink) (plan.LinkMatch, string) {
+	if l.Type == groupType {
+		if !p.user() {
+			return plan.LinkNo, ""
+		}
+		return p.Groups.Member(l, p.direct)
 	}
-	out := policy.Principal{Kind: policy.KindRole}
-	if p.Role == nil {
+	return p.direct(l), ""
+}
+
+// Identity returns what the plan shows of the principal, for matching the
+// Principal and NotPrincipal elements of a resource policy. A role or user
+// in the plan gives its known arn and name, and whether it sets a
+// permissions boundary. A principal outside the plan gives the name or ARN
+// of its entry.
+func (p Principal) Identity() policy.Principal {
+	kind := policy.KindRole
+	if p.user() {
+		kind = policy.KindUser
+	}
+	if p.Outside != nil {
+		return policy.Principal{Kind: kind, ARN: p.Outside.ARN, Name: p.Outside.Name}
+	}
+	out := policy.Principal{Kind: kind}
+	if p.Change == nil {
 		return out
 	}
-	out.ARN = p.Role.AttributeValues["arn"]
-	out.Name = p.Role.AttributeValues["name"]
-	out.PermissionsBoundary = p.Role.AttributeValues["permissions_boundary"] != "" || p.Role.Attributes["permissions_boundary"]
+	out.ARN = p.Change.AttributeValues["arn"]
+	out.Name = p.Change.AttributeValues["name"]
+	out.PermissionsBoundary = p.Change.AttributeValues["permissions_boundary"] != "" || p.Change.Attributes["permissions_boundary"]
 	return out
 }
 
-// The kinds of policy that the plan may not show completely for a role
-// outside the plan, as Applied.Unlisted names them.
+// The kinds of policy that the plan may not show completely for a role or
+// user outside the plan, as Applied.Unlisted names them. UnlistedGroups is
+// the policies of the groups that other stacks may add a user to.
 const (
 	UnlistedInline  = "inline"
 	UnlistedManaged = "managed"
+	UnlistedGroups  = "groups"
 )
 
 // Applied is a policy source that may apply to a checked need of a
@@ -70,11 +118,23 @@ type Applied struct {
 	// and LinkMaybe when it may be (see resourcePolicy). A resource policy of
 	// a type this version doesn't read yet is LinkMaybe.
 	Match plan.LinkMatch
-	// Unlisted is set on the implicit source of a role outside the plan:
-	// the policies that other stacks attach to the role. It names the kinds
-	// of policy that the plan may not show, UnlistedInline and
-	// UnlistedManaged. This source has no address and unknown text.
+	// Unlisted is set on the implicit source of a role or user outside the
+	// plan: the policies that other stacks attach to it. It names the kinds
+	// of policy that the plan may not show, UnlistedInline, UnlistedManaged
+	// and, for a user, UnlistedGroups. This source has no address and
+	// unknown text.
 	Unlisted []string
+	// Group is set on a group policy of a user: the group the policy
+	// reaches the user through, as the address of an aws_iam_group or the
+	// name of a group outside the plan. It is also set on the source of a
+	// group outside the plan that a membership puts the user in (see
+	// OutsideGroup).
+	Group string
+	// OutsideGroup is set on the source of a group that a membership may put
+	// the user in, and whose policies the plan doesn't show (see
+	// plan.Groups.OutsideGroups). Its address is the membership's, and its
+	// Group is the group's name, or empty when the plan doesn't know it.
+	OutsideGroup bool
 	// ResourceOutside is set on the implicit source of a resource whose
 	// resource policy must allow a need and that the plan doesn't show, such
 	// as a KMS key outside the plan (see requiredResourcePolicy), or a
@@ -100,11 +160,14 @@ type Result struct {
 	// Sources are the policy sources that may apply to at least one checked
 	// action: the sources of the plan in plan order, then the inline
 	// policies that an exclusive resource lists and the plan doesn't define,
-	// then the implicit source of a role outside the plan.
+	// then the groups outside the plan of a user, then the implicit source
+	// of a principal outside the plan.
 	Sources []Applied
-	// Complete is true when the plan shows every policy of the role. The
-	// check assumes it for a role in the plan. A role outside the plan has
-	// it when the plan has both exclusive resources for the role.
+	// Complete is true when the plan shows every policy of the principal.
+	// The check assumes it for a role or user in the plan. A role outside
+	// the plan has it when the plan has both exclusive resources for the
+	// role. A user outside the plan never has it, since other stacks may
+	// add it to groups.
 	Complete bool
 }
 
@@ -114,28 +177,43 @@ type Result struct {
 // principal's policy set (see Set) and runs the action through
 // iam.CheckNeedsWith, the path the needs of a --policy-* document take.
 //
+// The identity policies of a user include the policies of each group it
+// belongs to: "For an IAM user, these include user policies and policies
+// from groups to which the user belongs"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+// A group policy reaches the user in two hops, from the policy to the group
+// and from a membership to the user (see plan.Groups.Member). A group that
+// a membership may put the user in, and whose policies the plan doesn't show,
+// is an unknown source (see plan.Groups.OutsideGroups).
+//
 // exclusives are the exclusive resources of the plan (see plan.Exclusives).
-// For a role in the plan, the check assumes that the plan shows every policy
-// of the role, with or without them. A role outside the plan may have
-// policies that other stacks attach, so it gets an implicit unknown source,
-// unless the plan has an aws_iam_role_policies_exclusive and an
-// aws_iam_role_policy_attachments_exclusive for the role. With one of them,
-// the implicit source covers the other kind only.
+// For a role or user in the plan, the check assumes that the plan shows
+// every policy and every group membership of the principal, with or without
+// them. A role or user outside the plan may have policies that other stacks
+// attach, so it gets an implicit unknown source, unless the plan has an
+// exclusive resource of each kind for it, such as an
+// aws_iam_role_policies_exclusive and an
+// aws_iam_role_policy_attachments_exclusive for a role. With one of them,
+// the implicit source covers the other kind only. Other stacks may also add
+// a user outside the plan to groups, and no resource rules that out, so the
+// implicit source of such a user always covers its groups.
 //
-// For either role, an exclusive resource changes the sources in two ways.
-// An inline policy that its list names and that the plan doesn't define is
-// an unknown source. A source of the kind it lists, which its list may omit,
-// gets LinkMaybe: the provider removes it after the apply, unless terraform
-// attaches it again afterwards, so it may not apply. Its Allows count as
-// grants the tool can't check, and its Denies don't. Dropping the source
-// would turn its grants into a gap that the apply may disprove.
+// For any principal, an exclusive resource of the principal or of a group
+// of a user changes the sources in two ways. An inline policy that its list
+// names and that the plan doesn't define is an unknown source. A source of
+// the kind it lists, which its list may omit, gets LinkMaybe: the provider
+// removes it after the apply, unless terraform attaches it again afterwards,
+// so it may not apply. Its Allows count as grants the tool can't check, and
+// its Denies don't. Dropping the source would turn its grants into a gap
+// that the apply may disprove.
 //
-// The permissions boundary of a role in the plan is a policy source of the
-// kind plan.KindBoundary (see Set). The plan doesn't show whether a role
-// outside the plan has a boundary, or what it allows. The check treats it as
-// it treats a service control policy or a session policy: as allowing. A
-// boundary can only remove permissions, so a missing verdict stays provable,
-// and a covered verdict means covered by the policies the plan shows.
+// The permissions boundary of a role or user in the plan is a policy source
+// of the kind plan.KindBoundary (see Set). The plan doesn't show whether a
+// principal outside the plan has a boundary, or what it allows. The check
+// treats it as it treats a service control policy or a session policy: as
+// allowing. A boundary can only remove permissions, so a missing verdict
+// stays provable, and a covered verdict means covered by the policies the
+// plan shows.
 //
 // It returns an error when the plan shows a policy text that doesn't parse.
 func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusives []plan.Exclusive, strict bool) (Result, error) {
@@ -154,9 +232,10 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 	// The link of an identity or boundary source is the same for every
 	// action.
 	links := make([]plan.LinkMatch, len(sources))
+	groups := make([]string, len(sources))
 	for i, s := range sources {
 		if s.Kind != plan.KindResource {
-			links[i] = p.identityLink(s)
+			links[i], groups[i] = p.identityLink(s)
 		}
 	}
 	extra, complete := applyExclusives(p, sources, links, exclusives)
@@ -262,7 +341,7 @@ func Check(p Principal, needs []iam.Need, sources []plan.PolicySource, exclusive
 	res := Result{Missing: missing, Complete: complete}
 	for i, m := range applied {
 		if m != plan.LinkNo {
-			res.Sources = append(res.Sources, Applied{PolicySource: sources[i], Match: m})
+			res.Sources = append(res.Sources, Applied{PolicySource: sources[i], Match: m, Group: groups[i]})
 		}
 	}
 	if len(needs) > 0 {
@@ -404,14 +483,16 @@ func arnAccount(arn string) string {
 }
 
 // identityLink reports whether an identity or boundary source applies to
-// the principal: its link matches the role.
-func (p Principal) identityLink(s plan.PolicySource) plan.LinkMatch {
-	m := p.link(s.Link)
+// the principal: its link matches the role or user, or a group of the user.
+// It also returns the group of a group policy (see Principal.linkGroup).
+func (p Principal) identityLink(s plan.PolicySource) (plan.LinkMatch, string) {
+	m, group := p.linkGroup(s.Link)
 	if m == plan.LinkYes && s.PolicyMaybe {
-		// The role attaches the ARN, and the ARN may name another policy.
-		return plan.LinkMaybe
+		// The principal attaches the ARN, and the ARN may name another
+		// policy.
+		return plan.LinkMaybe, group
 	}
-	return m
+	return m, group
 }
 
 // appliedResourcePolicy is what a resource policy source adds to the
@@ -673,29 +754,43 @@ func resourceMatch(resource string, patterns []string) ([]string, plan.LinkMatch
 	return nil, plan.LinkNo
 }
 
-// applyExclusives applies the exclusive resources of the principal's role
-// to the links of its sources (see Check). It returns the extra sources: the
-// inline policies that a list names and the plan doesn't define, and the
-// implicit source of a role outside the plan. It also reports whether the
-// plan shows every policy of the role.
+// applyExclusives applies the exclusive resources of the principal, and of
+// the groups of a user, to the links of its sources (see Check). It returns
+// the extra sources: the inline policies that a list names and the plan
+// doesn't define, the groups outside the plan that a membership may put a
+// user in, and the implicit source of a principal outside the plan. It also
+// reports whether the plan shows every policy of the principal.
 func applyExclusives(p Principal, sources []plan.PolicySource, links []plan.LinkMatch, exclusives []plan.Exclusive) ([]Applied, bool) {
 	var extra []Applied
 	inline, managed := false, false
 	for _, ex := range exclusives {
-		m := p.link(ex.Link)
+		m, group := p.linkGroup(ex.Link)
 		if m == plan.LinkNo {
 			continue
 		}
+		// owned reports whether a source provably belongs to the role, user
+		// or group whose policies the list names.
+		owned := func(i int) bool {
+			s := sources[i]
+			switch {
+			case s.Kind != plan.KindIdentity || s.Link.Type != ex.Link.Type:
+				return false
+			case ex.Link.Type == groupType:
+				return p.Groups.Same(ex.Link, s.Link) == plan.LinkYes
+			}
+			return links[i] == plan.LinkYes
+		}
 		if ex.Kind == plan.ExclusiveInline {
-			extra = append(extra, undefinedInline(ex, m, sources, links)...)
+			extra = append(extra, undefinedInline(ex, m, group, sources, owned)...)
 		}
 		if m != plan.LinkYes {
-			// The resource may list the policies of another role.
+			// The resource may list the policies of another principal or
+			// group.
 			continue
 		}
 		listed := listedPolicies(ex, sources)
 		for i, s := range sources {
-			if links[i] != plan.LinkYes || s.Kind != plan.KindIdentity || s.Address == ex.Address {
+			if links[i] != plan.LinkYes || !owned(i) || s.Address == ex.Address {
 				continue
 			}
 			switch {
@@ -705,10 +800,30 @@ func applyExclusives(p Principal, sources []plan.PolicySource, links []plan.Link
 				links[i] = plan.LinkMaybe
 			}
 		}
+		if ex.Link.Type == groupType {
+			continue
+		}
 		if ex.Kind == plan.ExclusiveInline {
 			inline = true
 		} else {
 			managed = true
+		}
+	}
+	if p.user() {
+		for _, g := range p.Groups.OutsideGroups(p.direct, sources, exclusives) {
+			extra = append(extra, Applied{
+				PolicySource: plan.PolicySource{
+					Address:     g.Membership.Address,
+					Path:        g.Membership.Groups.Attribute,
+					Kind:        plan.KindIdentity,
+					Unknown:     true,
+					OutsidePlan: true,
+					Link:        g.Membership.Groups,
+				},
+				Match:        g.Match,
+				Group:        g.Name,
+				OutsideGroup: true,
+			})
 		}
 	}
 	if p.Outside == nil {
@@ -720,6 +835,11 @@ func applyExclusives(p Principal, sources []plan.PolicySource, links []plan.Link
 	}
 	if !managed {
 		unlisted = append(unlisted, UnlistedManaged)
+	}
+	if p.user() {
+		// No resource lists every group of a user (see package plan's
+		// Membership), so other stacks may add the user to groups.
+		unlisted = append(unlisted, UnlistedGroups)
 	}
 	if len(unlisted) == 0 {
 		return extra, true
@@ -756,16 +876,18 @@ func listedPolicies(ex plan.Exclusive, sources []plan.PolicySource) map[string]b
 }
 
 // undefinedInline returns an unknown source for each inline policy that the
-// list of an aws_iam_role_policies_exclusive names and the plan doesn't
-// define for the role: the role keeps that policy, and the plan doesn't show
-// its text. An inline policy is defined when a source that attaches to the
-// role has its name. An entry that terraform computes at apply time is
-// defined when the list references aws_iam_role_policy resources only. The
-// sources get the link m of the exclusive resource.
-func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicySource, links []plan.LinkMatch) []Applied {
+// list of an exclusive resource of inline policies names and the plan
+// doesn't define for its role, user or group: the principal keeps that
+// policy, and the plan doesn't show its text. An inline policy is defined
+// when a source that owned reports has its name. An entry that terraform
+// computes at apply time is defined when the list references inline
+// policies of the plan only, such as aws_iam_role_policy resources. The
+// sources get the link m of the exclusive resource, and the group a group's
+// resource reaches a user through.
+func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, group string, sources []plan.PolicySource, owned func(int) bool) []Applied {
 	defined := map[string]bool{}
 	for i, s := range sources {
-		if links[i] == plan.LinkYes && s.Kind == plan.KindIdentity && !s.Managed && s.PolicyName != "" {
+		if owned(i) && !s.Managed && s.PolicyName != "" {
 			defined[s.PolicyName] = true
 		}
 	}
@@ -776,7 +898,7 @@ func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicyS
 		case name == "":
 			computed = true
 		case !defined[name]:
-			out = append(out, Applied{Match: m, PolicySource: plan.PolicySource{
+			out = append(out, Applied{Match: m, Group: group, PolicySource: plan.PolicySource{
 				Address:     ex.Address,
 				Path:        ex.Attribute + "." + strconv.Itoa(i),
 				Kind:        plan.KindIdentity,
@@ -787,8 +909,8 @@ func undefinedInline(ex plan.Exclusive, m plan.LinkMatch, sources []plan.PolicyS
 			}})
 		}
 	}
-	if computed && !ex.EntriesFromPlan("aws_iam_role_policy") {
-		out = append(out, Applied{Match: m, PolicySource: plan.PolicySource{
+	if computed && !ex.EntriesFromPlan(ex.InlineType) {
+		out = append(out, Applied{Match: m, Group: group, PolicySource: plan.PolicySource{
 			Address: ex.Address,
 			Path:    ex.Attribute,
 			Kind:    plan.KindIdentity,

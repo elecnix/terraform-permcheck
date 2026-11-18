@@ -36,23 +36,26 @@ type JSONResult struct {
 type JSONPrincipalSources struct {
 	// Principal is the principal's key in the config's principals map.
 	Principal string `json:"principal"`
-	// Address is the terraform address of its role. It is absent for a
-	// role outside the plan.
+	// Address is the terraform address of its role or user. It is absent
+	// for a principal outside the plan.
 	Address string `json:"address,omitempty"`
 	// Name and ARN are the name or the ARN that the principals map gives a
-	// role outside the plan. Each is absent unless the map sets it.
+	// role or user outside the plan. Each is absent unless the map sets it.
 	Name string `json:"name,omitempty"`
 	ARN  string `json:"arn,omitempty"`
-	// Complete is set for a role outside the plan only. It is true when the
-	// plan has both exclusive resources for the role, so the sources list
-	// every policy of the role, some perhaps with unknown text. It is false
-	// when other stacks may attach policies to the role, and then the
-	// sources end with the implicit source of those policies. The check
-	// assumes that the plan shows every policy of a role in the plan.
+	// Complete is set for a role or user outside the plan only. It is true
+	// when the plan has both exclusive resources for a role, so the sources
+	// list every policy of the role, some perhaps with unknown text. It is
+	// false when other stacks may attach policies to the principal, and then
+	// the sources end with the implicit source of those policies. It is
+	// always false for a user outside the plan, since other stacks may add
+	// it to groups. The check assumes that the plan shows every policy and
+	// group membership of a role or user in the plan.
 	Complete *bool `json:"complete,omitempty"`
 	// Sources are in plan order, then the inline policies that an exclusive
-	// resource lists and the plan doesn't define, then the implicit source
-	// of a role outside the plan. The list is empty when no source applies.
+	// resource lists and the plan doesn't define, then the groups outside
+	// the plan of a user, then the implicit source of a principal outside
+	// the plan. The list is empty when no source applies.
 	Sources []JSONPolicySource `json:"sources"`
 }
 
@@ -75,9 +78,10 @@ type JSONPolicySource struct {
 	// UnknownReason says why the text is unknown: "computed" when
 	// terraform computes it at apply time, "unread" when this version
 	// doesn't read the source's type yet, and "outside_plan" when the
-	// source attaches a managed policy that the plan doesn't contain, or
-	// when an aws_iam_role_policies_exclusive lists an inline policy that
-	// the plan doesn't define. The implicit source of a role outside the
+	// source attaches a managed policy that the plan doesn't contain, when
+	// an exclusive resource of inline policies lists an inline policy that
+	// the plan doesn't define, or when a membership puts a user in a group
+	// outside the plan. The implicit source of a role or user outside the
 	// plan has "attached_outside_plan", and the implicit source of a
 	// resource in another account than the principal's has
 	// "cross_account". It is absent when the text is known.
@@ -88,9 +92,18 @@ type JSONPolicySource struct {
 	// PolicyName is the name of the inline policy, when the plan knows it.
 	PolicyName string `json:"policy_name,omitempty"`
 	// Unlisted names the kinds of policy, "inline" and "managed", that
-	// other stacks may attach to a role outside the plan. It is set on the
-	// implicit source of that role only.
+	// other stacks may attach to a role or user outside the plan, and
+	// "groups" when other stacks may add a user outside the plan to groups.
+	// It is set on the implicit source of that principal only.
 	Unlisted []string `json:"unlisted,omitempty"`
+	// Group is set on a policy of a group that a mapped user belongs to: the
+	// group the policy reaches the user through, as the address of an
+	// aws_iam_group or the name of a group outside the plan. It is also set
+	// on the source of a group outside the plan that a membership puts the
+	// user in, whose address is the membership's and whose unknown_reason is
+	// "outside_plan". That source has no group when the plan doesn't know
+	// the group's name.
+	Group string `json:"group,omitempty"`
 	// Resource is set on the implicit source of a KMS key outside the plan:
 	// the need's resource, whose key policy the plan doesn't show. Its
 	// unknown_reason is "outside_plan". The source of a need without
@@ -294,6 +307,7 @@ func jsonPolicySource(s principal.Applied) JSONPolicySource {
 		PolicyName: s.PolicyName,
 		Policy:     s.Policy,
 		Unlisted:   s.Unlisted,
+		Group:      s.Group,
 		Resource:   s.Resource,
 		Link:       s.Match.String(),
 	}

@@ -320,11 +320,10 @@ func TestOutsideRole_ConfigErrors(t *testing.T) {
 	for entry, want := range map[string]string{
 		`{"name": "ops-admin", "arn": "arn:aws:iam::123456789012:role/ops-admin"}`: "set only one of address, name and arn",
 		`{"address": "aws_iam_role.ops", "name": "ops-admin"}`:                     "set only one of address, name and arn",
-		`{"arn": "arn:aws:iam::123456789012:user/ci"}`:                             "users aren't supported yet",
 		`{"arn": "arn:aws:iam::123456789012:policy/ops"}`:                          "is not the ARN of an IAM role",
 		`{"arn": "arn:aws:iam::123456789012:role/ops-*"}`:                          "has a wildcard",
 		`{"name": "ops-*"}`: "has a wildcard",
-		`{}`:                "address is required, or name or arn for a role outside the plan",
+		`{}`:                "address is required, or name or arn for a role or user outside the plan",
 	} {
 		_, _, err := runValidate(t, "--plan-file", outsideRolePlan, "--config", outsideNeeds(t, entry))
 		if exitCode(err) != 2 || !strings.Contains(err.Error(), want) {

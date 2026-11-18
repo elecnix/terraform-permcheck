@@ -62,7 +62,8 @@ type PolicySource struct {
 	// an AWS managed policy. The plan can't show its text.
 	OutsidePlan bool
 	// PolicyName is the known name of an inline policy: the name of an
-	// aws_iam_role_policy, or of an inline_policy block of an aws_iam_role.
+	// aws_iam_role_policy, an aws_iam_user_policy or an
+	// aws_iam_group_policy, or of an inline_policy block of an aws_iam_role.
 	// It is empty for any other source, and when terraform computes the
 	// name at apply time.
 	PolicyName string
@@ -187,8 +188,8 @@ func (m LinkMatch) String() string {
 
 // Match reports whether the link points to the principal p. It tries the
 // references of the link attribute first, then its known value against the
-// principal's known name or arn. When neither decides, the answer is
-// LinkMaybe.
+// principal's known name or arn. A list whose values are all known tries
+// its values first. When neither decides, the answer is LinkMaybe.
 //
 // A reference without an instance key, such as aws_iam_role.task for a role
 // with count or for_each, names every instance. For an instance it matches
@@ -203,6 +204,15 @@ func (l PolicyLink) Match(p *ResourceChange) LinkMatch {
 			return LinkYes
 		}
 		return LinkNo
+	}
+	if l.Values != nil {
+		// A list whose values are all known, such as the groups of an
+		// aws_iam_user_group_membership, may mix references with constants,
+		// so its references don't list every principal it names. Its known
+		// values decide when the principal's name or arn is known.
+		if m := l.matchValue(p); m != LinkMaybe {
+			return m
+		}
 	}
 	if m, decided := l.matchReferences(p); decided {
 		return m
@@ -382,7 +392,9 @@ type sourceSpec struct {
 	// unread marks a source type that this version knows but doesn't read
 	// yet. Its sources are unknown, whatever text the plan holds. A later
 	// version reads the type by dropping the marker and giving the spec a
-	// texts function that reads the text.
+	// texts function that reads the text. Since the IAM users and groups
+	// stage of issue #175, every type of the design is read, and no spec has
+	// the marker.
 	unread bool
 	// service is the service prefix of the actions a resource policy can
 	// grant, such as secretsmanager. It is empty for an identity or
@@ -407,7 +419,8 @@ type sourceSpec struct {
 // from the check.
 //
 // The membership resources aws_iam_user_group_membership and
-// aws_iam_group_membership set no policy, so they have no spec. An
+// aws_iam_group_membership set no policy, so they have no spec: Groups reads
+// them. An
 // aws_iam_policy holds the text of a managed policy, but it attaches to no
 // principal by itself, so it has no spec either. A source that attaches it
 // reads its text (see resolvePolicyARN).
@@ -430,18 +443,23 @@ var sourceSpecs = map[string][]sourceSpec{
 	// aws_iam_role_policy resources, or from outside the plan.
 	"aws_iam_role_policy_attachments_exclusive": {{kind: KindIdentity, managed: true, texts: managedPolicyList("policy_arns"), link: attributeLink("role_name", "aws_iam_role")}},
 	"aws_iam_policy_attachment": {
-		{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "roles"), link: attributeLink("roles", "aws_iam_role")},
-		{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "users"), link: attributeLink("users", "aws_iam_user")},
-		{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadTextWhen("policy_arn", "groups"), link: attributeLink("groups", "aws_iam_group")},
+		{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "roles"), link: attributeLink("roles", roleType)},
+		{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "users"), link: attributeLink("users", userType)},
+		{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "groups"), link: attributeLink("groups", groupType)},
 	},
 
-	// Identity policies and the boundary of a user, and the policies of a
-	// group.
-	"aws_iam_user":                    {{kind: KindBoundary, unread: true, arn: "permissions_boundary", texts: unreadText("permissions_boundary"), link: selfLink}},
-	"aws_iam_user_policy":             {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("user", "aws_iam_user")}},
-	"aws_iam_user_policy_attachment":  {{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("user", "aws_iam_user")}},
-	"aws_iam_group_policy":            {{kind: KindIdentity, unread: true, texts: unreadText("policy"), link: attributeLink("group", "aws_iam_group")}},
-	"aws_iam_group_policy_attachment": {{kind: KindIdentity, managed: true, unread: true, arn: "policy_arn", texts: unreadText("policy_arn"), link: attributeLink("group", "aws_iam_group")}},
+	// Identity policies and the boundary of a user. A user also gets the
+	// policies of each group it belongs to (see Groups).
+	"aws_iam_user":                              {{kind: KindBoundary, texts: managedPolicy("permissions_boundary", "permissions_boundary"), link: selfLink}},
+	"aws_iam_user_policy":                       {{kind: KindIdentity, texts: attributeText("policy"), link: attributeLink("user", userType)}},
+	"aws_iam_user_policy_attachment":            {{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("user", userType)}},
+	"aws_iam_user_policy_attachments_exclusive": {{kind: KindIdentity, managed: true, texts: managedPolicyList("policy_arns"), link: attributeLink("user_name", userType)}},
+
+	// Identity policies of a group. Their link points to the group, and the
+	// memberships of the plan take them on to its users (see Groups).
+	"aws_iam_group_policy":                       {{kind: KindIdentity, texts: attributeText("policy"), link: attributeLink("group", groupType)}},
+	"aws_iam_group_policy_attachment":            {{kind: KindIdentity, managed: true, texts: managedPolicy("policy_arn", "policy_arn"), link: attributeLink("group", groupType)}},
+	"aws_iam_group_policy_attachments_exclusive": {{kind: KindIdentity, managed: true, texts: managedPolicyList("policy_arns"), link: attributeLink("group_name", groupType)}},
 
 	// Resource policies.
 	// A resource policy source links to the resource it is attached to: the
@@ -565,11 +583,12 @@ func PolicySources(changes []*ResourceChange, data []DataSource) []PolicySource 
 }
 
 // inlinePolicyName returns the known name of the inline policy whose text is
-// at path in rc: the name of an aws_iam_role_policy, or the name of an
-// inline_policy block of an aws_iam_role. It is empty for any other source.
+// at path in rc: the name of an aws_iam_role_policy, aws_iam_user_policy or
+// aws_iam_group_policy, or the name of an inline_policy block of an
+// aws_iam_role. It is empty for any other source.
 func inlinePolicyName(rc *ResourceChange, path string) string {
 	switch {
-	case rc.Type == rolePolicyType && path == "policy":
+	case (rc.Type == rolePolicyType || rc.Type == userPolicyType || rc.Type == groupPolicyType) && path == "policy":
 		return rc.AttributeValues["name"]
 	case rc.Type == roleType && strings.HasPrefix(path, "inline_policy.") && strings.HasSuffix(path, ".policy"):
 		namePath := strings.TrimSuffix(path, ".policy") + ".name"
@@ -862,24 +881,6 @@ func configuredText(attr string) func(rc *ResourceChange, ctx sourceContext) []p
 			return nil
 		}
 		return []policyText{readText(rc, attr)}
-	}
-}
-
-// unreadText gives one source with unknown text at the attribute attr, when
-// the resource may set that attribute.
-func unreadText(attr string) func(rc *ResourceChange, ctx sourceContext) []policyText {
-	return unreadTextWhen(attr, attr)
-}
-
-// unreadTextWhen gives one source with unknown text at the attribute attr,
-// when the resource may set the attribute when. An aws_iam_policy_attachment
-// that names only users, say, gives no source for users.
-func unreadTextWhen(attr, when string) func(rc *ResourceChange, ctx sourceContext) []policyText {
-	return func(rc *ResourceChange, _ sourceContext) []policyText {
-		if !maySet(rc, when) {
-			return nil
-		}
-		return []policyText{{path: attr, unknown: true}}
 	}
 }
 
