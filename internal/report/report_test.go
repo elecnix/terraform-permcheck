@@ -189,3 +189,39 @@ func TestReport_UnresolvedNeverAllClear(t *testing.T) {
 		})
 	}
 }
+
+// TestReport_JSONNotEvaluated checks that the json report of a run that
+// checks a mapped principal lists the kinds of policy the check counts as
+// allowing without reading them, and that the report of any other run has no
+// such key, so its output stays as it was.
+func TestReport_JSONNotEvaluated(t *testing.T) {
+	keys := func(t *testing.T, res check.Result) map[string]json.RawMessage {
+		t.Helper()
+		var out map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(New(res, nil, false).json()), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	t.Run("mapped principal", func(t *testing.T) {
+		res := check.Result{Needs: 1, Label: "resource changes", Principals: []check.PrincipalSources{{Label: "task", Address: "aws_iam_role.task"}}}
+		raw, ok := keys(t, res)["not_evaluated"]
+		if !ok {
+			t.Fatal("json report of a mapped run has no not_evaluated key")
+		}
+		var got []string
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"scp", "rcp", "session_policy", "vpc_endpoint_policy", "role_trust_policy"}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("not_evaluated = %v, want %v", got, want)
+		}
+	})
+	t.Run("no mapped principal", func(t *testing.T) {
+		res := check.Result{Needs: 1, Checked: 2, Label: "resource changes"}
+		if raw, ok := keys(t, res)["not_evaluated"]; ok {
+			t.Errorf("json report of a run without a mapped principal has not_evaluated = %s", raw)
+		}
+	})
+}

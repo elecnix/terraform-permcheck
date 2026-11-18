@@ -29,7 +29,37 @@ type JSONResult struct {
 	// so it checked the needs of mapped principals only and not the plan's
 	// resources. It is absent otherwise.
 	PlanResourcesSkipped bool `json:"plan_resources_skipped,omitempty"`
+	// NotEvaluated lists the kinds of policy that the check of a mapped
+	// principal's needs counts as allowing without reading them (see
+	// notEvaluated). It is absent when the run checked no mapped need.
+	NotEvaluated []string `json:"not_evaluated,omitempty"`
 }
+
+// notEvaluated lists the kinds of policy that the check of a mapped
+// principal's needs never reads, in the order the json report gives them.
+// Each can only remove permissions that the other policies grant, so the
+// check counts each as allowing: a covered verdict means covered by the
+// policies the plan shows, and a missing verdict stays provable.
+//
+//   - "scp" and "rcp": service control policies apply to the principal's
+//     account and resource control policies to the resource's account, and
+//     both must allow the request
+//     (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics-id-scp).
+//     The plan doesn't show which account a principal runs in.
+//   - "session_policy": the call that creates a session passes it, and the
+//     plan never shows it
+//     (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session).
+//   - "vpc_endpoint_policy": an endpoint policy limits the requests that go
+//     through the endpoint
+//     (https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-access.html).
+//     The plan doesn't show which path a request takes, and the check
+//     doesn't read the policy of aws_vpc_endpoint.
+//   - "role_trust_policy": a role's trust policy "must explicitly allow
+//     access for principals"
+//     (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
+//     The check doesn't read assume_role_policy, so in one account it checks
+//     a need for sts:AssumeRole against the identity side alone.
+var notEvaluated = []string{"scp", "rcp", "session_policy", "vpc_endpoint_policy", "role_trust_policy"}
 
 // JSONPrincipalSources is a mapped principal and the policy sources that may
 // apply to its checked needs.
@@ -291,6 +321,9 @@ func (r *Report) json() string {
 		result.PolicySources = append(result.PolicySources, item)
 	}
 	result.PlanResourcesSkipped = r.resourcesSkipped
+	if len(r.principals) > 0 {
+		result.NotEvaluated = notEvaluated
+	}
 
 	out, _ := json.MarshalIndent(result, "", "  ")
 	return string(out) + "\n"

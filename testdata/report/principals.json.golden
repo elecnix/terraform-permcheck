@@ -104,6 +104,13 @@
         }
       ]
     }
+  ],
+  "not_evaluated": [
+    "scp",
+    "rcp",
+    "session_policy",
+    "vpc_endpoint_policy",
+    "role_trust_policy"
   ]
 }
 --- stderr ---

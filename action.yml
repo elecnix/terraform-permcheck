@@ -59,7 +59,7 @@ inputs:
     required: false
     default: "false"
   principal:
-    description: Also check the config file's `needs` declared for this principal. A need without a principal is checked on every run, and an unknown principal is an error. Leave empty to check only the needs that apply to every run.
+    description: Also check the config file's `needs` declared for this principal. A need without a principal is checked on every run, and an unknown principal is an error. Leave empty to check the needs without a principal and the needs of every principal in the config's `principals` map.
     required: false
     default: ""
   strict-resources:
