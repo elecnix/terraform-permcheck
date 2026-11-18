@@ -44,6 +44,11 @@ type resourceRule struct {
 	// valueRequirements lists the actions AWS checks on the caller, in
 	// another service, when an attribute holds a value.
 	valueRequirements []valueRequirement
+	// everyResource lists, per operation, the actions IAM authorizes on
+	// Resource "*" whatever the resource's ARN, such as a call the provider
+	// makes after the resource is gone. Only a grant on every resource
+	// covers them.
+	everyResource map[string][]string
 }
 
 // resourceRules maps a terraform resource type to its rule. A type with no
@@ -91,14 +96,23 @@ var resourceRules = map[string]resourceRule{
 	// least-privilege policy scopes it with the lambda:FunctionArn
 	// condition key. The key holds the ARN of the function the mapping
 	// points at, which the plan shows in function_name.
-	"aws_lambda_event_source_mapping": {conditionKeys: []conditionKeyRule{{
-		actions: []string{
-			"lambda:CreateEventSourceMapping",
-			"lambda:UpdateEventSourceMapping",
-			"lambda:DeleteEventSourceMapping",
-		},
-		key: conditionKey{name: "lambda:FunctionArn", attribute: "function_name", arn: true},
-	}}},
+	//
+	// After DeleteEventSourceMapping, the provider's delete waiter polls
+	// GetEventSourceMapping until Lambda reports the mapping gone. Once it
+	// is gone, IAM authorizes the poll on Resource "*", not on the mapping's
+	// ARN, so a grant scoped to the mapping fails the delete after the
+	// mapping is already deleted (#208).
+	"aws_lambda_event_source_mapping": {
+		conditionKeys: []conditionKeyRule{{
+			actions: []string{
+				"lambda:CreateEventSourceMapping",
+				"lambda:UpdateEventSourceMapping",
+				"lambda:DeleteEventSourceMapping",
+			},
+			key: conditionKey{name: "lambda:FunctionArn", attribute: "function_name", arn: true},
+		}},
+		everyResource: map[string][]string{"delete": {"lambda:GetEventSourceMapping"}},
+	},
 
 	// A regional custom domain makes API Gateway create its service-linked
 	// role.

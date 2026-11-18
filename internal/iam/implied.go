@@ -26,6 +26,9 @@ type targeted struct {
 	// conditions holds the condition key values the plan supplies, so a
 	// grant that is scoped to a key can be checked against them.
 	conditions policy.Conditions
+	// everyResource marks an action IAM authorizes on Resource "*": only a
+	// grant on every resource covers it, whatever its targets.
+	everyResource bool
 	// knownTargetsOnly drops a missing verdict when targets is nil. The
 	// resource may act on no target at all, so only a grant checked against
 	// a known target, or a grant scoped elsewhere under --strict-resources,
@@ -36,12 +39,13 @@ type targeted struct {
 	dependsOn string
 }
 
-// withTargets pairs each requirement with the same targets, and with the
-// condition key values the plan supplies for the requirement's action.
-func withTargets(reqs []Requirement, targets [][]string, conditions func(string) policy.Conditions) []targeted {
+// withTargets pairs each requirement with the same targets, with the
+// condition key values the plan supplies for the requirement's action, and
+// marks the actions everyResource says need a grant on every resource.
+func withTargets(reqs []Requirement, targets [][]string, conditions func(string) policy.Conditions, everyResource func(string) bool) []targeted {
 	out := make([]targeted, len(reqs))
 	for i, r := range reqs {
-		out[i] = targeted{Requirement: r, targets: targets, conditions: conditions(r.Action)}
+		out[i] = targeted{Requirement: r, targets: targets, conditions: conditions(r.Action), everyResource: everyResource(r.Action)}
 	}
 	return out
 }
@@ -89,6 +93,9 @@ func instanceProfileDetachRequirements(rc *plan.ResourceChange, set *changeSet) 
 // verdict returns the policy's verdict on a requirement: whether the policy
 // grants its action on each of its targets.
 func (t targeted) verdict(doc *policy.Document, strict bool) policy.Result {
+	if t.everyResource {
+		return doc.CoverageOfEveryResource(t.Action, strict)
+	}
 	res := doc.WorstVerdict(t.Action, t.targets, t.conditions, strict)
 	if res.Verdict == policy.Missing && t.knownTargetsOnly && len(t.targets) == 0 {
 		return policy.Result{Verdict: policy.Covered}

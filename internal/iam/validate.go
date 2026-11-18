@@ -205,7 +205,7 @@ func Validate(changes []*plan.ResourceChange, doc *policy.Document, resolver Res
 		} else {
 			reqs = operationRequirements(schema, rc.Change)
 		}
-		paths := append(withTargets(reqs, resourceTargets(rc, set), resourceConditions(rc)), impliedRequirements(rc, set)...)
+		paths := append(withTargets(reqs, resourceTargets(rc, set), resourceConditions(rc), resourceEveryResource(rc)), impliedRequirements(rc, set)...)
 		missing = append(missing, checkChange(rc, paths, doc, isDedicated(schema), inPlan, filter)...)
 	}
 

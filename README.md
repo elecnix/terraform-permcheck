@@ -297,6 +297,13 @@ rather than only the action name:
   `aws_wafv2_web_acl_association`. The target is a literal ARN, or the
   referenced resource's ARN: its known `arn`, the `name` of an `aws_lb`, or
   the `rest_api_id` and `stage_name` of an `aws_api_gateway_stage`.
+- A delete of an `aws_lambda_event_source_mapping` needs
+  `lambda:GetEventSourceMapping` on `Resource: "*"`. After the delete call,
+  the provider polls `GetEventSourceMapping` until Lambda reports the mapping
+  gone, and IAM then authorizes the poll on `"*"`. A grant on
+  `event-source-mapping:*` ARNs leaves the apply failing after AWS has already
+  deleted the mapping, so PermCheck reports the action missing and lists the
+  scoped grant.
 
 A grant whose `Resource` provably cannot apply to the target is reported
 missing (e.g. `PutSecretValue` on `example-b` with a grant on `example-a-*`).

@@ -1,6 +1,8 @@
 package iam
 
 import (
+	"slices"
+
 	"github.com/elecnix/terraform-permcheck/internal/plan"
 	"github.com/elecnix/terraform-permcheck/internal/policy"
 )
@@ -39,6 +41,16 @@ func resourceConditions(rc *plan.ResourceChange) func(string) policy.Conditions 
 	rule := resourceRules[rc.Type]
 	return func(action string) policy.Conditions {
 		return conditionValues(rc, rule, action)
+	}
+}
+
+// resourceEveryResource reports whether resource change rc needs an action
+// granted on every resource: IAM authorizes the action on Resource "*" for
+// the change's operation, whatever the resource's ARN.
+func resourceEveryResource(rc *plan.ResourceChange) func(string) bool {
+	actions := resourceRules[rc.Type].everyResource[rc.Change]
+	return func(action string) bool {
+		return slices.Contains(actions, action)
 	}
 }
 
