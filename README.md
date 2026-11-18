@@ -1231,8 +1231,8 @@ principals' needs may omit it (see
 
 | Format | stdout | stderr |
 |--------|--------|--------|
-| `text` | The all-clear line | Findings and the summary line |
-| `github-annotations` | Annotations, the summary line and the all-clear line | Nothing |
+| `text` | The all-clear line | Findings, the summary line, and the notices of a run with mapped principals |
+| `github-annotations` | Annotations, the summary line and the all-clear line | The notices of a run with mapped principals |
 | `json` | The JSON report | Nothing |
 
 Error messages, usage errors and warnings, such as a file map that
