@@ -713,7 +713,7 @@ A run fails with exit code 2 in these cases:
   has one entry form.
 - The run is in static HCL mode, which has no plan, and selects a mapped need.
 
-Releases after v0.10.3 read `principals`. An older release ignores the key and
+Releases from v0.11.0 on read `principals`. An older release ignores the key and
 checks every need against the `--policy-*` document.
 
 ##### Policies PermCheck reads
@@ -1334,7 +1334,7 @@ release tag:
     terraform show -json plan.tfplan > plan.json
 
 - name: Check IAM permissions
-  uses: elecnix/terraform-permcheck@v0.10.3
+  uses: elecnix/terraform-permcheck@v0.11.0
   with:
     plan-file: plan.json
     policy-file: deploy_policy.json
