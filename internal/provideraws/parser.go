@@ -44,7 +44,8 @@ func (p *Package) resourceFuncs(fileName, resourceName string) map[string][]stri
 		return nil
 	}
 	byName := operationsByName(f, resourceName)
-	funcs := operationBindings(f)
+	funcs, lits := operationBindings(f)
+	p.indexLiterals(lits, serviceImports(f))
 	resolveMethodBindings(funcs, p.idx)
 	if len(funcs) == 0 {
 		return byName
@@ -55,6 +56,22 @@ func (p *Package) resourceFuncs(fileName, resourceName string) map[string][]stri
 		funcs["import"] = byName["import"]
 	}
 	return funcs
+}
+
+// indexLiterals indexes each func literal a schema binds as a function of the
+// package, under the name operationBindings gave it, so the operation resolves
+// through its body like a named function. A name already indexed is kept.
+func (p *Package) indexLiterals(lits map[string]*ast.FuncLit, imports map[string]string) {
+	for name, lit := range lits {
+		if p.idx.has(name) {
+			continue
+		}
+		p.idx.funcs[name] = true
+		p.idx.plain[name] = true
+		p.idx.errResult[name] = lastResultIsError(lit.Type.Results)
+		fd := &ast.FuncDecl{Name: ast.NewIdent(name), Type: lit.Type, Body: lit.Body}
+		p.idx.index(name, fd, imports)
+	}
 }
 
 // actionsFor resolves the actions of each operation's functions.

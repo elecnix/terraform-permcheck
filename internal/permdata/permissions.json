@@ -948,6 +948,9 @@
         "delete": [
           {"action":"apigateway:DELETE"}
         ],
+        "import": [
+          {"action":"apigateway:GET"}
+        ],
         "read": [
           {"action":"apigateway:GET"}
         ],
@@ -5375,6 +5378,7 @@
       }
     },
     "aws_cloudfront_distribution": {
+      "op_providers": {"import":["6"]},
       "ops": {
         "create": [
           {"action":"cloudfront:CreateDistribution"},
@@ -5388,6 +5392,9 @@
           {"action":"cloudfront:GetContinuousDeploymentPolicy"},
           {"action":"cloudfront:UpdateDistribution"},
           {"action":"cloudfront:DeleteDistribution"}
+        ],
+        "import": [
+          {"action":"cloudfront:GetDistribution"}
         ],
         "read": [
           {"action":"cloudfront:GetDistribution"},
@@ -7274,6 +7281,9 @@
         "delete": [
           {"action":"codedeploy:DeleteApplication"}
         ],
+        "import": [
+          {"action":"codedeploy:GetApplication"}
+        ],
         "read": [
           {"action":"codedeploy:GetApplication"},
           {"action":"codedeploy:ListTagsForResource"}
@@ -7310,6 +7320,9 @@
         ],
         "delete": [
           {"action":"codedeploy:DeleteDeploymentGroup"}
+        ],
+        "import": [
+          {"action":"codedeploy:GetDeploymentGroup"}
         ],
         "read": [
           {"action":"codedeploy:GetDeploymentGroup"},
@@ -8614,6 +8627,9 @@
         "delete": [
           {"action":"controltower:DisableControl"},
           {"action":"controltower:GetControlOperation"}
+        ],
+        "import": [
+          {"action":"controltower:ListEnabledControls"}
         ],
         "read": [
           {"action":"controltower:GetEnabledControl"},
@@ -16915,6 +16931,9 @@
         "delete": [
           {"action":"iam:DeleteAccessKey"}
         ],
+        "import": [
+          {"action":"iam:GetAccessKeyLastUsed"}
+        ],
         "read": [
           {"action":"iam:ListAccessKeys"}
         ],
@@ -19171,7 +19190,6 @@
       }
     },
     "aws_kinesis_stream": {
-      "op_providers": {"import":["5"]},
       "ops": {
         "create": [
           {"action":"kinesis:CreateStream"},
@@ -22960,6 +22978,9 @@
           {"action":"ec2:DescribeNetworkAcls"},
           {"action":"ec2:ReplaceNetworkAclAssociation"}
         ],
+        "import": [
+          {"action":"ec2:DescribeNetworkAcls"}
+        ],
         "read": [
           {"action":"ec2:DescribeNetworkAcls"}
         ],
@@ -24541,6 +24562,7 @@
       }
     },
     "aws_opensearch_domain": {
+      "op_providers": {"import":["6"]},
       "ops": {
         "create": [
           {"action":"es:CreateDomain"},
@@ -24555,6 +24577,9 @@
           {"action":"es:DeleteDomain"},
           {"action":"es:DescribeDomain"},
           {"action":"es:DescribeDomainConfig"}
+        ],
+        "import": [
+          {"action":"es:DescribeDomain"}
         ],
         "read": [
           {"action":"es:DescribeDomainConfig"},
@@ -33863,6 +33888,9 @@
         "delete": [
           {"action":"ssm:RegisterDefaultPatchBaseline"},
           {"action":"ssm:DescribePatchBaselines"}
+        ],
+        "import": [
+          {"action":"ssm:GetPatchBaseline"}
         ],
         "read": [
           {"action":"ssm:GetDefaultPatchBaseline"}

@@ -35,17 +35,49 @@ var importerOperationKeys = map[string]string{"State": "import", "StateContext":
 // included, holds the calls. A method value on a local of a named type
 // (h.Upsert, where h := &queueAttributeHandler{...}) is the method's index key,
 // queueAttributeHandler.Upsert; resolveMethodBindings drops it when the package
-// declares no such method. Any other binding (schema.NoopContext) maps to "".
-func operationBindings(f *ast.File) map[string][]string {
-	bound := make(map[string][]string)
+// declares no such method. A func literal written in place (StateContext:
+// func(ctx context.Context, ...) {...}) is named after the declaration that
+// holds it and its operation, as resourceStream[import], and returned in lits
+// under that name for the package to index. Any other binding
+// (schema.NoopContext) maps to "".
+func operationBindings(f *ast.File) (bound map[string][]string, lits map[string]*ast.FuncLit) {
+	bound = make(map[string][]string)
+	lits = make(map[string]*ast.FuncLit)
 	for _, decl := range f.Decls {
 		var locals map[string]string
 		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Body != nil {
 			locals = localTypes(fd.Body)
 		}
-		collectBindings(decl, locals, bound)
+		collectBindings(decl, declName(decl), locals, bound, lits)
 	}
-	return bound
+	return bound, lits
+}
+
+// declName returns the name of a top-level declaration whose func literals
+// the index can resolve: a plain function's, or the first name of a var or
+// const declaration. A method gets "": its literals call through the receiver,
+// as the OpsWorks layers' lt.Create, and the index has no value for it.
+func declName(decl ast.Decl) string {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		if d.Recv != nil {
+			return ""
+		}
+		return d.Name.Name
+	case *ast.GenDecl:
+		for _, spec := range d.Specs {
+			if vs, ok := spec.(*ast.ValueSpec); ok && len(vs.Names) > 0 {
+				return vs.Names[0].Name
+			}
+		}
+	}
+	return ""
+}
+
+// literalName is the index name of a func literal bound to op in the
+// declaration owner. The brackets keep it apart from every declared name.
+func literalName(owner, op string) string {
+	return owner + "[" + op + "]"
 }
 
 // localTypes maps each local variable the block declares with a named type to
@@ -119,8 +151,9 @@ func resolveMethodBindings(funcs map[string][]string, idx *pkgIndex) {
 	}
 }
 
-// collectBindings adds the bindings of the schema literals under n to bound.
-func collectBindings(n ast.Node, locals map[string]string, bound map[string][]string) {
+// collectBindings adds the bindings of the schema literals under n, which the
+// declaration owner holds, to bound, and the func literals they bind to lits.
+func collectBindings(n ast.Node, owner string, locals map[string]string, bound map[string][]string, lits map[string]*ast.FuncLit) {
 	ast.Inspect(n, func(n ast.Node) bool {
 		lit, ok := n.(*ast.CompositeLit)
 		if !ok {
@@ -157,6 +190,11 @@ func collectBindings(n ast.Node, locals map[string]string, bound map[string][]st
 			case *ast.SelectorExpr:
 				if recv, ok := v.X.(*ast.Ident); ok && locals[recv.Name] != "" {
 					fn = methodKey(locals[recv.Name], v.Sel.Name)
+				}
+			case *ast.FuncLit:
+				if owner != "" {
+					fn = literalName(owner, op)
+					lits[fn] = v
 				}
 			}
 			bound[op] = []string{fn}
