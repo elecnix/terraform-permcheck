@@ -233,10 +233,12 @@ func TestMatchOutside_UsersAndGroups(t *testing.T) {
 		r    OutsidePrincipal
 		want LinkMatch
 	}{
-		{"a user name", PolicyLink{Type: userType, Value: "ci"}, ci, LinkYes},
+		{"a user name", PolicyLink{Type: userType, Value: "ci"}, OutsidePrincipal{Type: userType, Name: "ci"}, LinkYes},
+		{"a user name, account unknown", PolicyLink{Type: userType, Value: "ci"}, ci, LinkMaybe},
+		{"a user arn", PolicyLink{Type: userType, Value: "arn:aws:iam::123456789012:user/ci"}, ci, LinkYes},
 		{"a role link with the user's name", PolicyLink{Type: roleType, Value: "ci"}, ci, LinkNo},
 		{"a reference to a user of the plan", PolicyLink{Type: userType, References: []string{"aws_iam_user.app.name", "aws_iam_user.app"}}, ci, LinkNo},
-		{"a list of users", PolicyLink{Type: userType, Values: []string{"app", "ci"}}, ci, LinkYes},
+		{"a list of users", PolicyLink{Type: userType, Values: []string{"app", "ci"}}, ci, LinkMaybe},
 		{"a group name", PolicyLink{Type: groupType, Value: "ops"}, OutsidePrincipal{Type: groupType, Name: "ops"}, LinkYes},
 		{"a group with no known name", PolicyLink{Type: groupType, Value: "ops"}, OutsidePrincipal{Type: groupType}, LinkNo},
 		{"an unknown group", PolicyLink{Type: groupType}, OutsidePrincipal{Type: groupType}, LinkMaybe},

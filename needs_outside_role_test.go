@@ -174,12 +174,31 @@ func assertVerdicts(t *testing.T, what string, got, want []string) {
 // An arn entry gives the role's name, the last part of its path, so the
 // inline policy on role = "ops-admin" attaches to it. The verdicts are those
 // of the name entry.
+//
+// The plan's resources name the role by its name, which the provider
+// resolves in an account that the plan doesn't show. They may name a role of
+// another account, so the inline policy may grant a need, and the exclusive
+// resources don't make the plan list every policy of the role.
 func TestOutsideRole_ARNEntry(t *testing.T) {
 	cfg := outsideNeeds(t, `{"arn": "arn:aws:iam::123456789012:role/ops-admin"}`)
-	assertVerdicts(t, "without exclusives", strictVerdicts(t, writePlan(t, opsLogsPolicy), cfg),
-		[]string{"ReadParams ssm:GetParameter unverified policy_unknown"})
-	assertVerdicts(t, "with exclusives", strictVerdicts(t, writePlan(t, opsLogsPolicy, opsPoliciesExclusive, opsAttachmentsExclusiveEmpty), cfg),
-		[]string{"ReadParams ssm:GetParameter"})
+	unverified := []string{
+		"ReadParams ssm:GetParameter unverified policy_unknown",
+		"WriteLogs logs:PutLogEvents unverified condition",
+	}
+	assertVerdicts(t, "without exclusives", strictVerdicts(t, writePlan(t, opsLogsPolicy), cfg), unverified)
+	withExclusives := writePlan(t, opsLogsPolicy, opsPoliciesExclusive, opsAttachmentsExclusiveEmpty)
+	assertVerdicts(t, "with exclusives", strictVerdicts(t, withExclusives, cfg), unverified)
+	assertVerdicts(t, "sources with exclusives", outsideSources(t, outsideReport(t, "--plan-file", withExclusives, "--config", cfg)), []string{
+		"aws_iam_role_policy.ops_logs policy known ops-logs maybe",
+		"unknown attached_outside_plan inline,managed yes",
+	})
+	_, stderr, _ := runValidate(t, "--plan-file", withExclusives, "--config", cfg)
+	line := `notice: role arn:aws:iam::123456789012:role/ops-admin is outside the plan, and other stacks may attach inline and managed policies to it; needs of "ops" may be granted by them; with a "name" entry instead of "arn", an aws_iam_role_policies_exclusive and an aws_iam_role_policy_attachments_exclusive for the role make the plan list every policy of that kind, since the plan doesn't show the account that a name resolves in`
+	// The exclusive resource of inline policies names ops-logs, which the
+	// plan defines for the same role name, so it adds no notice of its own.
+	if !strings.Contains(stderr, line+"\n") || strings.Contains(stderr, "aws_iam_role_policies_exclusive.ops:") {
+		t.Errorf("stderr has no line %q, or has a notice of the exclusive resource:\n%s", line, stderr)
+	}
 
 	r := outsideReport(t, "--plan-file", writePlan(t, opsLogsPolicy), "--config", cfg)
 	p := r.PolicySources[0]

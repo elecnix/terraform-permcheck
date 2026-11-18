@@ -131,9 +131,20 @@ func (p Principal) sessionPattern() string {
 }
 
 // mayBe reports whether an ARN entry of a Principal element may name the
-// principal or a session of its role. IAM names are unique without regard to
-// case, so the comparison folds case. A wildcard in the entry matches as a
+// principal or a session of its role. A wildcard in the entry matches as a
 // pattern, as in Resource.
+//
+// The comparison folds case, and a match is only possible, never definite.
+// IAM names "aren't distinguished by case, for example, you can't create
+// groups named both ADMINS and admins"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html#reference_iam-quotas-names),
+// so an entry with other capitalisation can't name another principal of the
+// account. But "In a Principal element, the user name part of the Amazon
+// Resource Name (ARN) is case sensitive"
+// (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html#principal-users),
+// and AWS doesn't say how it matches the role name part. So such an entry may
+// fail to name the principal: its Allow may grant, and its Deny isn't
+// definite (see grantsEntry and denies, which compare byte for byte).
 func (p Principal) mayBe(entry string) bool {
 	entry = strings.ToLower(entry)
 	for _, pat := range p.arnPatterns() {
@@ -482,6 +493,9 @@ func accountMatch(account string, p Principal) match {
 // explicit Deny that applies overrides every Allow
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html).
 // An entry that only may name the principal does not make a Deny definite.
+// That includes the principal's ARN with other capitalisation, since AWS
+// documents the name part of a user ARN in a Principal element as case
+// sensitive and doesn't document role names there (see Principal.mayBe).
 func denies(f principalField, p Principal) bool {
 	if f.everyone {
 		return true

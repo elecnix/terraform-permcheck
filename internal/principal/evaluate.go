@@ -74,6 +74,19 @@ func (p Principal) linkGroup(l plan.PolicyLink) (plan.LinkMatch, string) {
 	return p.direct(l), ""
 }
 
+// sameByName reports whether two links of a principal outside the plan that
+// its entry gives by ARN provably name one role or user: both name it by its
+// name. The provider resolves both names in the account of its credentials,
+// so they name the same principal, while the plan doesn't show whether that
+// account is the one in the entry's ARN (see plan.PolicyLink.MatchOutside).
+func (p Principal) sameByName(a, b plan.PolicyLink) bool {
+	if p.Outside == nil || p.Outside.ARN == "" {
+		return false
+	}
+	byName := plan.OutsidePrincipal{Type: p.Outside.Type, Name: p.Outside.Name}
+	return a.MatchOutside(byName) == plan.LinkYes && b.MatchOutside(byName) == plan.LinkYes
+}
+
 // Identity returns what the plan shows of the principal, for matching the
 // Principal and NotPrincipal elements of a resource policy. A role or user
 // in the plan gives its known arn and name, and whether it sets a
@@ -778,7 +791,7 @@ func applyExclusives(p Principal, sources []plan.PolicySource, links []plan.Link
 			case ex.Link.Type == groupType:
 				return p.Groups.Same(ex.Link, s.Link) == plan.LinkYes
 			}
-			return links[i] == plan.LinkYes
+			return links[i] == plan.LinkYes || p.sameByName(ex.Link, s.Link)
 		}
 		if ex.Kind == plan.ExclusiveInline {
 			extra = append(extra, undefinedInline(ex, m, group, sources, owned)...)

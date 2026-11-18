@@ -282,7 +282,6 @@
           "arn": true,
           "attachment_count": true,
           "id": true,
-          "name_prefix": true,
           "policy_id": true,
           "tags_all": true,
           "name": true

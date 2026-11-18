@@ -47,13 +47,13 @@
         ],
         "before": null,
         "after": {
-          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": [\"ecr:BatchGetImage\"], \"Resource\": \"*\"}]}"
+          "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Action\": [\"ecr:BatchGetImage\"], \"Resource\": \"*\"}]}",
+          "role": "app-task"
         },
         "after_unknown": {
           "id": true,
           "name": true,
-          "name_prefix": true,
-          "role": true
+          "name_prefix": true
         }
       }
     },

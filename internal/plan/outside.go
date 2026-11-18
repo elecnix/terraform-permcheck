@@ -42,8 +42,9 @@ type OutsidePrincipal struct {
 // contain. A link that references only resources of r's type in the plan
 // points to another principal, unless it is a list whose values are all
 // known. Otherwise the known value of the link
-// attribute decides: a name equal to r's name gives LinkYes, and another
-// name gives LinkNo. An unknown value gives LinkMaybe.
+// attribute decides: a name equal to r's name gives LinkYes, or LinkMaybe
+// when r is known by its ARN (see matchOutsideValue), and another name gives
+// LinkNo. An unknown value gives LinkMaybe.
 //
 // IAM role, user and group names are unique without regard to case
 // (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html#reference_iam-quotas-names),
@@ -88,15 +89,24 @@ func (l PolicyLink) MatchOutside(r OutsidePrincipal) LinkMatch {
 // matchOutsideValue compares one known value of a link attribute with r. An
 // ARN compares with r's ARN. When r is known by its name only, an ARN with
 // the same name may name it in another account.
+//
+// A name compares with r's name. The provider resolves a name in the account
+// of its credentials, which the plan doesn't show. So when r is known by its
+// ARN, the same name may name a role or user of another account, and the
+// link is LinkMaybe. When r is known by its name only, its account is the
+// one the plan runs in, and the same name gives LinkYes.
 func matchOutsideValue(value string, r OutsidePrincipal) LinkMatch {
 	switch {
 	case value == "":
 		return LinkMaybe
 	case !strings.HasPrefix(value, "arn:"):
-		if strings.EqualFold(value, r.Name) {
-			return LinkYes
+		switch {
+		case !strings.EqualFold(value, r.Name):
+			return LinkNo
+		case r.ARN != "":
+			return LinkMaybe
 		}
-		return LinkNo
+		return LinkYes
 	case r.ARN != "":
 		if strings.EqualFold(value, r.ARN) {
 			return LinkYes

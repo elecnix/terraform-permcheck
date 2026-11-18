@@ -34,7 +34,10 @@ type Need struct {
 // Two needs that run together must have different sids, or the report shows
 // two findings with the same source. A need without a principal runs with
 // every principal, so its sid must be unique in the whole list. Needs under
-// two different principals never run together, so they may share a sid.
+// two different principals may share a sid. Two unmapped principals never
+// run together. Two mapped principals do, and the report names the
+// principal of each finding, so their findings stay apart (see
+// resourceMatches for the exclusion that names one of them).
 func ValidateNeeds(needs []Need) error {
 	seen := map[string]bool{}     // principal and sid
 	unnamed := map[string]bool{}  // sids of needs without a principal

@@ -220,6 +220,35 @@ func TestExclusions_MatchNeeds(t *testing.T) {
 	}
 }
 
+// TestExclusions_MatchNeedsOfOnePrincipal checks the needs of two mapped
+// principals that share a sid. A pattern "needs.<label>.<sid>" matches the
+// need of one principal, and "needs.<sid>" matches the sid of every
+// principal, as it matches an unmapped need.
+func TestExclusions_MatchNeedsOfOnePrincipal(t *testing.T) {
+	missing := []MissingAction{
+		{Action: "s3:GetObject", Need: "Read", Principal: "task"},
+		{Action: "s3:GetObject", Need: "Read", Principal: "deploy"},
+		{Action: "s3:GetObject", Need: "Read"},
+	}
+	who := func(ms []MissingAction) string {
+		var out []string
+		for _, m := range ms {
+			out = append(out, m.Principal+"/"+m.Need)
+		}
+		return strings.Join(out, ",")
+	}
+	for pattern, want := range map[string]string{
+		"needs.deploy.Read": "task/Read,/Read",
+		"needs.*.Read":      "/Read",
+		"needs.Read":        "",
+	} {
+		kept, _ := ApplyExclusions(missing, []Exclusion{{Permission: "s3:GetObject", Resource: pattern}})
+		if got := who(kept); got != want {
+			t.Errorf("%s: kept %s, want %s", pattern, got, want)
+		}
+	}
+}
+
 // TestCheckNeeds_StarNeedUnderCondition checks a need on "*" against grants
 // that carry a condition the tool cannot evaluate. Such a grant on every
 // resource counts as covered by default and is unverified only in strict

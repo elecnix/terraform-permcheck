@@ -436,21 +436,35 @@ func TestUser_OutsideThePlan(t *testing.T) {
 		change("aws_iam_user_policies_exclusive.ci", `"user_name": "ci", "policy_names": ["logs"]`),
 		change("aws_iam_user_policy_attachments_exclusive.ci", `"user_name": "ci", "policy_arns": []`)}
 	unknown := []string{"ReadParams ssm:GetParameter unverified policy_unknown"}
-	for _, entry := range []string{`{"arn": "arn:aws:iam::123456789012:user/ci"}`, `{"name": "ci", "type": "user"}`} {
+	// The plan names the user by its name, in an account that it doesn't
+	// show, so for an arn entry its inline policy may grant a need.
+	byARN := []string{"ReadParams ssm:GetParameter unverified policy_unknown", "WriteLogs logs:PutLogEvents unverified condition"}
+	for entry, want := range map[string][]string{
+		`{"arn": "arn:aws:iam::123456789012:user/ci"}`: byARN,
+		`{"name": "ci", "type": "user"}`:               unknown,
+	} {
 		cfg := outsideNeeds(t, entry)
-		assertVerdicts(t, entry+" without exclusives", strictVerdicts(t, writePlan(t, ciPolicy), cfg), unknown)
-		assertVerdicts(t, entry+" with exclusives", strictVerdicts(t, writePlan(t, exclusives...), cfg), unknown)
+		assertVerdicts(t, entry+" without exclusives", strictVerdicts(t, writePlan(t, ciPolicy), cfg), want)
+		assertVerdicts(t, entry+" with exclusives", strictVerdicts(t, writePlan(t, exclusives...), cfg), want)
 	}
 
-	cfg := outsideNeeds(t, `{"arn": "arn:aws:iam::123456789012:user/ci"}`)
+	cfg := outsideNeeds(t, `{"name": "ci", "type": "user"}`)
 	assertVerdicts(t, "notices", userNotices(t, writePlan(t, ciPolicy), cfg), []string{
-		`notice: user arn:aws:iam::123456789012:user/ci is outside the plan, and other stacks may attach inline and managed policies to it or add it to groups; needs of "ops" may be granted by them; an aws_iam_user_policies_exclusive and an aws_iam_user_policy_attachments_exclusive for the user make the plan list every policy of that kind`,
+		`notice: user ci is outside the plan, and other stacks may attach inline and managed policies to it or add it to groups; needs of "ops" may be granted by them; an aws_iam_user_policies_exclusive and an aws_iam_user_policy_attachments_exclusive for the user make the plan list every policy of that kind`,
 	})
 	assertVerdicts(t, "notices with exclusives", userNotices(t, writePlan(t, exclusives...), cfg), []string{
-		`notice: user arn:aws:iam::123456789012:user/ci is outside the plan, and other stacks may add it to groups; needs of "ops" may be granted by them`,
+		`notice: user ci is outside the plan, and other stacks may add it to groups; needs of "ops" may be granted by them`,
 	})
 	assertVerdicts(t, "sources", userSources(t, "--plan-file", writePlan(t, ciPolicy), "--config", cfg), []string{
 		"aws_iam_user_policy.ci policy identity known yes",
+		"identity unknown attached_outside_plan unlisted=inline,managed,groups yes",
+	})
+	arnCfg := outsideNeeds(t, `{"arn": "arn:aws:iam::123456789012:user/ci"}`)
+	assertVerdicts(t, "arn entry notices with exclusives", userNotices(t, writePlan(t, exclusives...), arnCfg), []string{
+		`notice: user arn:aws:iam::123456789012:user/ci is outside the plan, and other stacks may attach inline and managed policies to it or add it to groups; needs of "ops" may be granted by them; with a "name" entry instead of "arn", an aws_iam_user_policies_exclusive and an aws_iam_user_policy_attachments_exclusive for the user make the plan list every policy of that kind, since the plan doesn't show the account that a name resolves in`,
+	})
+	assertVerdicts(t, "arn entry sources", userSources(t, "--plan-file", writePlan(t, ciPolicy), "--config", arnCfg), []string{
+		"aws_iam_user_policy.ci policy identity known maybe",
 		"identity unknown attached_outside_plan unlisted=inline,managed,groups yes",
 	})
 

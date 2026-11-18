@@ -121,10 +121,19 @@ func operationMatches(operations []string, change string) bool {
 // type, its address without count or for_each indexes, or its full address.
 // An address starts with the module, so "aws_sqs_queue.q" names the root
 // module's queue only, while "aws_sqs_queue" names the type in every module.
-// For a declared need, the glob matches "needs.<sid>".
+// For a declared need, the glob matches "needs.<sid>". The need of a mapped
+// principal also matches "needs.<label>.<sid>": the needs of several mapped
+// principals run together and may share a sid, so that form names the need
+// of one principal, while "needs.<sid>" names the sid of every principal.
 func resourceMatches(pattern string, m MissingAction) bool {
 	if m.Need != "" {
-		ok, _ := path.Match(pattern, "needs."+m.Need)
+		if ok, _ := path.Match(pattern, "needs."+m.Need); ok {
+			return true
+		}
+		if m.Principal == "" {
+			return false
+		}
+		ok, _ := path.Match(pattern, "needs."+m.Principal+"."+m.Need)
 		return ok
 	}
 	addr := m.Address()

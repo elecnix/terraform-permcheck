@@ -218,6 +218,21 @@ func TestKMS_KeyOutsidePlan(t *testing.T) {
 	if !strings.Contains(stderr, want) {
 		t.Errorf("stderr lacks %q:\n%s", want, stderr)
 	}
+
+	// The json report gives the key policy the reason outside_plan, not
+	// computed: the policy exists, and the plan doesn't contain it.
+	r, _ := runValidateJSON(t, "--plan-file", plan, "--config", serviceConfig(t, kmsNeed("Decrypt", "kms:Decrypt", kmsKey)))
+	var reasons []string
+	for _, p := range r.PolicySources {
+		for _, s := range p.Sources {
+			if s.Kind == "resource" && s.Text == "unknown" {
+				reasons = append(reasons, s.UnknownReason)
+			}
+		}
+	}
+	if strings.Join(reasons, ",") != "outside_plan" {
+		t.Errorf("unknown_reason of the key policy = %q, want outside_plan", reasons)
+	}
 }
 
 // Rule 9: a need may name the key by an alias. The plan links the alias to

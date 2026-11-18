@@ -63,13 +63,13 @@
         ],
         "before": null,
         "after": {
-          "policy": "{\"Statement\":[{\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Effect\":\"Allow\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}"
+          "policy": "{\"Statement\":[{\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Effect\":\"Allow\",\"Resource\":\"*\"}],\"Version\":\"2012-10-17\"}",
+          "role": "app-task"
         },
         "after_unknown": {
           "id": true,
           "name": true,
-          "name_prefix": true,
-          "role": true
+          "name_prefix": true
         }
       }
     },

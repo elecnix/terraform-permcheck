@@ -104,7 +104,8 @@ var userExclusiveFix = map[string]string{
 // outside the plan: other stacks may attach policies of the unlisted kinds
 // to it, and may add a user to groups. No resource makes the plan list a
 // user's groups, so the fix names the exclusive resources of the other
-// kinds only.
+// kinds only. For a principal that its entry gives by ARN, the fix also says
+// to give it by name.
 func outsideRoleNotice(p check.PrincipalSources, unlisted []string) string {
 	who := p.Name
 	if p.ARN != "" {
@@ -142,6 +143,13 @@ func outsideRoleNotice(p check.PrincipalSources, unlisted []string) string {
 	verb := "makes"
 	if len(names) > 1 {
 		verb = "make"
+	}
+	if p.ARN != "" {
+		// The exclusive resources name the principal by its name, which
+		// the provider resolves in an account the plan doesn't show, so
+		// they don't count for an arn entry (see
+		// plan.PolicyLink.MatchOutside).
+		return fmt.Sprintf("%s; with a \"name\" entry instead of \"arn\", %s for the %s %s the plan list every policy of that kind, since the plan doesn't show the account that a name resolves in", line, strings.Join(names, " and "), kind, verb)
 	}
 	return fmt.Sprintf("%s; %s for the %s %s the plan list every policy of that kind", line, strings.Join(names, " and "), kind, verb)
 }

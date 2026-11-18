@@ -362,6 +362,12 @@ func TestPrincipals_StaticModeIsUsageError(t *testing.T) {
 	if exitCode(err) != 2 || !strings.Contains(err.Error(), "static HCL mode has no plan") {
 		t.Errorf("want a static mode usage error, got %v", err)
 	}
+	// Without a --policy-* flag, the same error comes before any read of a
+	// policy file.
+	_, _, err = runValidate(t, "--terraform-root", "testdata/realplan", "--config", ecsTaskConfig)
+	if exitCode(err) != 2 || !strings.Contains(err.Error(), "static HCL mode has no plan") {
+		t.Errorf("without a --policy-* flag: want a static mode usage error, got %v", err)
+	}
 }
 
 // A run without a --policy-* source checks the mapped needs only, skips the
@@ -400,4 +406,43 @@ func TestPrincipals_RunWithoutPolicySource(t *testing.T) {
 // writeFile writes body to path.
 func writeFile(path, body string) error {
 	return os.WriteFile(path, []byte(body), 0o644)
+}
+
+// Two mapped principals may give a need the same sid, and both run without
+// --principal. The text report names the principal of each finding, so the
+// findings stay apart. An exclusion "needs.<label>.<sid>" hides the need of
+// one principal, and "needs.<sid>" hides the sid of both.
+func TestPrincipals_TwoPrincipalsShareASid(t *testing.T) {
+	planPath := writePlan(t,
+		change("aws_iam_role.task", `"name": "app-task", "arn": "arn:aws:iam::123456789012:role/app-task"`),
+		change("aws_iam_role.deploy", `"name": "app-deploy", "arn": "arn:aws:iam::123456789012:role/app-deploy"`))
+	config := func(exclude string) string {
+		return writeConfig(t, t.TempDir(), `{
+			"principals": {"task": {"address": "aws_iam_role.task"}, "deploy": {"address": "aws_iam_role.deploy"}},
+			"needs": [
+				{"sid": "Read", "principal": "task", "actions": ["s3:GetObject"]},
+				{"sid": "Read", "principal": "deploy", "actions": ["s3:GetObject"]}
+			],
+			"exclude": [`+exclude+`]
+		}`)
+	}
+	_, stderr, _ := runValidate(t, "--plan-file", planPath, "--config", config(""))
+	for _, line := range []string{`→ needs "Read" of deploy`, `→ needs "Read" of task`} {
+		if !strings.Contains(stderr, line+"\n") {
+			t.Errorf("stderr has no line %q:\n%s", line, stderr)
+		}
+	}
+	for exclude, want := range map[string]string{
+		`{"permission": "s3:GetObject", "resource": "needs.deploy.Read"}`: "task",
+		`{"permission": "s3:GetObject", "resource": "needs.Read"}`:        "",
+	} {
+		r, _ := runValidateJSON(t, "--plan-file", planPath, "--config", config(exclude))
+		var got []string
+		for _, m := range r.Missing {
+			got = append(got, m.Principal)
+		}
+		if strings.Join(got, ",") != want {
+			t.Errorf("%s: findings of %v, want %q", exclude, got, want)
+		}
+	}
 }

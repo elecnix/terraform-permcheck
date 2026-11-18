@@ -466,6 +466,12 @@ directory, or pointed at with `--config`):
   - the address without `count` and `for_each` keys, so `aws_s3_bucket.logs`
     matches `aws_s3_bucket.logs[0]` and `module.app.aws_s3_bucket.logs`
     matches `module.app["eu"].aws_s3_bucket.logs`.
+  - for a declared need, `needs.<sid>`. A run without `--principal` checks
+    the needs of every mapped principal, and two of them may use the same
+    sid. `needs.<sid>` matches that sid for each principal. The need of a
+    mapped principal also matches `needs.<label>.<sid>`, so
+    `needs.deploy.Read` hides the `Read` need of `deploy` and keeps the `Read`
+    need of `task`.
 - **`operations`** (optional) — limits the exclusion to the named terraform
   operations: `create`, `update`, `delete`, or `read`. Omit to apply the
   exclusion to every operation.
@@ -592,7 +598,9 @@ In `--format json`, the finding carries `need` and `need_resource` in place of
 `resource_type`, `resource_name` and `change`, plus the need's `reason`. A
 missing need fails the run unless `--exit-zero` is set. An exclusion can
 suppress it: its `permission` matches the action, and its `resource` matches
-`needs.<sid>`.
+`needs.<sid>`. For the need of a mapped principal, it also matches
+`needs.<label>.<sid>` (see
+[Excluding known false positives](#excluding-known-false-positives)).
 
 Without a `principals` map, PermCheck checks the needs against the one
 `--policy-*` document it's given. With the map, it checks the needs of a
@@ -666,7 +674,17 @@ one that another stack creates, set `name` or `arn` instead:
 ```
 
 An `arn` must be the ARN of an IAM role or user, without a wildcard. PermCheck
-reads the name from the last part of the ARN's path. A name alone doesn't say
+reads the name from the last part of the ARN's path.
+
+The resources of a plan give a role or user by its name, such as the `role` of
+an `aws_iam_role_policy`. The provider looks the name up in the account of its
+credentials, and the plan doesn't show that account. A `name` entry is a role
+or user of that account, so a resource with the same name attaches to it. For
+an `arn` entry, the same name may be a role or user of another account. Its
+policies then count as grants PermCheck can't check, with the reason
+`condition`, and PermCheck ignores their `Deny` statements. The exclusive
+resources don't make the plan list every policy of an `arn` entry either. Use a
+`name` entry for a role or user in the account that the plan runs in. A name alone doesn't say
 whether it's a role or a user, so a `name` entry is a role unless it sets
 `"type": "user"`. The optional `type` is `role` or `user`. An `address` or an
 `arn` already gives the kind.
@@ -1106,7 +1124,7 @@ Each entry of `sources` has these fields:
 | `path` | the attribute path of the policy in that resource, such as `policy` or `inline_policy.0.policy` |
 | `kind` | `identity`, `boundary` or `resource` |
 | `text` | `known`, or `unknown` for an unknown source |
-| `unknown_reason` | for an unknown source: `computed`, `unread`, `outside_plan` for a managed policy, an inline policy that an exclusive resource lists, or a group outside the plan, `attached_outside_plan` for the implicit source of a principal outside the plan, or `cross_account` |
+| `unknown_reason` | for an unknown source: `computed`, `unread`, `outside_plan` for a managed policy, an inline policy that an exclusive resource lists, a group outside the plan, or the key policy of a KMS key outside the plan, `attached_outside_plan` for the implicit source of a principal outside the plan, or `cross_account` |
 | `link` | `yes`, or `maybe` when PermCheck can't decide it from the plan. A resource policy is `yes` when its resource is the resource of a checked need, and `maybe` when it may be |
 | `policy_arn` | the known ARN of the managed policy that the source attaches |
 | `policy_name` | the known name of an inline policy |

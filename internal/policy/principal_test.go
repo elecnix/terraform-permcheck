@@ -147,6 +147,8 @@ func TestForPrincipal_MoreForms(t *testing.T) {
 		{"a name that ends like the role's", `{"AWS":"arn:aws:iam::123456789012:role/myapp-task"}`, taskRoleNameOnly, dropped, dropped},
 		{"a user with the role's name", `{"AWS":"arn:aws:iam::123456789012:user/app-task"}`, taskRoleNameOnly, dropped, dropped},
 		{"the role ARN in another account", `{"AWS":"arn:aws:iam::444455556666:role/app-task"}`, taskRole, dropped, dropped},
+		{"the role ARN with other capitalisation", `{"AWS":"arn:aws:iam::123456789012:role/App-Task"}`, taskRole, mayGrant, dropped},
+		{"the user ARN with other capitalisation", `{"AWS":"arn:aws:iam::123456789012:user/CI"}`, Principal{Kind: KindUser, ARN: "arn:aws:iam::123456789012:user/ci"}, mayGrant, dropped},
 		{"a role whose name the tool cannot read", `{"AWS":"arn:aws:iam::123456789012:role/app-task"}`, taskRoleUnknown, mayGrant, dropped},
 		{"a wildcard entry that may match", `{"AWS":"arn:aws:iam::123456789012:role/app-*"}`, taskRole, mayGrant, dropped},
 		{"a wildcard entry that cannot match", `{"AWS":"arn:aws:iam::123456789012:role/web-*"}`, taskRole, dropped, dropped},
