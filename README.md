@@ -1341,7 +1341,7 @@ release tag:
     terraform show -json plan.tfplan > plan.json
 
 - name: Check IAM permissions
-  uses: elecnix/terraform-permcheck@v0.11.0
+  uses: elecnix/terraform-permcheck@v0.11.1
   with:
     plan-file: plan.json
     policy-file: deploy_policy.json
